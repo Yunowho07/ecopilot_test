@@ -1,0 +1,23 @@
+// Development Firestore rules - DO NOT USE IN PRODUCTION
+// These rules allow read/write access to 'products' and 'user_scans' for
+// authenticated users and also provide an option to make them open for quick testing.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write to products for anyone in dev. Comment out allow if you want auth-only.
+    match /products/{doc=**} {
+      allow read, write: if true; // DEV ONLY
+    }
+
+    // user_scans: allow write only if authenticated (recommended)
+    match /user_scans/{doc=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

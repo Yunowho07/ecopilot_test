@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "185672794875",
+    "project_id": "ecopilot-test-115f0",
+    "storage_bucket": "ecopilot-test-115f0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:185672794875:android:9e9ee377c26c3aa93b665e",
+        "android_client_info": {
+          "package_name": "com.example.ecopilot_test"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "185672794875-kcqukia1o242f10ia7sddu0m66gt8ob5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCWdRtUjFNR4AX6xrw5mM0Byt_dLA12eTE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "185672794875-kcqukia1o242f10ia7sddu0m66gt8ob5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "185672794875-sa870qt9bqscocapoi4smj1vkp8smmq2.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.ecopilotTest"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

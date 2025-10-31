@@ -1,0 +1,11 @@
+name: flutter_native_timezone
+version: 0.0.1
+description: "Local shim for flutter_native_timezone used in dev builds to avoid native plugin during builds"
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+
+flutter:
+  plugin:
+    platforms: {}
+
+# No dependencies
