@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
 import 'alternative_screen.dart';
+
+// Style constants for easy tuning
+const Color _kPrimaryGreen = Color(0xFF1DB954);
+const Color _kAccentYellow = Color(0xFFFFC300);
+const double _kCardRadius = 16.0;
+const double _kResultBorderWidth = 3.0;
+const double _kContentPadding = 14.0;
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({Key? key}) : super(key: key);
@@ -193,11 +199,21 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(_kContentPadding),
             decoration: BoxDecoration(
               color: Colors.black,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFF1DB954), width: 4),
+              borderRadius: BorderRadius.circular(_kCardRadius + 2),
+              border: Border.all(
+                color: _kPrimaryGreen,
+                width: _kResultBorderWidth,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,20 +227,24 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                     if (_lastSavedResult != null &&
                         _lastSavedResult!['raw'] != null)
                       SizedBox(
-                        width: 48,
-                        height: 48,
+                        width: 56,
+                        height: 56,
                         child:
                             _lastSavedResult!['raw']['image_url'] != null &&
                                 _lastSavedResult!['raw']['image_url'] != ''
-                            ? Image.network(
-                                _lastSavedResult!['raw']['image_url'],
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  _lastSavedResult!['raw']['image_url'],
+                                  fit: BoxFit.cover,
+                                ),
                               )
                             : const SizedBox.shrink(),
                       ),
@@ -232,13 +252,13 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Category: ${_lastSavedResult?['raw']?['category'] ?? 'Personal Care (Sunscreen)'}',
-                  style: const TextStyle(color: Colors.white70),
+                  'Category: ${_lastSavedResult?['raw']?['category'] ?? 'Personal Care (Sunscreen)'},',
+                  style: const TextStyle(color: Colors.white70, height: 1.3),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Ingredients: ${_lastSavedResult?['raw']?['ingredients'] ?? 'Ingredients not available'}',
-                  style: const TextStyle(color: Colors.white70),
+                  style: const TextStyle(color: Colors.white70, height: 1.3),
                 ),
                 const SizedBox(height: 12),
                 const Text(
@@ -307,15 +327,24 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFFFC300), width: 4),
+              borderRadius: BorderRadius.circular(_kCardRadius),
+              border: Border.all(
+                color: _kAccentYellow,
+                width: _kResultBorderWidth,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      // placeholder: recipe ideas
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Recipe Ideas')),
                       );
@@ -323,7 +352,11 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
                     icon: const Icon(Icons.restaurant_menu),
                     label: const Text('Recipe Ideas'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: Colors.blue.shade700,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                 ),
@@ -331,7 +364,6 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      // Navigate to Alternative screen
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const AlternativeScreen(),
@@ -341,7 +373,11 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
                     icon: const Icon(Icons.nature),
                     label: const Text('Better Alternative'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: _kPrimaryGreen,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                 ),
@@ -354,7 +390,6 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () async {
-                    // Persist and return to Home as recent activity
                     try {
                       if (_lastSavedResult != null) {
                         Navigator.of(context).pop(_lastSavedResult);
@@ -367,18 +402,22 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
                   },
                   icon: const Icon(Icons.bookmark_add),
                   label: const Text('Add to Recent'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: _kPrimaryGreen, width: 1.5),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
                   onPressed: () {
-                    // Close scan screen
                     Navigator.of(context).pop();
                   },
                   child: const Text('Done'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
+                    backgroundColor: Colors.deepPurple.shade400,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                 ),
               ),
@@ -408,16 +447,18 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: const Text(
           'Scan Product',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: const Color(0xFF1DB954),
+        backgroundColor: _kPrimaryGreen,
+        elevation: 2,
       ),
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(_kContentPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -425,9 +466,7 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
               Expanded(
                 child: Center(
                   child: _isLoading
-                      ? const CircularProgressIndicator(
-                          color: Color(0xFF1DB954),
-                        )
+                      ? CircularProgressIndicator(color: _kPrimaryGreen)
                       : _buildImagePreview(),
                 ),
               ),
@@ -449,17 +488,14 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
                       height: 74,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: const Color(0xFF1DB954),
-                          width: 4,
-                        ),
+                        border: Border.all(color: _kPrimaryGreen, width: 4),
                         color: Colors.white,
                       ),
-                      child: const Center(
+                      child: Center(
                         child: Icon(
                           Icons.camera_alt,
                           size: 34,
-                          color: Color(0xFF1DB954),
+                          color: _kPrimaryGreen,
                         ),
                       ),
                     ),
