@@ -4,26 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:intl/intl.dart';
+// removed unused cloud_firestore and intl imports (centralized in FirebaseService)
+import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'profile_screen.dart' as profile_screen;
 import 'alternative_screen.dart' as alternative_screen;
 import 'dispose_screen.dart' as dispose_screen;
-
-// --- I. Constants and Colors ---
-const Color kPrimaryGreen = Color(0xFF1DB954);
-const Color kResultCardGreen = Color(0xFF388E3C);
-const Color kWarningRed = Color(0xFFD32F2F);
-const Color kDiscoverMoreYellow = Color(0xFFFDD835);
-const Color kDiscoverMoreBlue = Color(0xFF1976D2);
-const Color kDiscoverMoreGreen = kPrimaryGreen;
+import 'package:ecopilot_test/widgets/app_drawer.dart';
+import '/utils/constants.dart';
 
 // --- II. Data Model and Parsing Logic ---
 
 class ProductAnalysisData {
   final File? imageFile;
+  final String? imageUrl;
   final String productName;
   final String category;
   final String ingredients;
@@ -37,6 +31,7 @@ class ProductAnalysisData {
 
   ProductAnalysisData({
     this.imageFile,
+    this.imageUrl,
     required this.productName,
     this.category = 'N/A',
     this.ingredients = 'N/A',
@@ -48,6 +43,37 @@ class ProductAnalysisData {
     this.crueltyFree = false,
     this.ecoScore = 'N/A',
   });
+
+  ProductAnalysisData copyWith({
+    File? imageFile,
+    String? imageUrl,
+    String? productName,
+    String? category,
+    String? ingredients,
+    String? carbonFootprint,
+    String? packagingType,
+    String? disposalMethod,
+    bool? containsMicroplastics,
+    bool? palmOilDerivative,
+    bool? crueltyFree,
+    String? ecoScore,
+  }) {
+    return ProductAnalysisData(
+      imageFile: imageFile ?? this.imageFile,
+      imageUrl: imageUrl ?? this.imageUrl,
+      productName: productName ?? this.productName,
+      category: category ?? this.category,
+      ingredients: ingredients ?? this.ingredients,
+      carbonFootprint: carbonFootprint ?? this.carbonFootprint,
+      packagingType: packagingType ?? this.packagingType,
+      disposalMethod: disposalMethod ?? this.disposalMethod,
+      containsMicroplastics:
+          containsMicroplastics ?? this.containsMicroplastics,
+      palmOilDerivative: palmOilDerivative ?? this.palmOilDerivative,
+      crueltyFree: crueltyFree ?? this.crueltyFree,
+      ecoScore: ecoScore ?? this.ecoScore,
+    );
+  }
 
   factory ProductAnalysisData.fromGeminiOutput(
     String geminiOutput, {
@@ -94,11 +120,27 @@ class ProductAnalysisData {
       category = 'Personal Care (Sunscreen)';
     }
 
+    // Clean up redundant/duplicated data that sometimes appears in Gemini output
+    String cleanIngredients = _sanitizeField(
+      ingredients,
+      removeIfContains: [
+        productName,
+        'Product name',
+        'Category',
+        'Eco-friendliness',
+        'Carbon Footprint',
+      ],
+    );
+
+    // Also clean packaging/disposal fields similarly
+    packagingType = _sanitizeField(packagingType);
+    disposalMethod = _sanitizeField(disposalMethod);
+
     return ProductAnalysisData(
       imageFile: imageFile,
       productName: productName,
       category: category,
-      ingredients: ingredients,
+      ingredients: cleanIngredients,
       carbonFootprint: carbonFootprint,
       packagingType: packagingType,
       disposalMethod: disposalMethod,
@@ -107,6 +149,45 @@ class ProductAnalysisData {
       crueltyFree: crueltyFree,
       ecoScore: ecoScore,
     );
+  }
+
+  // Remove obvious repeated labels or full-line duplicates originating from
+  // the raw Gemini output. If removeIfContains is provided, any line that
+  // includes any of those substrings will be dropped from the result.
+  static String _sanitizeField(String raw, {List<String>? removeIfContains}) {
+    if (raw.trim().isEmpty) return 'N/A';
+    final lines = raw
+        .split(RegExp(r"\r?\n"))
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final seen = <String>{};
+    final out = <String>[];
+    for (var line in lines) {
+      var skip = false;
+      if (removeIfContains != null) {
+        for (var sub in removeIfContains) {
+          if (sub.isEmpty) continue;
+          if (line.toLowerCase().contains(sub.toLowerCase())) {
+            skip = true;
+            break;
+          }
+        }
+      }
+      if (skip) continue;
+
+      // If the line is already seen (exact duplicate), skip it.
+      if (seen.contains(line)) continue;
+
+      // Avoid adding a line that is just a repeat of a short token like 'N/A'
+      if (line.toUpperCase() == 'N/A') continue;
+
+      seen.add(line);
+      out.add(line);
+    }
+
+    if (out.isEmpty) return 'N/A';
+    return out.join('\n');
   }
 
   static String _extractValue(String text, String regexPattern) {
@@ -257,7 +338,6 @@ class ResultScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(15),
         border: Border.all(color: borderColor, width: 2),
       ),
-      padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -334,7 +414,29 @@ class ResultScreen extends StatelessWidget {
                       Colors.grey.shade900, // Background when image is missing
                 ),
                 height: 200,
-                child: analysisData.imageFile != null
+                child:
+                    analysisData.imageUrl != null &&
+                        analysisData.imageUrl!.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(15),
+                        child: Image.network(
+                          analysisData.imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (ctx, err, st) =>
+                              analysisData.imageFile != null
+                              ? Image.file(
+                                  analysisData.imageFile!,
+                                  fit: BoxFit.cover,
+                                )
+                              : const Center(
+                                  child: Text(
+                                    "Image Not Available",
+                                    style: TextStyle(color: Colors.white70),
+                                  ),
+                                ),
+                        ),
+                      )
+                    : analysisData.imageFile != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(15),
                         child: Image.file(
@@ -353,8 +455,8 @@ class ResultScreen extends StatelessWidget {
 
               // 1. Product Details Card (Green Text/Border)
               _buildSectionCard(
-                borderColor: kResultCardGreen,
-                titleColor: kResultCardGreen,
+                borderColor: kPrimaryGreen,
+                titleColor: kPrimaryGreen,
                 title: 'Product Details',
                 children: [
                   _buildInfoRow('Name', analysisData.productName),
@@ -366,8 +468,8 @@ class ResultScreen extends StatelessWidget {
 
               // 2. Eco Impact Card (Green Text/Border)
               _buildSectionCard(
-                borderColor: kResultCardGreen,
-                titleColor: kResultCardGreen,
+                borderColor: kPrimaryGreen,
+                titleColor: kPrimaryGreen,
                 title: 'Eco Impact',
                 children: [
                   _buildInfoRow(
@@ -394,9 +496,10 @@ class ResultScreen extends StatelessWidget {
 
               // 3. Environmental Warnings Card (Green Text/Border)
               _buildSectionCard(
-                borderColor: kResultCardGreen,
-                titleColor: kResultCardGreen,
-                title: 'Environmental Warnings',
+                borderColor: kPrimaryGreen,
+                titleColor: kPrimaryGreen,
+                title:
+                    'Environmental Warnings', // keep bold via the card's Text style; to center the title, update _buildSectionCard's Text to use textAlign: TextAlign.center
                 children: [
                   _buildWarningRow(
                     'Contains microplastics?',
@@ -441,7 +544,7 @@ class ResultScreen extends StatelessWidget {
                         Expanded(
                           child: _buildDiscoverMoreButton(
                             label: 'Disposal Guidance',
-                            icon: Icons.restaurant,
+                            icon: Icons.delete_sweep,
                             color: kDiscoverMoreBlue,
                             onTap: () {},
                           ),
@@ -450,7 +553,7 @@ class ResultScreen extends StatelessWidget {
                         Expanded(
                           child: _buildDiscoverMoreButton(
                             label: 'Better Alternative',
-                            icon: Icons.eco,
+                            icon: Icons.shopping_cart,
                             color: kDiscoverMoreGreen,
                             onTap: () {
                               Navigator.of(context).push(
@@ -574,8 +677,18 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
         imageFile: imageFile,
       );
 
-      await _saveScanToFirebase(imageFile, outputText);
-      _navigateToResultScreen(analysisData);
+      final uploadedImageUrl = await _saveScanToFirebase(
+        imageFile,
+        outputText,
+        analysisData,
+      );
+
+      // If we have an uploaded URL from Cloudinary, attach it to the analysis data
+      final analysisToShow = uploadedImageUrl != null
+          ? analysisData.copyWith(imageUrl: uploadedImageUrl)
+          : analysisData;
+
+      _navigateToResultScreen(analysisToShow);
     } catch (e) {
       analysisData = ProductAnalysisData(
         productName: 'Analysis Error',
@@ -602,38 +715,52 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
     );
   }
 
-  Future<void> _saveScanToFirebase(File imageFile, String analysisText) async {
+  Future<String?> _saveScanToFirebase(
+    File imageFile,
+    String analysisText,
+    ProductAnalysisData analysisData,
+  ) async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         throw Exception("User not logged in.");
       }
 
-      // Upload image to Firebase Storage
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child('scanned_images')
-          .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+      // Upload image to Cloudinary via FirebaseService helper
+      String? imageUrl;
+      try {
+        imageUrl = await FirebaseService().uploadScannedImage(
+          file: imageFile,
+          fileName: '${DateTime.now().millisecondsSinceEpoch}.jpg',
+          onProgress: (transferred, total) {
+            debugPrint('Scan upload progress: $transferred / $total');
+          },
+        );
+      } catch (e) {
+        debugPrint('Failed to upload scanned image to Cloudinary: $e');
+        imageUrl = null;
+      }
 
-      await storageRef.putFile(imageFile);
-      final imageUrl = await storageRef.getDownloadURL();
+      // Persist using centralized FirebaseService so all per-user scan logic
+      // (and any legacy writes) are handled in one place.
+      try {
+        await FirebaseService().saveUserScan(
+          analysis: analysisText,
+          productName: analysisData.productName,
+          ecoScore: analysisData.ecoScore,
+          carbonFootprint: analysisData.carbonFootprint,
+          imageUrl: imageUrl,
+        );
+        debugPrint("✅ Scan saved to Firestore via FirebaseService.");
+      } catch (e) {
+        debugPrint("❌ Failed to save scan via FirebaseService: $e");
+      }
 
-      // Save scan result to Firestore
-      final scansRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('scans');
-
-      await scansRef.add({
-        'analysis': analysisText,
-        'image_url': imageUrl,
-        'timestamp': DateTime.now(),
-        'date': DateFormat('yyyy-MM-dd – kk:mm').format(DateTime.now()),
-      });
-
-      debugPrint("✅ Scan saved to Firestore successfully.");
+      // Return the uploaded image URL (if any) so caller can show it immediately
+      return imageUrl;
     } catch (e) {
       debugPrint("❌ Error saving to Firestore: $e");
+      return null;
     }
   }
 
@@ -687,13 +814,20 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
+        // Use a Builder for the leading icon so we can call Scaffold.of(context)
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         title: const Text(
           'Scan Product',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         backgroundColor: kPrimaryGreen,
-        automaticallyImplyLeading: false, // remove back button
       ),
       backgroundColor: Colors.white,
       body: SafeArea(

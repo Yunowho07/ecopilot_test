@@ -2,6 +2,8 @@
     <!-- Permission required to use the device camera -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- Android 13+: granular media permissions -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <!-- Optional: allow apps to query camera-capable features -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />

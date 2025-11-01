@@ -1,41 +1,55 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, compute;
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:firebase_storage/firebase_storage.dart' as fb_storage;
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firestore
+import 'package:intl/intl.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 
-/// Simple Firebase authentication helper used by the login/signup screens.
-///
-/// This keeps the UI files decoupled from direct FirebaseAuth calls and
-/// provides a small abstraction for signIn/signUp/signOut.
+/// A comprehensive Firebase service class handling:
+/// 1. Firebase Authentication (Email/Password, Google, Facebook, Apple).
+/// 2. Firebase Storage (Profile Photo Upload).
+/// 3. Cloud Firestore (User Profiles, Scanned Products, Challenges, Notifications).
 class FirebaseService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore =
+      FirebaseFirestore.instance; // Added Firestore
 
   /// Returns the currently signed in [User], or null if not signed in.
   User? get currentUser => _auth.currentUser;
 
-  /// Example fetcher for activity data. In a real app this would query
-  /// Firestore or another backend. Returning a simple mock payload so
-  /// the UI can render without adding Firestore as a dependency here.
-  Future<Map<String, dynamic>> fetchActivities(String uid) async {
-    // Simulate a small delay like a network/database call
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+  /// Returns the current user's UID, or an empty string if not signed in.
+  String get currentUserId => _auth.currentUser?.uid ?? '';
 
-    return {
-      'tip': 'Bring a reusable bag for shopping.',
-      'challenge': 'Avoid single-use plastics today.',
-      'recentActivity': [
-        {'product': 'Reusable Bottle', 'score': '95', 'co2': '0.2kg'},
-        {'product': 'Compost Bin', 'score': '88', 'co2': '0.1kg'},
-      ],
-    };
+  // ===============================================
+  // 🔰 AUTHENTICATION (From Version 1) 🔰
+  // ===============================================
+
+  // Top-level helper used by compute() to perform image resizing and JPEG encoding
+  // in a background isolate. Keep this function top-level so compute() can call it.
+  Uint8List _encodeResizeJpeg(Uint8List bytes) {
+    try {
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return bytes;
+
+      // Resize to a smaller width to prioritize speed and lower upload size.
+      final resized = img.copyResize(decoded, width: 400);
+
+      // Encode with lower quality to further reduce payload size for faster uploads.
+      final encoded = img.encodeJpg(resized, quality: 50);
+      return Uint8List.fromList(encoded);
+    } catch (e) {
+      // If decoding/encoding fails, return the original bytes so upload can still proceed.
+      return bytes;
+    }
   }
 
   Future<User?> signIn({
@@ -64,139 +78,24 @@ class FirebaseService {
       await credential.user!.updateDisplayName(fullName);
       // Refresh the user to make sure displayName is available immediately.
       await credential.user!.reload();
+      // Ensure the Firestore profile is created immediately after a successful sign-up
+      await createUserProfile(fullName, email, credential.user!.photoURL ?? '');
       return _auth.currentUser;
     }
 
+    // Ensure the Firestore profile is created for basic sign-up
+    if (credential.user != null) {
+      await createUserProfile(
+        credential.user!.displayName ?? 'New User',
+        email,
+        credential.user!.photoURL ?? '',
+      );
+    }
     return credential.user;
   }
 
   Future<void> signOut() async {
     await _auth.signOut();
-  }
-
-  /// Update the current user's display name.
-  Future<void> updateDisplayName(String name) async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('No user signed in');
-    await user.updateDisplayName(name);
-    await user.reload();
-  }
-
-  /// Update the current user's photo URL.
-  Future<void> updatePhotoUrl(String photoUrl) async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('No user signed in');
-    await user.updatePhotoURL(photoUrl);
-    await user.reload();
-  }
-
-  /// Upload a local file to Firebase Storage and return the download URL.
-  /// On web, [file] will be null and [bytes] should be provided.
-  /// Upload profile photo with progress and automatic retries.
-  ///
-  /// Parameters:
-  /// - [file]: local File (mobile). If [bytes] is provided, it will be used
-  ///   instead (preferred so callers can retry without re-reading disk).
-  /// - [bytes]: raw image bytes to upload.
-  /// - [fileName]: optional filename to use in storage path.
-  /// - [onProgress]: optional callback (transferred, total) called with snapshot updates.
-  /// - [maxAttempts]: number of attempts (default 3) for automatic retries.
-  Future<String> uploadProfilePhoto({
-    File? file,
-    Uint8List? bytes,
-    String? fileName,
-    void Function(int transferred, int total)? onProgress,
-    int maxAttempts = 3,
-  }) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) throw Exception('No user signed in');
-
-      final uid = user.uid;
-      final name =
-          fileName ?? 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      // Store in a profile_photos folder within a subfolder of the user's UID
-      final ref = fb_storage.FirebaseStorage.instance
-          .ref()
-          .child('profile_photos')
-          .child(uid)
-          .child(name);
-
-      // no-op placeholder removed; we directly forward snapshot events to caller
-
-      // Prepare bytes (prefer provided bytes so callers can reuse them)
-      Uint8List uploadBytes;
-      if (bytes != null) {
-        uploadBytes = bytes;
-      } else if (file != null) {
-        uploadBytes = await file.readAsBytes();
-      } else {
-        throw Exception('No image data provided for upload');
-      }
-
-      // Adaptive sizing: if already small, skip resizing. Threshold 200KB.
-      try {
-        if (uploadBytes.length > 200 * 1024) {
-          final decoded = img.decodeImage(uploadBytes);
-          if (decoded != null) {
-            final resized = img.copyResize(decoded, width: 800);
-            int quality = 70;
-            var encoded = img.encodeJpg(resized, quality: quality);
-
-            if (encoded.length > 400 * 1024) {
-              quality = 60;
-              encoded = img.encodeJpg(resized, quality: quality);
-            }
-
-            uploadBytes = Uint8List.fromList(encoded);
-          }
-        }
-      } catch (_) {
-        debugPrint('Image processing failed, using original bytes.');
-      }
-
-      // Attempt upload with retries and exponential backoff
-      int attempt = 0;
-      int backoffMs = 500;
-      while (true) {
-        attempt++;
-        try {
-          final task = ref.putData(
-            uploadBytes,
-            fb_storage.SettableMetadata(
-              contentType: 'image/jpeg',
-              cacheControl: 'public,max-age=3600',
-            ),
-          );
-
-          // Listen to progress and forward to callback
-          final sub = task.snapshotEvents.listen((snapshot) {
-            try {
-              final transferred = snapshot.bytesTransferred;
-              final total = snapshot.totalBytes;
-              if (onProgress != null) onProgress(transferred, total);
-            } catch (_) {}
-          });
-
-          final snapshot = await task;
-          await sub.cancel();
-
-          final url = await snapshot.ref.getDownloadURL();
-          // Update user's photoURL in Auth
-          await updatePhotoUrl(url);
-          return url;
-        } catch (e) {
-          debugPrint('Upload attempt $attempt failed: $e');
-          if (attempt >= maxAttempts) rethrow;
-          // exponential backoff before retrying
-          await Future<void>.delayed(Duration(milliseconds: backoffMs));
-          backoffMs *= 2;
-        }
-      }
-    } catch (e) {
-      debugPrint('Upload failed: $e');
-      rethrow;
-    }
   }
 
   /// Update the current user's password. This will fail if the user's
@@ -208,12 +107,17 @@ class FirebaseService {
     await user.reload();
   }
 
+  // --- Social Sign-In Methods ---
+
   /// Sign in using Google. Supports web (popup) and mobile flows.
   Future<User?> signInWithGoogle() async {
     try {
       if (kIsWeb) {
         final googleProvider = GoogleAuthProvider();
         final userCredential = await _auth.signInWithPopup(googleProvider);
+        if (userCredential.user != null) {
+          await _handleSocialSignInProfile(userCredential.user!);
+        }
         return userCredential.user;
       } else {
         final googleSignIn = GoogleSignIn();
@@ -227,6 +131,9 @@ class FirebaseService {
         );
 
         final userCredential = await _auth.signInWithCredential(credential);
+        if (userCredential.user != null) {
+          await _handleSocialSignInProfile(userCredential.user!);
+        }
         return userCredential.user;
       }
     } catch (e) {
@@ -241,6 +148,9 @@ class FirebaseService {
       if (kIsWeb) {
         final fbProvider = OAuthProvider('facebook.com');
         final userCredential = await _auth.signInWithPopup(fbProvider);
+        if (userCredential.user != null) {
+          await _handleSocialSignInProfile(userCredential.user!);
+        }
         return userCredential.user;
       } else {
         final LoginResult result = await FacebookAuth.instance.login();
@@ -252,6 +162,9 @@ class FirebaseService {
             accessToken as String,
           );
           final userCredential = await _auth.signInWithCredential(credential);
+          if (userCredential.user != null) {
+            await _handleSocialSignInProfile(userCredential.user!);
+          }
           return userCredential.user;
         } else if (result.status == LoginStatus.cancelled) {
           return null;
@@ -271,6 +184,9 @@ class FirebaseService {
       if (kIsWeb) {
         final appleProvider = OAuthProvider('apple.com');
         final userCredential = await _auth.signInWithPopup(appleProvider);
+        if (userCredential.user != null) {
+          await _handleSocialSignInProfile(userCredential.user!);
+        }
         return userCredential.user;
       } else {
         final rawNonce = _generateNonce();
@@ -292,6 +208,9 @@ class FirebaseService {
         final userCredential = await _auth.signInWithCredential(
           oauthCredential,
         );
+        if (userCredential.user != null) {
+          await _handleSocialSignInProfile(userCredential.user!);
+        }
         return userCredential.user;
       }
     } catch (e) {
@@ -300,7 +219,17 @@ class FirebaseService {
     }
   }
 
-  // Helpers for Apple sign-in nonce generation (from Firebase docs)
+  // Helper function to create Firestore profile after a successful social sign-in
+  Future<void> _handleSocialSignInProfile(User user) async {
+    await createUserProfile(
+      user.displayName ?? 'New User',
+      user.email ??
+          '', // Email can be null for anonymous sign-in, though not for these providers
+      user.photoURL ?? '',
+    );
+  }
+
+  // Helpers for Apple sign-in nonce generation (from Version 1)
   String _generateNonce([int length = 32]) {
     const charset =
         '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
@@ -316,5 +245,417 @@ class FirebaseService {
     final bytes = utf8.encode(input);
     final digest = sha256.convert(bytes);
     return digest.toString();
+  }
+
+  // ===============================================
+  // ✏️ USER PROFILE UPDATES (From Version 1 - Auth part) ✏️
+  // ===============================================
+
+  /// Update the current user's display name in Firebase Auth and Firestore.
+  Future<void> updateDisplayName(String name) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user signed in');
+    await user.updateDisplayName(name);
+    await user.reload();
+    await updateUserProfile(name: name); // Update in Firestore
+  }
+
+  /// Update the current user's photo URL in Firebase Auth and Firestore.
+  Future<void> updatePhotoUrl(String photoUrl) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user signed in');
+    await user.updatePhotoURL(photoUrl);
+    await user.reload();
+    await updateUserProfile(photoUrl: photoUrl); // Update in Firestore
+  }
+
+  // ===============================================
+  // ☁️ FIREBASE STORAGE (From Version 1) ☁️
+  // ===============================================
+
+  /// Upload a local file to Firebase Storage and return the download URL.
+  Future<String> uploadProfilePhoto({
+    File? file,
+    Uint8List? bytes,
+    String? fileName,
+    void Function(int transferred, int total)? onProgress,
+    int maxAttempts = 3,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('No user signed in');
+
+      final uid = user.uid;
+      final name = fileName ?? 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      // Prepare bytes (prefer provided bytes so callers can reuse them)
+      Uint8List uploadBytes;
+      if (bytes != null) {
+        uploadBytes = bytes;
+      } else if (file != null) {
+        uploadBytes = await file.readAsBytes();
+      } else {
+        throw Exception('No image data provided for upload');
+      }
+
+      // Adaptive sizing: if already small, skip resizing. Threshold 80KB.
+      try {
+        if (uploadBytes.length > 80 * 1024) {
+          uploadBytes = await compute(_encodeResizeJpeg, uploadBytes);
+        }
+      } catch (e) {
+        debugPrint('Image processing failed, using original bytes. Error: $e');
+      }
+
+      // Upload to Cloudinary (unsigned preset) using HTTP multipart upload.
+      final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+      final uploadPreset = dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
+      if (cloudName.isEmpty || uploadPreset.isEmpty) {
+        throw Exception(
+            'Cloudinary configuration missing. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env');
+      }
+
+      final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+
+      int attempt = 0;
+      int backoffMs = 500;
+      while (true) {
+        attempt++;
+        try {
+          final request = http.MultipartRequest('POST', uri);
+          request.fields['upload_preset'] = uploadPreset;
+          request.fields['folder'] = 'profile_photos/$uid';
+          request.files.add(http.MultipartFile.fromBytes('file', uploadBytes, filename: name));
+
+          final streamed = await request.send();
+          if (onProgress != null) onProgress(uploadBytes.length, uploadBytes.length);
+
+          final respStr = await streamed.stream.bytesToString();
+          if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+            throw Exception('Cloudinary upload failed: ${streamed.statusCode} ${respStr}');
+          }
+          final Map<String, dynamic> decoded = jsonDecode(respStr);
+          final url = decoded['secure_url'] as String?;
+          if (url == null || url.isEmpty) throw Exception('Cloudinary response missing secure_url');
+
+          await updatePhotoUrl(url);
+          return url;
+        } catch (e) {
+          debugPrint('Cloudinary upload attempt $attempt failed: $e');
+          if (attempt >= maxAttempts) rethrow;
+          await Future<void>.delayed(Duration(milliseconds: backoffMs));
+          backoffMs *= 2;
+        }
+      }
+    } catch (e) {
+      debugPrint('Upload failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Upload a scanned image (product scan) to Cloudinary and return the secure URL.
+  Future<String> uploadScannedImage({
+    File? file,
+    Uint8List? bytes,
+    String? fileName,
+    void Function(int transferred, int total)? onProgress,
+    int maxAttempts = 3,
+  }) async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) throw Exception('No user signed in');
+      final uid = user.uid;
+
+      final name = fileName ?? 'scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      Uint8List uploadBytes;
+      if (bytes != null) {
+        uploadBytes = bytes;
+      } else if (file != null) {
+        uploadBytes = await file.readAsBytes();
+      } else {
+        throw Exception('No image data provided for upload');
+      }
+
+      try {
+        if (uploadBytes.length > 80 * 1024) {
+          uploadBytes = await compute(_encodeResizeJpeg, uploadBytes);
+        }
+      } catch (e) {
+        debugPrint('Image processing failed, using original bytes. Error: $e');
+      }
+
+      final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
+      final uploadPreset = dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
+      if (cloudName.isEmpty || uploadPreset.isEmpty) {
+        throw Exception('Cloudinary configuration missing. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env');
+      }
+
+      final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+
+      int attempt = 0;
+      int backoffMs = 500;
+      while (true) {
+        attempt++;
+        try {
+          final request = http.MultipartRequest('POST', uri);
+          request.fields['upload_preset'] = uploadPreset;
+          request.fields['folder'] = 'scanned_images/$uid';
+          request.files.add(http.MultipartFile.fromBytes('file', uploadBytes, filename: name));
+
+          final streamed = await request.send();
+          if (onProgress != null) onProgress(uploadBytes.length, uploadBytes.length);
+
+          final respStr = await streamed.stream.bytesToString();
+          if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+            throw Exception('Cloudinary upload failed: ${streamed.statusCode} ${respStr}');
+          }
+          final Map<String, dynamic> decoded = jsonDecode(respStr);
+          final url = decoded['secure_url'] as String?;
+          if (url == null || url.isEmpty) throw Exception('Cloudinary response missing secure_url');
+          return url;
+        } catch (e) {
+          debugPrint('Cloudinary scanned image upload attempt $attempt failed: $e');
+          if (attempt >= maxAttempts) rethrow;
+          await Future<void>.delayed(Duration(milliseconds: backoffMs));
+          backoffMs *= 2;
+        }
+      }
+    } catch (e) {
+      debugPrint('uploadScannedImage failed: $e');
+      rethrow;
+    }
+  }
+
+  // ===============================================
+  // 📖 FIRESTORE - USER DATA (From Version 2) 📖
+  // ===============================================
+
+  Future<void> createUserProfile(
+    String name,
+    String email,
+    String photoUrl,
+  ) async {
+    final uid = _auth.currentUser!.uid;
+
+    final userRef = _firestore.collection('users').doc(uid);
+    final existingUser = await userRef.get();
+
+    // Only create profile if it doesn't exist yet
+    if (!existingUser.exists) {
+      await userRef.set({
+        'name': name,
+        'email': email,
+        'photoUrl': photoUrl,
+        'ecoScore': 0,
+        'title': 'Eco Beginner',
+        'streakDays': 0,
+        'createdAt': Timestamp.now(),
+      });
+    }
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>> getUserProfile() async {
+    final uid = _auth.currentUser!.uid;
+    return _firestore.collection('users').doc(uid).get();
+  }
+
+  Future<void> updateUserProfile({String? name, String? photoUrl}) async {
+    final uid = _auth.currentUser!.uid;
+    final updates = <String, dynamic>{};
+    if (name != null) updates['name'] = name;
+    if (photoUrl != null) updates['photoUrl'] = photoUrl;
+
+    if (updates.isNotEmpty) {
+      await _firestore.collection('users').doc(uid).update(updates);
+    }
+  }
+
+  Future<void> updateEcoScore(int points) async {
+    final uid = _auth.currentUser!.uid;
+    final userRef = _firestore.collection('users').doc(uid);
+    final userDoc = await userRef.get();
+
+    if (userDoc.exists) {
+      final currentScore = userDoc.data()?['ecoScore'] ?? 0;
+      await userRef.update({'ecoScore': currentScore + points});
+    }
+  }
+
+  // ===============================================
+  // 📦 FIRESTORE - SCANNED PRODUCTS (From Version 2) 📦
+  // ===============================================
+
+  Future<void> saveScannedProduct({
+    required String productName,
+    required String ecoScore,
+    required String imageUrl,
+    required String packaging,
+    required String disposalMethod,
+    double? carbonFootprint,
+    String? barcode,
+  }) async {
+    final uid = _auth.currentUser!.uid;
+
+    // Save under users/{uid}/scans for per-user history (centralized location).
+    final scansRef = _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('scans');
+    await scansRef.add({
+      'analysis':
+          '', // legacy callers may not pass raw analysis; keep empty by default
+      'product_name': productName,
+      'eco_score': ecoScore,
+      'barcode': barcode ?? '',
+      'carbon_footprint': carbonFootprint ?? 0.0,
+      'packaging': packaging,
+      'disposal_method': disposalMethod,
+      'image_url': imageUrl,
+      'timestamp': Timestamp.now(),
+      'date': DateTime.now().toIso8601String(),
+    });
+
+    // Also keep the legacy global collection for compatibility (optional).
+    await _firestore.collection('scanned_products').add({
+      'userId': uid,
+      'productName': productName,
+      'ecoScore': ecoScore,
+      'barcode': barcode ?? '',
+      'carbonFootprint': carbonFootprint ?? 0.0,
+      'packaging': packaging,
+      'disposalMethod': disposalMethod,
+      'imageUrl': imageUrl,
+      'scannedAt': Timestamp.now(),
+    });
+  }
+
+  /// Save a user scan with analysis text and optional image URL to per-user scans.
+  Future<void> saveUserScan({
+    required String analysis,
+    required String productName,
+    required String ecoScore,
+    required String carbonFootprint,
+    String? imageUrl,
+  }) async {
+    final uid = _auth.currentUser!.uid;
+    final scansRef = _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('scans');
+    await scansRef.add({
+      'analysis': analysis,
+      'product_name': productName,
+      'eco_score': ecoScore,
+      'carbon_footprint': carbonFootprint,
+      'image_url': imageUrl ?? null,
+      'timestamp': FieldValue.serverTimestamp(),
+      'date': DateFormat('yyyy-MM-dd – kk:mm').format(DateTime.now()),
+    });
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> getUserRecentScans() {
+    final uid = _auth.currentUser!.uid;
+    return _firestore
+        .collection('scanned_products')
+        .where('userId', isEqualTo: uid)
+        .orderBy('scannedAt', descending: true)
+        .snapshots();
+  }
+
+  Future<List<Map<String, dynamic>>> getScannedProductsOnce() async {
+    final uid = _auth.currentUser!.uid;
+    final snapshot = await _firestore
+        .collection('scanned_products')
+        .where('userId', isEqualTo: uid)
+        .orderBy('scannedAt', descending: true)
+        .get();
+    return snapshot.docs.map((doc) => doc.data()).toList();
+  }
+
+  // ===============================================
+  // 🌱 FIRESTORE - ALTERNATIVES (From Version 2) 🌱
+  // ===============================================
+
+  Future<List<Map<String, dynamic>>> getAlternatives(String forProduct) async {
+    final snapshot = await _firestore
+        .collection('alternatives')
+        .where('forProduct', isEqualTo: forProduct)
+        .get();
+
+    return snapshot.docs.map((doc) => doc.data()).toList();
+  }
+
+  Future<void> addAlternative({
+    required String forProduct,
+    required String alternativeName,
+    required String ecoScore,
+    required String reason,
+    required String productUrl,
+  }) async {
+    await _firestore.collection('alternatives').add({
+      'forProduct': forProduct,
+      'alternativeName': alternativeName,
+      'ecoScore': ecoScore,
+      'reason': reason,
+      'productUrl': productUrl,
+      'createdAt': Timestamp.now(),
+    });
+  }
+
+  // ===============================================
+  // 🏆 FIRESTORE - DAILY CHALLENGES (From Version 2) 🏆
+  // ===============================================
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> getDailyChallenges() {
+    return _firestore
+        .collection('challenges')
+        .orderBy('date', descending: true)
+        .snapshots();
+  }
+
+  Future<void> addChallenge({
+    required String title,
+    required String description,
+    required int points,
+    required String date,
+  }) async {
+    await _firestore.collection('challenges').add({
+      'title': title,
+      'description': description,
+      'points': points,
+      'date': date,
+      'createdAt': Timestamp.now(),
+    });
+  }
+
+  // ===============================================
+  // 🔔 FIRESTORE - NOTIFICATIONS (From Version 2) 🔔
+  // ===============================================
+
+  Future<void> sendUserNotification(String message) async {
+    final uid = _auth.currentUser!.uid;
+
+    await _firestore.collection('notifications').add({
+      'userId': uid,
+      'message': message,
+      'timestamp': Timestamp.now(),
+      'isRead': false,
+    });
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> getUserNotifications() {
+    final uid = _auth.currentUser!.uid;
+    return _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: uid)
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
+  Future<void> markNotificationAsRead(String notificationId) async {
+    await _firestore.collection('notifications').doc(notificationId).update({
+      'isRead': true,
+    });
   }
 }

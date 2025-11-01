@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '/auth/firebase_service.dart';
-import '/utils/constants.dart' as constants; // Assumed location for kPrimaryGreen/kPrimaryYellow
+import '/utils/constants.dart'
+    as constants; // Assumed location for kPrimaryGreen/kPrimaryYellow
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
@@ -60,12 +61,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickImage() async {
     // Request permission on platforms that need it
     if (!kIsWeb) {
-      final status = await Permission.photos.request();
-      if (!status.isGranted) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Permission denied to access photos')),
+      // Request both common permissions to cover Android and iOS cases.
+      // On iOS Permission.photos is used; on Android apps may need READ_EXTERNAL_STORAGE
+      // or READ_MEDIA_IMAGES (Android 13+). Request both and continue if either is granted.
+      final statuses = await [Permission.photos, Permission.storage].request();
+
+      final photosGranted = statuses[Permission.photos]?.isGranted ?? false;
+      final storageGranted = statuses[Permission.storage]?.isGranted ?? false;
+      final photosPermDenied =
+          statuses[Permission.photos]?.isPermanentlyDenied ?? false;
+      final storagePermDenied =
+          statuses[Permission.storage]?.isPermanentlyDenied ?? false;
+
+      if (!photosGranted && !storageGranted) {
+        if (photosPermDenied || storagePermDenied) {
+          // If permission is permanently denied, prompt user to open app settings
+          if (!mounted) return;
+          final open = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Permission required'),
+              content: const Text(
+                'Photo access is permanently denied. Please open app settings to enable photo permissions.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Open Settings'),
+                ),
+              ],
+            ),
           );
+          if (open == true) {
+            await openAppSettings();
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Permission denied to access photos'),
+              ),
+            );
+          }
         }
         return;
       }
@@ -360,7 +401,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                     CircularProgressIndicator(
                                                       value: _uploadProgress,
                                                       strokeWidth: 4,
-                                                      color: constants.kPrimaryGreen,
+                                                      color: constants
+                                                          .kPrimaryGreen,
                                                     ),
                                                     Text(
                                                       '${((_uploadProgress ?? 0) * 100).toStringAsFixed(0)}%',
@@ -571,14 +613,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
               top: 12,
             ),
             child: _isUploading || _isSaving
-                ? Center(child: CircularProgressIndicator(color: constants.kPrimaryGreen))
+                ? Center(
+                    child: CircularProgressIndicator(
+                      color: constants.kPrimaryGreen,
+                    ),
+                  )
                 : SizedBox(
                     width: double.infinity,
                     height: 56,
                     child: ElevatedButton(
                       onPressed: _saveProfile,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimaryGreen,
+                        backgroundColor: constants.kPrimaryGreen,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -661,6 +707,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Icon(icon, color: Colors.white, size: 20),
     );
   }
+
   Widget _buildBottomNavBar(BuildContext context) {
     const int currentIndex = 3; // Dispose tab
     const Color primaryGreen = Color(0xFF1DB954);
@@ -697,11 +744,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return;
         }
         if (index == 4) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const ProfileScreen(),
-            ),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
           return;
         }
       },
@@ -786,7 +831,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           // Top green header (Fixed height, not curved)
           Container(
             height: 100,
-            decoration: const BoxDecoration(color: kPrimaryGreen),
+            decoration: const BoxDecoration(color: constants.kPrimaryGreen),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.only(top: 6.0),
@@ -805,7 +850,11 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         child: Center(
                           child: Text(
                             'Profile', // Title is 'Profile' when viewed from Change Password
-                            style: TextStyle(color: Colors.white,fontSize: 25,fontWeight: FontWeight.bold,),
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 25,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),
@@ -875,14 +924,18 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               top: 16,
             ),
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: constants.kPrimaryGreen))
+                ? Center(
+                    child: CircularProgressIndicator(
+                      color: constants.kPrimaryGreen,
+                    ),
+                  )
                 : SizedBox(
                     height: 56,
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: _changePassword,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimaryGreen,
+                        backgroundColor: constants.kPrimaryGreen,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

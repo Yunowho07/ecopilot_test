@@ -3,16 +3,34 @@ rules_version='2'
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{document=**} {
-      // This rule allows anyone with your database reference to view, edit,
-      // and delete all data in your database. It is useful for getting
-      // started, but it is configured to expire after 30 days because it
-      // leaves your app open to attackers. At that time, all client
-      // requests to your database will be denied.
-      //
-      // Make sure to write security rules for your app before that time, or
-      // else all client requests to your database will be denied until you
-      // update your rules.
-      allow read, write: if request.time < timestamp.date(2025, 11, 29);
+      // Each user has a profile at /users/{userId}
+      match /users/{userId} {
+      // Allow the authenticated user to read & write their own profile
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Scans (user-specific subcollection): /users/{userId}/scans/{scanId}
+      match /scans/{scanId} {
+      // Allow the authenticated user to create/read/update/delete only their own scans
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Optional stricter create rule example (uncomment if you want):
+      allow create: if request.auth != null
+            && request.auth.uid == userId
+            && request.resource.data.keys().hasAll(['analysis','timestamp']);
+            }
+        }
+      }
+
+      // Optional public collection example
+      match /public/{doc=**} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      // Default: deny anything else explicitly
+      match /{document=**} {
+        allow read, write: if false;
+      }
     }
   }
-}
+

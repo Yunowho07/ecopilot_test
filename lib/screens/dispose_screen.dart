@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'profile_screen.dart' as profile_screen;
 import 'alternative_screen.dart' as alternative_screen;
 import 'home_screen.dart'; // Assume this file exists
@@ -14,12 +15,21 @@ class DisposalGuidanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
-        toolbarHeight: 0, // Hide the default AppBar
-        backgroundColor: Colors.transparent,
+        // Provide a visible menu button to open the Drawer
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.black87),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
+        title: const Text(
+          'Disposal Guidance',
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: Colors.white,
         elevation: 0,
-        // For status bar icons to be dark
-        // systemOverlayStyle: SystemUiOverlayStyle.dark,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

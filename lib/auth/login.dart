@@ -359,7 +359,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildHeader(BuildContext context) {
     final size = MediaQuery.of(context).size;
     return Container(
-      height: size.height * 0.35,
+      height: size.height * 0.25,
       width: size.width,
       decoration: BoxDecoration(color: kPrimaryGreen),
       child: Stack(

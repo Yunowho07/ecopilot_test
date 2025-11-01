@@ -1,6 +1,7 @@
 // NOTE: These are required imports for the navigation logic provided.
 // Since the full project structure is not provided, these are assumed imports.
 import 'package:flutter/material.dart';
+import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'home_screen.dart'; // Assume this file exists
 import 'scan_screen.dart'; // Assume this file exists
 import 'dispose_screen.dart' as dispose_screen; // Assume this file exists
@@ -375,9 +376,16 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
+        // Visible menu button to open drawer
+        leading: Builder(
+          builder: (context) => IconButton(
+            icon: const Icon(Icons.menu, color: Colors.white),
+            onPressed: () => Scaffold.of(context).openDrawer(),
+          ),
+        ),
         centerTitle: true,
-        automaticallyImplyLeading: false, // remove back button
         title: const Text(
           'Alternative Products',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
