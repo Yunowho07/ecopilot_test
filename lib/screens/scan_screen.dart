@@ -1,11 +1,13 @@
 import 'dart:io';
+// NOTE: ⚠️ UNCOMMENT THESE IMPORTS AFTER ADDING THE 'camera' PACKAGE TO PUBSPEC.YAML
+import 'package:camera/camera.dart'; 
+import 'package:path_provider/path_provider.dart'; 
 import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// removed unused cloud_firestore and intl imports (centralized in FirebaseService)
 import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'profile_screen.dart' as profile_screen;
 import 'alternative_screen.dart' as alternative_screen;
@@ -13,8 +15,14 @@ import 'dispose_screen.dart' as dispose_screen;
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import '/utils/constants.dart';
 
-// --- II. Data Model and Parsing Logic ---
+// Assuming you have defined these colors in utils/constants.dart
+const Color kPrimaryGreen = Color(0xFF4CAF50);
+const Color kWarningRed = Color(0xFFF44336);
+const Color kDiscoverMoreYellow = Color(0xFFFFC107);
+const Color kDiscoverMoreBlue = Color(0xFF2196F3);
 
+// --- II. Data Model and Parsing Logic ---
+// (No changes in this section)
 class ProductAnalysisData {
   final File? imageFile;
   final String? imageUrl;
@@ -206,9 +214,8 @@ class ProductAnalysisData {
   }
 }
 
-// --- III. Helper Widgets (Bottom Nav, Placeholder) ---
+// --- III. Helper Widgets (ResultScreen, ProfileScreen) ---
 
-// Placeholder for ProfileScreen
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({Key? key}) : super(key: key);
   @override
@@ -219,8 +226,6 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 }
-
-// --- IV. Result Screen Implementation (Design Match) ---
 
 class ResultScreen extends StatelessWidget {
   final ProductAnalysisData analysisData;
@@ -269,21 +274,23 @@ class ResultScreen extends StatelessWidget {
   }
 
   Widget _buildWarningRow(String label, bool isChecked) {
+    final bool isGood = label.toLowerCase().contains('cruelty') ? isChecked : !isChecked;
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: Row(
         children: [
           Icon(
-            isChecked ? Icons.check_circle_outline : Icons.cancel_outlined,
-            color: isChecked ? kPrimaryGreen : kWarningRed,
+            isGood ? Icons.check_circle_outline : Icons.cancel_outlined,
+            color: isGood ? kPrimaryGreen : kWarningRed,
             size: 20,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                color: isChecked ? Colors.white : kWarningRed,
+              style: const TextStyle(
+                color: Colors.white,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -306,7 +313,7 @@ class ResultScreen extends StatelessWidget {
     if (displayScore.length > 1 && displayScore.contains('+')) {
       displayScore = displayScore.substring(0, 1);
     }
-    String displayLetter = displayScore.substring(0, 1);
+    String displayLetter = displayScore.isNotEmpty ? displayScore.substring(0, 1) : 'N';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -315,7 +322,6 @@ class ResultScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text(
-        // Show the actual ecoScore from data model, but use only the letter for color
         'ECO-SCORE $ecoScore'.toUpperCase(),
         style: const TextStyle(
           color: Colors.white,
@@ -326,64 +332,43 @@ class ResultScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSectionCard({
-    required Color borderColor,
-    required Color titleColor,
-    required String title,
-    required List<Widget> children,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.black, // Background color is black as in the design
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: borderColor, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: titleColor,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const Divider(color: Colors.white30, height: 20),
-          ...children,
-        ],
-      ),
-    );
-  }
-
   Widget _buildDiscoverMoreButton({
     required String label,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
   }) {
-    return ElevatedButton(
-      onPressed: onTap,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: Colors.white, size: 28),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        customBorder: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(15.0),
+        ),
+        child: Container(
+          height: 80, // Fixed height for a button-like appearance
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(15.0),
           ),
-        ],
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 24),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -396,10 +381,10 @@ class ResultScreen extends StatelessWidget {
           'Product Details',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: kPrimaryGreen,
+        backgroundColor: Colors.black, // Dark app bar
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      backgroundColor: Colors.black, // Background matches the image design
+      backgroundColor: Colors.black, // Black background for the body
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16.0),
@@ -454,68 +439,89 @@ class ResultScreen extends StatelessWidget {
               const SizedBox(height: 20),
 
               // 1. Product Details Card (Green Text/Border)
-              _buildSectionCard(
-                borderColor: kPrimaryGreen,
-                titleColor: kPrimaryGreen,
-                title: 'Product Details',
-                children: [
-                  _buildInfoRow('Name', analysisData.productName),
-                  _buildInfoRow('Category', analysisData.category),
-                  _buildInfoRow('Ingredients', analysisData.ingredients),
-                ],
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: kPrimaryGreen, width: 3),
+                ),
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Product Details', style: TextStyle(color: kPrimaryGreen, fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Divider(color: Colors.white30, height: 16),
+                    _buildInfoRow('Name', analysisData.productName),
+                    _buildInfoRow('Category', analysisData.category),
+                    _buildInfoRow('Ingredients', analysisData.ingredients),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 
               // 2. Eco Impact Card (Green Text/Border)
-              _buildSectionCard(
-                borderColor: kPrimaryGreen,
-                titleColor: kPrimaryGreen,
-                title: 'Eco Impact',
-                children: [
-                  _buildInfoRow(
-                    'Carbon Footprint',
-                    analysisData.carbonFootprint,
-                    icon: Icons.cloud,
-                    iconColor: Colors.lightBlue.shade300,
-                  ),
-                  _buildInfoRow(
-                    'Packaging',
-                    analysisData.packagingType,
-                    icon: Icons.eco,
-                    iconColor: Colors.lightGreen.shade300,
-                  ),
-                  _buildInfoRow(
-                    'Suggested Disposal',
-                    analysisData.disposalMethod,
-                    icon: Icons.restore_from_trash,
-                    iconColor: Colors.grey.shade400,
-                  ),
-                ],
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: kPrimaryGreen, width: 3),
+                ),
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Eco Impact', style: TextStyle(color: kPrimaryGreen, fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Divider(color: Colors.white30, height: 16),
+                    _buildInfoRow(
+                      'Carbon Footprint',
+                      analysisData.carbonFootprint,
+                      icon: Icons.cloud,
+                      iconColor: Colors.lightBlue.shade300,
+                    ),
+                    _buildInfoRow(
+                      'Packaging',
+                      analysisData.packagingType,
+                      icon: Icons.eco,
+                      iconColor: Colors.lightGreen.shade300,
+                    ),
+                    _buildInfoRow(
+                      'Suggested Disposal',
+                      analysisData.disposalMethod,
+                      icon: Icons.restore_from_trash,
+                      iconColor: Colors.grey.shade400,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
 
               // 3. Environmental Warnings Card (Green Text/Border)
-              _buildSectionCard(
-                borderColor: kPrimaryGreen,
-                titleColor: kPrimaryGreen,
-                title:
-                    'Environmental Warnings', // keep bold via the card's Text style; to center the title, update _buildSectionCard's Text to use textAlign: TextAlign.center
-                children: [
-                  _buildWarningRow(
-                    'Contains microplastics?',
-                    analysisData.containsMicroplastics,
-                  ),
-                  _buildWarningRow(
-                    'Palm oil derivative?',
-                    analysisData.palmOilDerivative,
-                  ),
-                  _buildWarningRow('Cruelty-Free?', analysisData.crueltyFree),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _buildEcoScoreDisplay(analysisData.ecoScore),
-                  ),
-                ],
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(color: kPrimaryGreen, width: 3),
+                ),
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Environmental Warnings', style: TextStyle(color: kPrimaryGreen, fontSize: 16, fontWeight: FontWeight.bold)),
+                    const Divider(color: Colors.white30, height: 16),
+                    _buildWarningRow(
+                      'Contains microplastics?',
+                      analysisData.containsMicroplastics,
+                    ),
+                    _buildWarningRow(
+                      'Palm oil derivative?',
+                      analysisData.palmOilDerivative,
+                    ),
+                    _buildWarningRow('Cruelty-Free?', analysisData.crueltyFree),
+                    const SizedBox(height: 10),
+                    // ECO-SCORE DISPLAY
+                    _buildEcoScoreDisplay(analysisData.ecoScore),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -524,7 +530,7 @@ class ResultScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Colors.black,
                   borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: kDiscoverMoreYellow, width: 2),
+                  border: Border.all(color: kDiscoverMoreYellow, width: 3),
                 ),
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -541,29 +547,28 @@ class ResultScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(
-                          child: _buildDiscoverMoreButton(
-                            label: 'Disposal Guidance',
-                            icon: Icons.delete_sweep,
-                            color: kDiscoverMoreBlue,
-                            onTap: () {},
-                          ),
+                        _buildDiscoverMoreButton(
+                          label: 'Recipe Ideas', // Changed label to match image
+                          icon: Icons.restaurant_menu, // Using relevant icon
+                          color: kDiscoverMoreBlue,
+                          onTap: () {
+                            // TODO: Implement navigation to Recipe Ideas screen
+                            debugPrint('Navigating to Recipe Ideas');
+                          },
                         ),
                         const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildDiscoverMoreButton(
-                            label: 'Better Alternative',
-                            icon: Icons.shopping_cart,
-                            color: kDiscoverMoreGreen,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const alternative_screen.AlternativeScreen(),
-                                ),
-                              );
-                            },
-                          ),
+                        _buildDiscoverMoreButton(
+                          label: 'Better Alternative',
+                          icon: Icons.eco, // Changed icon to be more relevant
+                          color: kPrimaryGreen, // Using primary green for alt
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const alternative_screen.AlternativeScreen(),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -588,17 +593,78 @@ class ScanScreen extends StatefulWidget {
 }
 
 class _ScanScreenState extends State<ScanScreen> {
+  // ⚠️ UNCOMMENT THESE VARIABLES FOR CAMERA PACKAGE INTEGRATION
+  CameraController? _cameraController;
+  bool _isCameraInitialized = false;
+  List<CameraDescription> _cameras = [];
+
   bool _isLoading = false;
   late final String _geminiApiKey;
   final ImagePicker _picker = ImagePicker();
   int _selectedIndex = 2; // Default to 'Scan' tab
+  bool _isFlashOn = false; // State for flashlight (controls the icon)
+  bool _isFrontCamera = false; // State for camera toggle (controls the icon)
 
+  // A. State Variables & Initialization
   @override
   void initState() {
     super.initState();
     _geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+
+    // Start camera initialization
+    _initializeCamera();
   }
 
+  Future<void> _initializeCamera() async {
+    // ⚠️ UNCOMMENT and use these methods for actual camera setup.
+    
+    try {
+      // 1. Fetch available cameras
+      _cameras = await availableCameras();
+      
+      // 2. Initialize the controller with the rear camera
+      _cameraController = CameraController(
+        _cameras.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.back,
+          orElse: () => _cameras.first,
+        ),
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      
+      // 3. Initialize the controller instance
+      await _cameraController!.initialize();
+
+      // 4. Update state to reflect readiness and set initial flash state
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _cameraController!.setFlashMode(FlashMode.off); 
+        });
+      }
+    } on CameraException catch (e) {
+      debugPrint("Camera initialization error: $e");
+      // Handle error gracefully in UI, e.g., show an error message
+    }
+    
+    debugPrint("Camera initialization logic executed (using simulation).");
+    if (mounted) {
+      // Simulate initialization completion for UI to render properly
+      setState(() {
+        // _isCameraInitialized = true;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    // ⚠️ UNCOMMENT for camera package integration
+    // _cameraController?.dispose(); 
+    super.dispose();
+  }
+
+
+  // --- Image/Analysis Logic ---
   Future<void> _pickImage(ImageSource source) async {
     final pickedFile = await _picker.pickImage(source: source);
 
@@ -609,24 +675,9 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _scanBarcodeAndAnalyze() async {
-    // **TODO: Implement Barcode Scanning logic here**
-    /*
-    Example using 'flutter_barcode_scanner'
-    String barcodeScanRes = await FlutterBarcodeScanner.scanBarcode(
-        '#ff6666', 'Cancel', true, ScanMode.BARCODE);
-
-    if (barcodeScanRes != '-1' && barcodeScanRes.isNotEmpty) {
-      // Barcode scanned successfully, try OpenFoodFacts
-      // final productInfo = await _fetchOpenFoodFacts(barcodeScanRes);
-      // if (productInfo != null) {
-      //   final analysisData = ProductAnalysisData.fromOpenFoodFacts(productInfo);
-      //   _navigateToResultScreen(analysisData);
-      //   return;
-      // }
-    }
-    */
-
-    // Fallback to image upload/camera
+    debugPrint("Triggering Barcode/Camera Scan...");
+    // If using the camera package, this would be where you call:
+    // final XFile = await _cameraController.takePicture();
     _showImageSourceActionSheet(context);
   }
 
@@ -811,133 +862,289 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: const AppDrawer(),
-      appBar: AppBar(
-        // Use a Builder for the leading icon so we can call Scaffold.of(context)
-        leading: Builder(
-          builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.white),
-            onPressed: () => Scaffold.of(context).openDrawer(),
-          ),
+
+  // --- UI Builder Widgets ---
+
+  // Small circle button for camera controls
+  Widget _buildCameraButton({required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.4),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white54, width: 1.5),
         ),
-        title: const Text(
-          'Scan Product',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: kPrimaryGreen,
+        child: Icon(icon, color: Colors.white, size: 24),
       ),
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_isLoading)
-                const Center(
-                  child: Column(
-                    children: [
-                      CircularProgressIndicator(color: kPrimaryGreen),
-                      SizedBox(height: 16),
-                      Text(
-                        "Analyzing product...",
-                        style: TextStyle(fontSize: 16, color: Colors.black54),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                Column(
-                  children: [
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimaryGreen,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: _scanBarcodeAndAnalyze,
-                      icon: const Icon(
-                        Icons.qr_code_scanner,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                      label: const Text(
-                        'Scan Barcode',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24.0),
-                      child: Text(
-                        'OR',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: kPrimaryGreen,
-                        side: const BorderSide(color: kPrimaryGreen, width: 2),
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: () => _showImageSourceActionSheet(context),
-                      icon: const Icon(Icons.camera_alt, size: 24),
-                      label: const Text(
-                        'Upload or Take Product Photo',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              const Spacer(),
-              const Text(
-                "Tap 'Scan Barcode' for quick data from OpenFoodFacts, or 'Upload or Take Photo' for comprehensive analysis via Gemini.",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.black45),
-              ),
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNavBar(),
     );
   }
 
+  // B. Live Preview (_buildCameraView)
+  Widget _buildCameraView() {
+    // ⚠️ UNCOMMENT this block for actual camera initialization check
+    
+    if (_cameraController == null || !_isCameraInitialized) {
+      // Show a loading indicator or a placeholder until the camera is ready
+      return const Expanded(
+        child: Center(
+          child: CircularProgressIndicator(color: kPrimaryGreen),
+        ),
+      );
+    }
+    
+    
+    return Expanded(
+      child: Container(
+        color: Colors.black, // Simulating a live camera feed's dark background
+        child: Stack(
+          children: [
+            // ⚠️ UNCOMMENT the line below to show the live preview
+            // CameraPreview(_cameraController!), 
+
+            // Scanner Frame/Corner Indicators (White borders for scanning area)
+            Center(
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.8,
+                height: MediaQuery.of(context).size.width * 0.8 * 0.7, // Rectangular scan area
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white10, width: 2),
+                ),
+                child: CustomPaint(
+                  painter: _CornerPainter(color: Colors.white, cornerLength: 40, cornerThickness: 4),
+                  child: Center(
+                    child: _isLoading
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(color: kPrimaryGreen),
+                              const SizedBox(height: 16),
+                              Text(
+                                "Analyzing product...",
+                                style: TextStyle(fontSize: 16, color: Colors.white.withOpacity(0.8)),
+                              ),
+                            ],
+                          )
+                        : Icon(
+                            Icons.qr_code_scanner,
+                            color: Colors.white.withOpacity(0.5),
+                            size: 80,
+                          ),
+                  ),
+                ),
+              ),
+            ),
+
+            // Top Control Bar (Flash and Flip Camera)
+            Positioned(
+              top: 30,
+              left: 0,
+              right: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Flashlight Toggle - C. Enabling Flash
+                    _buildCameraButton(
+                      icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
+                      onTap: () {
+                        // ⚠️ UNCOMMENT the check for camera initialization
+                        // if (_cameraController != null && _cameraController!.value.isInitialized) {
+                          setState(() {
+                            _isFlashOn = !_isFlashOn;
+                            // Actual flash control command:
+                            // _cameraController!.setFlashMode(_isFlashOn ? FlashMode.torch : FlashMode.off);
+                            debugPrint('Flashlight toggled to: $_isFlashOn');
+                          });
+                        // }
+                      },
+                    ),
+                    // Upload from Gallery
+                    _buildCameraButton(
+                      icon: Icons.image,
+                      onTap: () {
+                        debugPrint('Opening photo gallery...');
+                        _pickImage(ImageSource.gallery);
+                      },
+                    ),
+                    // Flip Camera - C. Enabling Flip
+                    _buildCameraButton(
+                      icon: Icons.flip_camera_ios,
+                      onTap: () {
+                        // ⚠️ UNCOMMENT the check for camera initialization
+                        // if (_cameraController != null && _cameraController!.value.isInitialized && _cameras.length > 1) {
+                          setState(() {
+                            _isFrontCamera = !_isFrontCamera;
+                            // Actual camera flip command:
+                            // final newCamera = _isFrontCamera ? _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front) : _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.back);
+                            // _cameraController!.setDescription(newCamera);
+                            debugPrint('Camera flipped to: ${_isFrontCamera ? 'Front' : 'Rear'}');
+                          });
+                        // }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Bottom Center Capture Button (Scan Barcode)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 20.0),
+                child: FloatingActionButton(
+                  onPressed: _scanBarcodeAndAnalyze, // Barcode scan/Image Action Sheet
+                  backgroundColor: kPrimaryGreen,
+                  child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 30),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  // The main dark bottom section containing the logo, search, and help text
+  Widget _buildScannerOverlay() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1E1E), // Dark grey/black for the bottom overlay
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20),
+          topRight: Radius.circular(20),
+        ),
+      ),
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Logo and App Name
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.eco, color: kPrimaryGreen, size: 30),
+              const SizedBox(width: 8),
+              const Text(
+                'Eco',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w300,
+                ),
+              ),
+              Text(
+                'PILOT',
+                style: TextStyle(
+                  color: kPrimaryGreen,
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Search Instruction Text
+          const Text(
+            'Scan a barcode or search for a product',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // Search Bar
+          TextField(
+            onSubmitted: (query) {
+              // TODO: Implement manual product search logic
+              debugPrint("Search for product: $query");
+            },
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              hintText: 'Search for a product',
+              hintStyle: TextStyle(color: Colors.white54),
+              filled: true,
+              fillColor: Colors.black, // Darker background for the search bar
+              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 20),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: BorderSide.none,
+              ),
+              prefixIcon: const Icon(Icons.search, color: kPrimaryGreen),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.qr_code_scanner, color: kPrimaryGreen),
+                onPressed: _scanBarcodeAndAnalyze,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 30),
+
+          // 'Help us translate' section (Simulating the secondary card)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF333333),
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.help_outline, color: kPrimaryGreen, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Help us improve our data!',
+                        style: TextStyle(
+                          color: kPrimaryGreen,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Translate the app, submit missing products, or verify ingredients.',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  // --- Bottom Navigation Bar ---
   Widget _buildBottomNavBar() {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
-      // Hardcode the index to 1 (Alternative) to visually highlight the current screen
       currentIndex: _selectedIndex,
       selectedItemColor: kPrimaryGreen,
       unselectedItemColor: Colors.grey,
+      backgroundColor: Colors.black,
       onTap: (index) async {
-        // When the Home tab is tapped, open the Home screen.
         if (index == 0) {
           Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
           return;
         }
-        // When the Alternative tab is tapped, open the Alternative screen (or do nothing if already here).
         if (index == 1) {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -946,12 +1153,8 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
           );
           return;
         }
-        // When Scan tab is tapped, open the ScanScreen and wait for result
         if (index == 2) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ScanScreen()));
-          return;
+          return; // Already on ScanScreen
         }
         if (index == 3) {
           Navigator.of(context).push(
@@ -961,7 +1164,6 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
           );
           return;
         }
-        // When the Profile tab is tapped, open the Profile screen.
         if (index == 4) {
           Navigator.of(context).push(
             MaterialPageRoute(
@@ -970,12 +1172,6 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
           );
           return;
         }
-
-        // NOTE: The provided logic does not allow the index to be changed (setState)
-        // because all navigations use push/return. Retaining the setState block just in case.
-        // setState(() {
-        //   _selectedIndex = index;
-        // });
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
@@ -995,4 +1191,60 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
       ],
     );
   }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      drawer: const AppDrawer(),
+      // No AppBar to allow the CameraView to be full height
+      body: SafeArea(
+        child: Column(
+          children: [
+            // 1. Camera View Area
+            _buildCameraView(),
+
+            // 2. Scanner Overlay (Dark section with search and logo)
+            _buildScannerOverlay(),
+          ],
+        ),
+      ),
+      bottomNavigationBar: _buildBottomNavBar(),
+    );
+  }
+}
+
+// Helper painter to draw the corner guides for the scanner
+class _CornerPainter extends CustomPainter {
+  final Color color;
+  final double cornerLength;
+  final double cornerThickness;
+
+  _CornerPainter({required this.color, required this.cornerLength, required this.cornerThickness});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = cornerThickness
+      ..style = PaintingStyle.stroke;
+
+    // Top-Left Corner
+    canvas.drawLine(Offset(0, 0), Offset(cornerLength, 0), paint);
+    canvas.drawLine(Offset(0, 0), Offset(0, cornerLength), paint);
+
+    // Top-Right Corner
+    canvas.drawLine(Offset(size.width - cornerLength, 0), Offset(size.width, 0), paint);
+    canvas.drawLine(Offset(size.width, 0), Offset(size.width, cornerLength), paint);
+
+    // Bottom-Left Corner
+    canvas.drawLine(Offset(0, size.height), Offset(cornerLength, size.height), paint);
+    canvas.drawLine(Offset(0, size.height - cornerLength), Offset(0, size.height), paint);
+
+    // Bottom-Right Corner
+    canvas.drawLine(Offset(size.width - cornerLength, size.height), Offset(size.width, size.height), paint);
+    canvas.drawLine(Offset(size.width, size.height - cornerLength), Offset(size.width, size.height), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
