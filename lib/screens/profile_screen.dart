@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import '/auth/firebase_service.dart';
-import '/utils/constants.dart'; // Assumed location for kPrimaryGreen/kPrimaryYellow
+import '/utils/constants.dart' as constants; // Assumed location for kPrimaryGreen/kPrimaryYellow
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'alternative_screen.dart' as alternative_screen;
+import 'home_screen.dart'; // Assume this file exists
+import 'scan_screen.dart'; // Assume this file exists
+import 'dispose_screen.dart' as dispose_screen; // Assume this file exists
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -229,7 +233,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // Top green header (Fixed height, not curved)
           Container(
             height: 100,
-            decoration: const BoxDecoration(color: kPrimaryGreen),
+            decoration: const BoxDecoration(color: constants.kPrimaryGreen),
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.only(top: 6.0),
@@ -293,7 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       shape: BoxShape.circle,
                                       color: Colors.white,
                                       border: Border.all(
-                                        color: kPrimaryYellow,
+                                        color: constants.kPrimaryYellow,
                                         width: 8,
                                       ),
                                       boxShadow: [
@@ -356,7 +360,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                                     CircularProgressIndicator(
                                                       value: _uploadProgress,
                                                       strokeWidth: 4,
-                                                      color: kPrimaryGreen,
+                                                      color: constants.kPrimaryGreen,
                                                     ),
                                                     Text(
                                                       '${((_uploadProgress ?? 0) * 100).toStringAsFixed(0)}%',
@@ -387,7 +391,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               height: 40,
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 3,
-                                                color: kPrimaryGreen,
+                                                color: constants.kPrimaryGreen,
                                               ),
                                             )
                                           : (_uploadError != null)
@@ -400,7 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             )
                                           : _buildEditButton(
                                               Icons.edit,
-                                              kPrimaryGreen,
+                                              constants.kPrimaryGreen,
                                             ),
                                     ),
                                   ),
@@ -538,7 +542,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               child: const Text(
                                 'Change',
                                 style: TextStyle(
-                                  color: kPrimaryGreen,
+                                  color: constants.kPrimaryGreen,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -567,7 +571,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               top: 12,
             ),
             child: _isUploading || _isSaving
-                ? Center(child: CircularProgressIndicator(color: kPrimaryGreen))
+                ? Center(child: CircularProgressIndicator(color: constants.kPrimaryGreen))
                 : SizedBox(
                     width: double.infinity,
                     height: 56,
@@ -612,7 +616,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, color: kPrimaryGreen, size: 28),
+          Icon(icon, color: constants.kPrimaryGreen, size: 28),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -655,6 +659,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
       child: Icon(icon, color: Colors.white, size: 20),
+    );
+  }
+  Widget _buildBottomNavBar(BuildContext context) {
+    const int currentIndex = 3; // Dispose tab
+    const Color primaryGreen = Color(0xFF1DB954);
+
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
+      selectedItemColor: primaryGreen,
+      unselectedItemColor: Colors.grey,
+      onTap: (index) async {
+        // Simple navigation that doesn't rely on state located outside this widget
+        if (index == 0) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
+          return;
+        }
+        if (index == 1) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const alternative_screen.AlternativeScreen(),
+            ),
+          );
+          return;
+        }
+        if (index == 2) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ScanScreen()));
+          return;
+        }
+        if (index == 3) {
+          // already on Dispose screen
+          return;
+        }
+        if (index == 4) {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const ProfileScreen(),
+            ),
+          );
+          return;
+        }
+      },
+      items: const <BottomNavigationBarItem>[
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_cart),
+          label: 'Alternative',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.qr_code_scanner),
+          label: 'Scan',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.delete_sweep),
+          label: 'Dispose',
+        ),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+      ],
     );
   }
 }
@@ -739,11 +805,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                         child: Center(
                           child: Text(
                             'Profile', // Title is 'Profile' when viewed from Change Password
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 25,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            style: TextStyle(color: Colors.white,fontSize: 25,fontWeight: FontWeight.bold,),
                           ),
                         ),
                       ),
@@ -813,7 +875,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               top: 16,
             ),
             child: _isLoading
-                ? Center(child: CircularProgressIndicator(color: kPrimaryGreen))
+                ? Center(child: CircularProgressIndicator(color: constants.kPrimaryGreen))
                 : SizedBox(
                     height: 56,
                     width: double.infinity,
@@ -857,7 +919,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.lock_outline, color: kPrimaryGreen, size: 28),
+          Icon(Icons.lock_outline, color: constants.kPrimaryGreen, size: 28),
           const SizedBox(width: 16),
           Expanded(
             child: Column(

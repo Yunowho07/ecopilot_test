@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../auth/firebase_service.dart';
 import '/auth/landing.dart';
-import 'profile_screen.dart';
-import 'scan_screen.dart';
+import 'profile_screen.dart' as profile_screen;
+import 'alternative_screen.dart' as alternative_screen;
+import 'dispose_screen.dart' as dispose_screen;
+import '/screens/scan_screen.dart';
 import 'notification_screen.dart';
 import 'setting_screen.dart';
 import 'support_screen.dart';
@@ -26,8 +28,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0; // For Bottom Navigation Bar
 
   // Use theme colors from constants
-  // final primaryGreen = const Color(0xFF4CAF50);
-  // final yellowAccent = const Color(0xFFFFEB3B);
+  final primaryGreen = const Color(0xFF4CAF50);
+  final yellowAccent = const Color(0xFFFFEB3B);
 
   @override
   void initState() {
@@ -76,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Open the Notification screen instead of signing out
     if (mounted) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const NotificationScreen()),
+        MaterialPageRoute(builder: (_) => const AuthLandingScreen()),
       );
     }
   }
@@ -170,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: _handleSignOut,
             child: CircleAvatar(
               radius: 20,
-              backgroundColor: kPrimaryGreen,
+              backgroundColor: primaryGreen,
               child: const Icon(Icons.notifications_none, color: Colors.white),
             ),
           ),
@@ -273,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Navigator.of(context).pop();
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const ProfileScreen(),
+                          builder: (_) => const profile_screen.ProfileScreen(),
                         ),
                       );
                     },
@@ -283,8 +285,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: 'Alternative',
                     onTap: () {
                       Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Alternative')),
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const alternative_screen.AlternativeScreen(),
+                        ),
                       );
                     },
                   ),
@@ -293,9 +297,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     label: 'Dispose',
                     onTap: () {
                       Navigator.of(context).pop();
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(const SnackBar(content: Text('Dispose')));
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const dispose_screen.DisposalGuidanceScreen(),
+                        ),
+                      );
                     },
                   ),
                   _drawerItem(
@@ -501,7 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.flag, color: kPrimaryGreen, size: 28),
+              Icon(Icons.flag, color: primaryGreen, size: 28),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -525,7 +531,7 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimaryGreen,
+              backgroundColor: primaryGreen,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -562,10 +568,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: colorWithOpacity(kPrimaryGreen, 0.1),
+              color: colorWithOpacity(primaryGreen, 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(Icons.recycling, color: kPrimaryGreen),
+            child: Icon(Icons.recycling, color: primaryGreen),
           ),
           const SizedBox(width: 15),
           Expanded(
@@ -603,7 +609,7 @@ class _HomeScreenState extends State<HomeScreen> {
             value: 0.8, // 80% progress
             minHeight: 15,
             backgroundColor: Colors.grey.shade200,
-            valueColor: const AlwaysStoppedAnimation<Color>(kPrimaryGreen),
+            valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
           ),
         ),
       ],
@@ -614,18 +620,24 @@ class _HomeScreenState extends State<HomeScreen> {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
       currentIndex: _selectedIndex,
-      selectedItemColor: kPrimaryGreen,
+      selectedItemColor: primaryGreen,
       unselectedItemColor: Colors.grey,
       onTap: (index) async {
         // When the Profile tab is tapped, open the Profile screen.
-        if (index == 4) {
+        if (index == 0) {
           Navigator.of(
             context,
-          ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
           return; // don't change selected index when opening profile as a separate route
         }
-
-        // When Scan tab is tapped, open the ScanScreen and wait for result
+        // When the Alternative tab is tapped, open the Alternative screen.
+        if (index == 1) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const alternative_screen.AlternativeScreen()));
+          return; // don't change selected index when opening alternative as a separate route
+        }
+                // When Scan tab is tapped, open the ScanScreen and wait for result
         if (index == 2) {
           final result = await Navigator.of(
             context,
@@ -652,6 +664,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
           return; // don't change selected index when opening scan as a separate route
         }
+        if (index == 3) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const dispose_screen.DisposalGuidanceScreen()));
+          return; // don't change selected index when opening dispose as a separate route
+        }
+        // When the Profile tab is tapped, open the Profile screen.
+        if (index == 4) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const profile_screen.ProfileScreen()));
+          return; // don't change selected index when opening profile as a separate route
+        }
 
         setState(() {
           _selectedIndex = index;
@@ -660,18 +685,9 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Alternative'),
+        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner), label: 'Scan'),
+        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep), label: 'Dispose'),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );
