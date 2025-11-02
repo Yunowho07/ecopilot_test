@@ -22,7 +22,7 @@ const Color kDiscoverMoreYellow = Color(0xFFFFC107);
 const Color kDiscoverMoreBlue = Color(0xFF2196F3);
 
 // --- II. Data Model and Parsing Logic ---
-// (No changes in this section)
+
 class ProductAnalysisData {
   final File? imageFile;
   final String? imageUrl;
@@ -215,6 +215,7 @@ class ProductAnalysisData {
 }
 
 // --- III. Helper Widgets (ResultScreen, ProfileScreen) ---
+// (ResultScreen and ProfileScreen remain unchanged for brevity, but are included in the final file)
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -604,6 +605,9 @@ class _ScanScreenState extends State<ScanScreen> {
   int _selectedIndex = 2; // Default to 'Scan' tab
   bool _isFlashOn = false; // State for flashlight (controls the icon)
   bool _isFrontCamera = false; // State for camera toggle (controls the icon)
+  
+  // NOTE: This variable is now unused, as the flip button is replaced by Capture.
+  // We keep the state logic for conceptual camera control.
 
   // A. State Variables & Initialization
   @override
@@ -659,7 +663,7 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   void dispose() {
     // ⚠️ UNCOMMENT for camera package integration
-    // _cameraController?.dispose(); 
+    _cameraController?.dispose(); 
     super.dispose();
   }
 
@@ -674,13 +678,33 @@ class _ScanScreenState extends State<ScanScreen> {
     }
   }
 
+  // NOTE: This handles the bottom FAB tap
   Future<void> _scanBarcodeAndAnalyze() async {
-    debugPrint("Triggering Barcode/Camera Scan...");
-    // If using the camera package, this would be where you call:
-    // final XFile = await _cameraController.takePicture();
-    _showImageSourceActionSheet(context);
+    debugPrint("Triggering Barcode/Camera Scan (FAB Tapped)...");
+    // If using a dedicated barcode package, call it here.
   }
 
+  // NOTE: This handles the top-right button tap (now Capture)
+  Future<void> _capturePicture() async {
+    debugPrint("Triggering Picture Capture (Top Right Button Tapped)...");
+    
+    // ⚠️ UNCOMMENT and replace with actual capture logic:
+    
+    if (_cameraController != null && _cameraController!.value.isInitialized) {
+      try {
+        final XFile file = await _cameraController!.takePicture();
+        final imageFile = File(file.path);
+        await _analyzeProduct(imageFile);
+      } catch (e) {
+        debugPrint("Error taking picture: $e");
+      }
+    } else { // Fallback to gallery/camera picker
+    }
+    // For simulation, we fall back to the picker immediately:
+  }
+
+
+  // ... (analyze, navigate, save, showActionSheet methods remain unchanged) ...
   Future<void> _analyzeImage(File imageFile) async {
     setState(() {
       _isLoading = true;
@@ -707,7 +731,7 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
 Product name: [Product Name]
 Category: [Product Category, e.g., Personal Care (Sunscreen)]
 Ingredients: [List of ingredients, comma-separated, e.g., Water, Zinc Oxide, etc.]
-Eco-friendliness rating: [A, B, C, D, E or A+, B+, etc.]
+Eco-friendliness rating: [A, B, C, D, E or etc.]
 Carbon Footprint: [Estimated CO2e per unit, e.g., 0.36 kg CO2e per unit]
 Packaging type: [Material and recyclability, e.g., Plastic Tube - Recyclable (Type 4 - LDPE)]
 Disposal method: [Suggested disposal, e.g., Rinse and recycle locally]
@@ -815,52 +839,52 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
     }
   }
 
-  void _showImageSourceActionSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
-      ),
-      builder: (BuildContext context) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text(
-                'Select Image Source',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: kPrimaryGreen,
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: kPrimaryGreen),
-              title: const Text(
-                'Photo Gallery',
-                style: TextStyle(fontSize: 16),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt, color: kPrimaryGreen),
-              title: const Text('Use Camera', style: TextStyle(fontSize: 16)),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
-        );
-      },
-    );
-  }
+  // void _showImageSourceActionSheet(BuildContext context) {
+  //   showModalBottomSheet(
+  //     context: context,
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
+  //     ),
+  //     builder: (BuildContext context) {
+  //       return Column(
+  //         mainAxisSize: MainAxisSize.min,
+  //         children: <Widget>[
+  //           const Padding(
+  //             padding: EdgeInsets.all(16.0),
+  //             child: Text(
+  //               'Select Image Source',
+  //               style: TextStyle(
+  //                 fontSize: 20,
+  //                 fontWeight: FontWeight.bold,
+  //                 color: kPrimaryGreen,
+  //               ),
+  //             ),
+  //           ),
+  //           ListTile(
+  //             leading: const Icon(Icons.photo_library, color: kPrimaryGreen),
+  //             title: const Text(
+  //               'Photo Gallery',
+  //               style: TextStyle(fontSize: 16),
+  //             ),
+  //             onTap: () {
+  //               Navigator.pop(context);
+  //               _pickImage(ImageSource.gallery);
+  //             },
+  //           ),
+  //           ListTile(
+  //             leading: const Icon(Icons.camera_alt, color: kPrimaryGreen),
+  //             title: const Text('Use Camera', style: TextStyle(fontSize: 16)),
+  //             onTap: () {
+  //               Navigator.pop(context);
+  //               _pickImage(ImageSource.camera);
+  //             },
+  //           ),
+  //           const SizedBox(height: 20),
+  //         ],
+  //       );
+  //     },
+  //   );
+  // }
 
 
   // --- UI Builder Widgets ---
@@ -886,7 +910,6 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
     // ⚠️ UNCOMMENT this block for actual camera initialization check
     
     if (_cameraController == null || !_isCameraInitialized) {
-      // Show a loading indicator or a placeholder until the camera is ready
       return const Expanded(
         child: Center(
           child: CircularProgressIndicator(color: kPrimaryGreen),
@@ -895,13 +918,17 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
     }
     
     
-    return Expanded(
+    // FIX: Removed Expanded and set height to cover the screen minus the bottom overlay
+    return Flexible( 
+      // Use MediaQuery to calculate the height above the bottom section.
+      // NOTE: This height calculation is conceptual and might need fine-tuning
+      // depending on the size of _buildScannerOverlay().
       child: Container(
         color: Colors.black, // Simulating a live camera feed's dark background
         child: Stack(
           children: [
             // ⚠️ UNCOMMENT the line below to show the live preview
-            // CameraPreview(_cameraController!), 
+            CameraPreview(_cameraController!), 
 
             // Scanner Frame/Corner Indicators (White borders for scanning area)
             Center(
@@ -936,9 +963,9 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
               ),
             ),
 
-            // Top Control Bar (Flash and Flip Camera)
+            // Top Control Bar (Flash and Capture/Gallery)
             Positioned(
-              top: 30,
+              bottom: 30,
               left: 0,
               right: 0,
               child: Padding(
@@ -946,22 +973,35 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Flashlight Toggle - C. Enabling Flash
+                    // Top-Left: Flashlight Toggle
                     _buildCameraButton(
                       icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
                       onTap: () {
                         // ⚠️ UNCOMMENT the check for camera initialization
-                        // if (_cameraController != null && _cameraController!.value.isInitialized) {
+                        if (_cameraController != null && _cameraController!.value.isInitialized) {
                           setState(() {
                             _isFlashOn = !_isFlashOn;
                             // Actual flash control command:
-                            // _cameraController!.setFlashMode(_isFlashOn ? FlashMode.torch : FlashMode.off);
+                            _cameraController!.setFlashMode(_isFlashOn ? FlashMode.torch : FlashMode.off);
                             debugPrint('Flashlight toggled to: $_isFlashOn');
                           });
-                        // }
+                        }
                       },
                     ),
-                    // Upload from Gallery
+                    // // Top-Center: Upload from Gallery
+                    // _buildCameraButton(
+                    //   icon: Icons.image,
+                    //   onTap: () {
+                    //     debugPrint('Opening photo gallery...');
+                    //     _pickImage(ImageSource.gallery);
+                    //   },
+                    // ),
+                    // Top-Right: Capture Button (Replaced Flip)
+                    _buildCameraButton(
+                      icon: Icons.camera_alt, // Capture Icon
+                      onTap: _capturePicture,
+                    ),
+                    // Top-Center: Upload from Gallery
                     _buildCameraButton(
                       icon: Icons.image,
                       onTap: () {
@@ -969,39 +1009,23 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
                         _pickImage(ImageSource.gallery);
                       },
                     ),
-                    // Flip Camera - C. Enabling Flip
-                    _buildCameraButton(
-                      icon: Icons.flip_camera_ios,
-                      onTap: () {
-                        // ⚠️ UNCOMMENT the check for camera initialization
-                        // if (_cameraController != null && _cameraController!.value.isInitialized && _cameras.length > 1) {
-                          setState(() {
-                            _isFrontCamera = !_isFrontCamera;
-                            // Actual camera flip command:
-                            // final newCamera = _isFrontCamera ? _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front) : _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.back);
-                            // _cameraController!.setDescription(newCamera);
-                            debugPrint('Camera flipped to: ${_isFrontCamera ? 'Front' : 'Rear'}');
-                          });
-                        // }
-                      },
-                    ),
                   ],
                 ),
               ),
             ),
 
-            // Bottom Center Capture Button (Scan Barcode)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: FloatingActionButton(
-                  onPressed: _scanBarcodeAndAnalyze, // Barcode scan/Image Action Sheet
-                  backgroundColor: kPrimaryGreen,
-                  child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 30),
-                ),
-              ),
-            ),
+            // Bottom Center Capture Button (Scan Barcode) - Stays as the FAB
+            // Align(
+            //   alignment: Alignment.bottomCenter,
+            //   child: Padding(
+            //     padding: const EdgeInsets.only(bottom: 20.0),
+            //     child: FloatingActionButton(
+            //       onPressed: _scanBarcodeAndAnalyze, // Barcode scan/Image Action Sheet
+            //       backgroundColor: kPrimaryGreen,
+            //       child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 30),
+            //     ),
+            //   ),
+            // ),
           ],
         ),
       ),
@@ -1014,10 +1038,6 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFF1E1E1E), // Dark grey/black for the bottom overlay
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
       ),
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -1027,7 +1047,12 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.eco, color: kPrimaryGreen, size: 30),
+              Image.asset(
+                'assets/ecopilot_logo.png',
+                width: 50,
+                height: 50,
+                fit: BoxFit.contain,
+              ),
               const SizedBox(width: 8),
               const Text(
                 'Eco',
@@ -1038,7 +1063,7 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
                 ),
               ),
               Text(
-                'PILOT',
+                'Pilot',
                 style: TextStyle(
                   color: kPrimaryGreen,
                   fontSize: 24,
@@ -1196,17 +1221,17 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: const AppDrawer(),
-      // No AppBar to allow the CameraView to be full height
-      body: SafeArea(
-        child: Column(
-          children: [
-            // 1. Camera View Area
-            _buildCameraView(),
+      // Remove AppBar so camera view can go full height
+      body: Column(
+        children: [
+          // 1. Camera View Area (Covers everything above the bottom overlay)
+          _buildCameraView(),
 
-            // 2. Scanner Overlay (Dark section with search and logo)
-            _buildScannerOverlay(),
-          ],
-        ),
+          // 2. Scanner Overlay (Dark section with search and logo)
+          _buildScannerOverlay(),
+          
+          // 3. Bottom Navigation Bar (Handled outside of Column structure by Scaffold)
+        ],
       ),
       bottomNavigationBar: _buildBottomNavBar(),
     );

@@ -10,6 +10,7 @@ import '/screens/scan_screen.dart';
 import 'notification_screen.dart';
 import 'setting_screen.dart';
 import 'support_screen.dart';
+import 'recent_activity_screen.dart';
 import 'package:ecopilot_test/utils/color_extensions.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
@@ -134,10 +135,30 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     }
                     final docs = snapshot.data!.docs;
+                    // Show only the 3 most recent items on the home screen
+                    final previewDocs = docs.take(3).toList();
                     return Column(
-                      children: docs.map((doc) {
-                        return _buildActivityTile(doc);
-                      }).toList(),
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ...previewDocs
+                            .map((doc) => _buildActivityTile(doc))
+                            .toList(),
+                        if (docs.length > 3)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const RecentActivityScreen(),
+                                  ),
+                                );
+                              },
+                              child: const Text('See all'),
+                            ),
+                          ),
+                      ],
                     );
                   },
                 );
@@ -288,164 +309,205 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Placeholder for the icon and text used for the boolean checks (✔ / ❌)
-Widget _buildBooleanRow(String label, bool value) {
-  final icon = value ? Icons.check_circle : Icons.cancel;
-  final color = value ? Colors.green.shade600 : Colors.red.shade600;
-  final text = value ? 'Yes' : 'No';
+  Widget _buildBooleanRow(String label, bool value) {
+    final icon = value ? Icons.check_circle : Icons.cancel;
+    final color = value ? Colors.green.shade600 : Colors.red.shade600;
+    final text = value ? 'Yes' : 'No';
 
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4.0),
-    child: Row(
-      children: [
-        Icon(icon, color: color, size: 18),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            '$label: $text',
-            style: TextStyle(color: Colors.white, fontSize: 14),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-// Custom widget to display the product details, mimicking the image
-Widget _buildProductDetailCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-  final data = doc.data();
-  final name = (data['product_name'] ?? 'Unknown Product').toString();
-  final category = (data['category'] ?? 'N/A').toString();
-  final ingredients = (data['ingredients'] ?? 'N/A').toString();
-  final score = (data['eco_score'] ?? 'A').toString().toUpperCase(); // Assuming A-E score
-  final co2 = (data['carbon_footprint'] ?? '—').toString();
-  final packaging = (data['packaging'] ?? 'N/A').toString();
-  final disposal = (data['disposal_method'] ?? 'Rinse and recycle locally').toString();
-  // Using the safe boolean read logic from your onTap function
-  bool _readBool(dynamic v) {
-    if (v is bool) return v;
-    if (v is String)
-      return v.toLowerCase() == 'true' || v.toLowerCase() == 'yes';
-    if (v is num) return v != 0;
-    return false;
-  }
-  final containsMicroplastics = _readBool(data['contains_microplastics']);
-  final palmOilDerivative = _readBool(data['palm_oil_derivative']);
-  final crueltyFree = _readBool(data['cruelty_free']);
-
-  // Function to determine the color for the Eco-Score background
-  Color _getEcoScoreColor(String s) {
-    switch (s) {
-      case 'A': return Colors.green.shade700;
-      case 'B': return Colors.lightGreen.shade700;
-      case 'C': return Colors.amber.shade700;
-      case 'D': return Colors.orange.shade700;
-      case 'E': return Colors.red.shade700;
-      default: return Colors.grey.shade700;
-    }
-  }
-  
-  // Custom styled Text for detail sections
-  Widget _detailText(String label, String value, {bool boldValue = false}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6.0),
-      child: RichText(
-        text: TextSpan(
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          children: [
-            TextSpan(text: '$label: '),
-            TextSpan(
-              text: value,
-              style: TextStyle(fontWeight: boldValue ? FontWeight.bold : FontWeight.normal),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$label: $text',
+              style: TextStyle(color: Colors.white, fontSize: 14),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  // --- Main Card Widget ---
-  return Container(
-    margin: const EdgeInsets.all(16.0),
-    decoration: BoxDecoration(
-      color: Colors.black.withOpacity(0.8), // Dark background for the card area
-      borderRadius: BorderRadius.circular(15.0),
-      border: Border.all(color: Colors.green, width: 3.0),
-    ),
-    padding: const EdgeInsets.all(16.0),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // --- Product Details Section ---
-        Text('Product Details', style: TextStyle(color: Colors.white70, fontSize: 14)),
-        const Divider(color: Colors.white54),
-        _detailText('Name', name, boldValue: true),
-        _detailText('Category', category),
-        _detailText('Ingredients', ingredients),
-        
-        const SizedBox(height: 12),
+  // Custom widget to display the product details, mimicking the image
+  Widget _buildProductDetailCard(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final name = (data['product_name'] ?? 'Unknown Product').toString();
+    final category = (data['category'] ?? 'N/A').toString();
+    final ingredients = (data['ingredients'] ?? 'N/A').toString();
+    final score = (data['eco_score'] ?? 'A')
+        .toString()
+        .toUpperCase(); // Assuming A-E score
+    final co2 = (data['carbon_footprint'] ?? '—').toString();
+    final packaging = (data['packaging'] ?? 'N/A').toString();
+    final disposal = (data['disposal_method'] ?? 'Rinse and recycle locally')
+        .toString();
+    // Using the safe boolean read logic from your onTap function
+    bool _readBool(dynamic v) {
+      if (v is bool) return v;
+      if (v is String)
+        return v.toLowerCase() == 'true' || v.toLowerCase() == 'yes';
+      if (v is num) return v != 0;
+      return false;
+    }
 
-        // --- Eco Impact Section ---
-        Text('Eco Impact', style: TextStyle(color: Colors.white70, fontSize: 14)),
-        const Divider(color: Colors.white54),
-        _detailText('Carbon Footprint', 'Estimated $co2 CO₂e per unit (Low impact for a skincare product)'),
-        _detailText('Packaging', '$packaging (Type 4 - LDPE) ♻️'),
-        _detailText('Suggested Disposal', disposal),
+    final containsMicroplastics = _readBool(data['contains_microplastics']);
+    final palmOilDerivative = _readBool(data['palm_oil_derivative']);
+    final crueltyFree = _readBool(data['cruelty_free']);
 
-        const SizedBox(height: 12),
+    // Function to determine the color for the Eco-Score background
+    Color _getEcoScoreColor(String s) {
+      switch (s) {
+        case 'A':
+          return Colors.green.shade700;
+        case 'B':
+          return Colors.lightGreen.shade700;
+        case 'C':
+          return Colors.amber.shade700;
+        case 'D':
+          return Colors.orange.shade700;
+        case 'E':
+          return Colors.red.shade700;
+        default:
+          return Colors.grey.shade700;
+      }
+    }
 
-        // --- Environmental Warnings Section ---
-        Text('Environmental Warnings:', style: TextStyle(color: Colors.white70, fontSize: 14)),
-        const Divider(color: Colors.white54),
-        
-        _buildBooleanRow('Contains microplastics?', !containsMicroplastics), // Inverting logic for display: X if contains, ✔ if not.
-        _buildBooleanRow('Palm oil derivative?', !palmOilDerivative), // X if derivative, ✔ if not.
-        _buildBooleanRow('Cruelty-Free', crueltyFree), // ✔ if cruelty-free, X if not.
-
-        const SizedBox(height: 16),
-
-        // --- ECO-SCORE Section (Simplified) ---
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'ECO-SCORE',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: _getEcoScoreColor(score),
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: Text(
-                score,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 20,
+    // Custom styled Text for detail sections
+    Widget _detailText(String label, String value, {bool boldValue = false}) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 6.0),
+        child: RichText(
+          text: TextSpan(
+            style: const TextStyle(color: Colors.white, fontSize: 14),
+            children: [
+              TextSpan(text: '$label: '),
+              TextSpan(
+                text: value,
+                style: TextStyle(
+                  fontWeight: boldValue ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
-            ),
-            //             // For a complete match, you'd add the A-E colored bar widget here.
-          ],
+            ],
+          ),
         ),
-      ],
-    ),
-  );
-}
+      );
+    }
+
+    // --- Main Card Widget ---
+    return Container(
+      margin: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(
+          0.8,
+        ), // Dark background for the card area
+        borderRadius: BorderRadius.circular(15.0),
+        border: Border.all(color: Colors.green, width: 3.0),
+      ),
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --- Product Details Section ---
+          Text(
+            'Product Details',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const Divider(color: Colors.white54),
+          _detailText('Name', name, boldValue: true),
+          _detailText('Category', category),
+          _detailText('Ingredients', ingredients),
+
+          const SizedBox(height: 12),
+
+          // --- Eco Impact Section ---
+          Text(
+            'Eco Impact',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const Divider(color: Colors.white54),
+          _detailText(
+            'Carbon Footprint',
+            'Estimated $co2 CO₂e per unit (Low impact for a skincare product)',
+          ),
+          _detailText('Packaging', '$packaging (Type 4 - LDPE) ♻️'),
+          _detailText('Suggested Disposal', disposal),
+
+          const SizedBox(height: 12),
+
+          // --- Environmental Warnings Section ---
+          Text(
+            'Environmental Warnings:',
+            style: TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const Divider(color: Colors.white54),
+
+          _buildBooleanRow(
+            'Contains microplastics?',
+            !containsMicroplastics,
+          ), // Inverting logic for display: X if contains, ✔ if not.
+          _buildBooleanRow(
+            'Palm oil derivative?',
+            !palmOilDerivative,
+          ), // X if derivative, ✔ if not.
+          _buildBooleanRow(
+            'Cruelty-Free',
+            crueltyFree,
+          ), // ✔ if cruelty-free, X if not.
+
+          const SizedBox(height: 16),
+
+          // --- ECO-SCORE Section (Simplified) ---
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'ECO-SCORE',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: _getEcoScoreColor(score),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  score,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+              //             // For a complete match, you'd add the A-E colored bar widget here.
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildActivityTile(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
     final product =
         (data['product_name'] ?? data['product'] ?? 'Unknown product')
             .toString();
-    final score = (data['eco_score'] ?? data['ecoscore'] ?? data['score'] ?? 'N/A')
-        .toString()
-        .toUpperCase();
+    final score =
+        (data['eco_score'] ?? data['ecoscore'] ?? data['score'] ?? 'N/A')
+            .toString()
+            .toUpperCase();
     final ts = data['timestamp'];
     DateTime? dt;
     if (ts is Timestamp) {
@@ -469,7 +531,14 @@ Widget _buildProductDetailCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) 
 
     // Try common image keys
     String? imageUrl;
-    final possibleKeys = ['image', 'image_url', 'product_image', 'thumbnail', 'photo', 'img'];
+    final possibleKeys = [
+      'image',
+      'image_url',
+      'product_image',
+      'thumbnail',
+      'photo',
+      'img',
+    ];
     for (final k in possibleKeys) {
       final v = data[k];
       if (v is String && v.isNotEmpty) {
@@ -529,20 +598,26 @@ Widget _buildProductDetailCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) 
           ),
         ),
         title: Text(product),
-        subtitle: Text([
-          if ((data['category'] ?? '').toString().isNotEmpty)
-            data['category'].toString(),
-          if (timeText.isNotEmpty) timeText, // includes exact time now
-        ].join(' • ')),
+        subtitle: Text(
+          [
+            if ((data['category'] ?? '').toString().isNotEmpty)
+              data['category'].toString(),
+            if (timeText.isNotEmpty) timeText, // includes exact time now
+          ].join(' • '),
+        ),
         trailing: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: _getEcoScoreColor(score),
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Text(score,
-              style:
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          child: Text(
+            score,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
         onTap: () {
           showModalBottomSheet(
@@ -562,6 +637,58 @@ Widget _buildProductDetailCard(QueryDocumentSnapshot<Map<String, dynamic>> doc) 
           );
         },
       ),
+    );
+  }
+
+  /// Use this widget in the StreamBuilder instead of mapping docs directly.
+  /// Example replacement in the StreamBuilder:
+  ///   final docs = snapshot.data!.docs;
+  ///   return _buildActivityList(docs);
+  Widget _buildActivityList(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    // Show only latest 5 by default
+    final visibleCount = 5;
+    final latest = docs.take(visibleCount).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...latest.map((doc) => _buildActivityTile(doc)).toList(),
+        if (docs.length > visibleCount)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  // Push a new page that lists all recent activity
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => Scaffold(
+                        appBar: AppBar(
+                          title: const Text('All Recent Activity'),
+                          backgroundColor: primaryGreen,
+                        ),
+                        body: ListView.separated(
+                          padding: const EdgeInsets.all(12),
+                          itemBuilder: (context, index) {
+                            final doc = docs[index];
+                            return _buildActivityTile(doc);
+                          },
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 6),
+                          itemCount: docs.length,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                child: const Text('See all'),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
