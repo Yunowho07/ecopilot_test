@@ -1,6 +1,9 @@
 import 'package:ecopilot_test/auth/landing.dart';
 import 'package:ecopilot_test/auth/login.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'firebase_service.dart';
 import 'package:ecopilot_test/utils/color_extensions.dart';
 
@@ -307,12 +310,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       onPressed: _handleFacebookSignIn,
                     ),
                     const SizedBox(height: 15),
-                    _buildSocialButton(
-                      'SIGN UP WITH APPLE',
-                      'assets/apple.png',
-                      primaryGreen,
-                      onPressed: _handleAppleSignIn,
-                    ),
+                    if (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
+                      SignInWithAppleButton(
+                        onPressed: _handleAppleSignIn,
+                        style: SignInWithAppleButtonStyle.white,
+                      )
+                    else
+                      _buildSocialButton(
+                        'SIGN IN WITH APPLE',
+                        'assets/apple.png',
+                        primaryGreen,
+                        onPressed: _handleAppleSignIn,
+                      ),
                     const SizedBox(height: 30),
 
                     // Terms and Services

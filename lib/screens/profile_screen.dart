@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '/auth/firebase_service.dart';
+import 'package:ecopilot_test/utils/rank_utils.dart';
 import '/utils/constants.dart'
     as constants; // Assumed location for kPrimaryGreen/kPrimaryYellow
 import 'package:image_picker/image_picker.dart';
@@ -28,6 +29,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _emailController = TextEditingController();
   String _rank = 'Rookie'; // Placeholder for user rank
   bool _isSaving = false;
+  int _ecoPoints = 0;
+  Color _rankColor = constants.kRankGreenExplorer;
 
   // State variables for photo upload preview and error handling
   bool _isUploading = false;
@@ -45,8 +48,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _nameController.text = user.displayName ?? '';
       _photoUrlController.text = user.photoURL ?? '';
       _emailController.text = user.email ?? '';
+      // Load rank for the user
+      _loadUserRank();
     }
   }
+
+  Future<void> _loadUserRank() async {
+    try {
+      final user = _service.currentUser;
+      if (user == null) return;
+      final summary = await _service.getUserSummary(user.uid);
+      final points = (summary['ecoScore'] ?? summary['ecoPoints'] ?? 0) as int;
+      final rankInfo = rankForPoints(points);
+      if (!mounted) return;
+      setState(() {
+        _ecoPoints = points;
+        _rank = rankInfo.title;
+        _rankColor = rankInfo.color;
+      });
+    } catch (e) {
+      debugPrint('Error loading user rank: $e');
+    }
+  }
+  // Rank logic moved to lib/utils/rank_utils.dart
 
   @override
   void dispose() {
@@ -541,12 +565,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildInfoCard(
                         icon: Icons.emoji_events,
                         label: 'Rank',
-                        contentWidget: Text(
-                          _rank,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                        contentWidget: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.star, color: _rankColor, size: 18),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _rank,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: _rankColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '$_ecoPoints eco points',
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -740,9 +781,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return;
         }
         if (index == 3) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const dispose_screen.DisposalGuidanceScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const dispose_screen.DisposalGuidanceScreen(),
+            ),
+          );
           return;
         }
         if (index == 4) {
@@ -754,9 +797,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
-        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
-        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_cart),
+          label: 'Alternative',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.qr_code_scanner),
+          label: 'Scan',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.delete_sweep),
+          label: 'Dispose',
+        ),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );

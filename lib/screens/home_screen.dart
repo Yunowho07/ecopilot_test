@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart'; // Required for date formatting
 import '../auth/firebase_service.dart';
 import '/auth/landing.dart';
 import 'profile_screen.dart' as profile_screen;
@@ -14,6 +15,16 @@ import 'recent_activity_screen.dart';
 import 'package:ecopilot_test/utils/color_extensions.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
+import 'daily_challenge_screen.dart'; // ⚠️ NEW IMPORT
+
+// Placeholder data structure for challenge and user progress
+class DailyChallenge {
+  final String title;
+  final int points;
+  final bool isCompleted;
+
+  DailyChallenge(this.title, this.points, this.isCompleted);
+}
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,20 +37,53 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseService _firebaseService = FirebaseService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _userName = 'User';
-  String _tip = 'Loading tip...';
-  String _challenge = 'Loading challenge...';
-  List<Map<String, String>> _recentActivity = [];
+
+  // 🚫 REMOVED: String _tip = 'Loading tip...'; // Replaced by FutureBuilder
+
+  // Use a map to store challenge data to simplify state updates on the home screen
+  DailyChallenge? _dailyChallenge;
+  // Fallback challenge text (legacy code expected `_challenge`)
+  String _challenge = 'Challenge yourself';
+  // Recent activity list used by the bottom nav scan flow (legacy callers expect `_recentActivity`)
+  final List<Map<String, dynamic>> _recentActivity = <Map<String, dynamic>>[];
+  int _userStreak = 0;
   int _selectedIndex = 0; // For Bottom Navigation Bar
 
   // Use theme colors from constants
   final primaryGreen = const Color(0xFF4CAF50);
   final yellowAccent = const Color(0xFFFFEB3B);
 
+  // --- NEW: Tip Fetch Logic ---
+  Future<String> _fetchTodayTip() async {
+    // 1. Get today's date string
+    String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    try {
+      // 2. Fetch the tip for that date from Firestore
+      final doc = await FirebaseFirestore.instance
+          .collection('daily_tips')
+          .doc(today)
+          .get();
+
+      // 3. If it exists, return the tip field
+      if (doc.exists && doc.data() != null && doc.data()!['tip'] != null) {
+        return doc.data()!['tip'] as String;
+      } else {
+        // If not found, show a fallback message
+        return 'No eco tips available today 🌍';
+      }
+    } catch (e) {
+      debugPrint("Error fetching daily tip: $e");
+      return 'Failed to load tip. Please check your connection.';
+    }
+  }
+  // ---------------------------
+
   @override
   void initState() {
     super.initState();
     _loadUserData();
-    // Recent activity will be loaded via a Firestore stream in the widget tree
+    _loadDailyChallengeData();
   }
 
   // Fetch user data from the service
@@ -49,7 +93,64 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _userName = user.displayName ?? 'User';
       });
+      // ⚠️ CONCEPTUAL: Fetch user streak and points summary here
+
+      _firebaseService.getUserSummary(user.uid).then((summary) {
+        if (mounted) {
+          setState(() {
+            _userStreak = summary['streak'] ?? 0;
+          });
+        }
+      });
     }
+  }
+
+  // ⚠️ CONCEPTUAL: Placeholder for loading today's challenge data
+  void _loadDailyChallengeData() async {
+    // 1. Get today's date string
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+
+    // 2. Simulate fetching the first challenge and user progress for the home screen preview
+    // In a real app, this uses Firestore:
+
+    final challengeDoc = await FirebaseFirestore.instance
+        .collection('challenges')
+        .doc(today)
+        .get();
+    final userChallengeDoc = await FirebaseFirestore.instance
+        .collection('user_challenges')
+        .doc('${_firebaseService.currentUser!.uid}-$today')
+        .get();
+
+    if (challengeDoc.exists) {
+      final challenges = List.from(challengeDoc.data()?['challenges'] ?? []);
+      if (challenges.isNotEmpty) {
+        final firstChallenge = challenges.first;
+        final isCompleted = userChallengeDoc.exists
+            ? List.from(userChallengeDoc.data()!['completed']).first
+            : false;
+
+        setState(() {
+          // 🚫 REMOVED: _tip = "Recycling today is key!"; // Tip fetching moved to FutureBuilder
+          _dailyChallenge = DailyChallenge(
+            firstChallenge['title'],
+            firstChallenge['points'],
+            isCompleted,
+          );
+        });
+      }
+    }
+
+    // Using simulated data for now:
+    setState(() {
+      // 🚫 REMOVED: _tip = "Remember to reuse your shopping bags today to reduce plastic waste!";
+      _dailyChallenge = DailyChallenge(
+        "Bring your own reusable bottle",
+        10,
+        false, // Assume incomplete for fresh loading
+      );
+      _userStreak = 4; // Simulated streak
+    });
   }
 
   Future<void> _handleSignOut() async {
@@ -60,6 +161,46 @@ class _HomeScreenState extends State<HomeScreen> {
       ).push(MaterialPageRoute(builder: (_) => const AuthLandingScreen()));
     }
   }
+
+  // (preview completion now handled by launching the detailed DailyChallengeScreen and
+  // receiving a result when the user completes the challenge there)
+
+  // --- NEW: Tip Card Content Widget ---
+  Widget _TipCardContent({required String tip, bool isError = false}) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: isError
+            ? Colors.red.shade100
+            : colorWithOpacity(kPrimaryYellow, 0.9),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            isError ? Icons.error_outline : Icons.lightbulb_outline,
+            color: isError ? Colors.red.shade800 : Colors.black,
+            size: 28,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Today's tips :",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                Text(tip, style: const TextStyle(fontSize: 15)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  // -----------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -83,14 +224,49 @@ class _HomeScreenState extends State<HomeScreen> {
               style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 5),
-            const Text(
-              'Lets get started',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+            Row(
+              children: [
+                const Text(
+                  'Lets get started',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(width: 8),
+                // 🔥 Display Streak
+                if (_userStreak > 0)
+                  Row(
+                    children: [
+                      Text(
+                        '🔥 $_userStreak days streak',
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
             const SizedBox(height: 25),
 
-            // Today's Tips
-            _buildTipsCard(),
+            // Today's Tips - NOW USING FUTUREBUILDER (Replaces old _buildTipsCard())
+            FutureBuilder<String>(
+              future: _fetchTodayTip(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return _TipCardContent(tip: 'Loading today\'s tip...');
+                } else if (snapshot.hasError) {
+                  return _TipCardContent(
+                    tip: 'Error loading tip.',
+                    isError: true,
+                  );
+                } else {
+                  return _TipCardContent(
+                    tip: snapshot.data ?? 'No tips available.',
+                  );
+                }
+              },
+            ),
             const SizedBox(height: 15),
 
             // Daily Eco Challenge
@@ -182,24 +358,6 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             const SizedBox(height: 30),
-
-            // Weekly Eco Score
-            // const Text(
-            //   'Your Weekly Eco Score',
-            //   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            // ),
-            // const SizedBox(height: 10),
-            // _buildScoreIndicator(),
-            // const SizedBox(height: 5),
-            // Row(
-            //   children: [
-            //     const Text(
-            //       "You're doing great keep doing! ",
-            //       style: TextStyle(color: Colors.grey),
-            //     ),
-            //     const Icon(Icons.eco, color: Colors.green, size: 18),
-            //   ],
-            // ),
           ],
         ),
       ),
@@ -240,87 +398,122 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // Removed duplicate build method that caused name collision with the main build implementation.
-  // If you need an alternatives screen, use the existing AlternativeScreen widget (imported as alternative_screen)
-  // or extract this UI into a separate widget/class.
-
-  Widget _buildTipsCard() {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: colorWithOpacity(kPrimaryYellow, 0.9),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.lightbulb_outline, color: Colors.black, size: 28),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Today's tips :",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                Text(_tip, style: const TextStyle(fontSize: 15)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // 🚫 REMOVED: The old _buildTipsCard() is replaced by _TipCardContent and the FutureBuilder in the build method.
 
   Widget _buildChallengeCard() {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.blueGrey.shade50,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.flag, color: primaryGreen, size: 28),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    final challenge = _dailyChallenge;
+    final isCompleted = challenge?.isCompleted ?? false;
+    final challengeText = challenge != null
+        ? challenge.title
+        : _challenge; // Fallback to old _challenge text
+
+    return GestureDetector(
+      onTap: () {
+        // Navigate to the new detailed challenge screen
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => DailyChallengeScreen(
+              userName: _userName,
+              primaryGreen: primaryGreen,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(15),
+        decoration: BoxDecoration(
+          color: Colors.blueGrey.shade50,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Row(
                 children: [
-                  const Text(
-                    'Daily Eco Challenge',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  Icon(
+                    isCompleted ? Icons.check_circle : Icons.flag,
+                    color: isCompleted ? Colors.green.shade600 : primaryGreen,
+                    size: 28,
                   ),
-                  Text(
-                    _challenge,
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Daily Eco Challenge',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          challengeText,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: isCompleted
+                                ? Colors.grey.shade500
+                                : Colors.grey,
+                            decoration: isCompleted
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-            ],
-          ),
-          ElevatedButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Challenge marked complete!')),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+            ),
+            ElevatedButton(
+              onPressed: isCompleted
+                  ? null
+                  : () async {
+                      // Navigate to the full Daily Challenge screen and wait for a completion result
+                      final result = await Navigator.of(context).push<bool>(
+                        MaterialPageRoute(
+                          builder: (_) => DailyChallengeScreen(
+                            userName: _userName,
+                            primaryGreen: primaryGreen,
+                          ),
+                        ),
+                      );
+                      if (result == true) {
+                        // mark the preview challenge as completed
+                        if (challenge != null) {
+                          setState(() {
+                            _dailyChallenge = DailyChallenge(
+                              challenge.title,
+                              challenge.points,
+                              true,
+                            );
+                          });
+                        } else {
+                          setState(() {
+                            _dailyChallenge = DailyChallenge(
+                              _challenge,
+                              0,
+                              true,
+                            );
+                          });
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isCompleted ? Colors.grey : primaryGreen,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              child: Text(
+                isCompleted ? 'Completed' : 'Go',
+                style: const TextStyle(color: Colors.white),
               ),
             ),
-            child: const Text(
-              'Complete',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -358,7 +551,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Text(
               '$label: $text',
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
         ],
@@ -370,6 +563,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildProductDetailCard(
     QueryDocumentSnapshot<Map<String, dynamic>> doc,
   ) {
+    // ... (Product details logic remains the same)
     final data = doc.data();
     final name = (data['product_name'] ?? 'Unknown Product').toString();
     final category = (data['category'] ?? 'N/A').toString();
@@ -448,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // --- Product Details Section ---
-          Text(
+          const Text(
             'Product Details',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
@@ -460,7 +654,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
 
           // --- Eco Impact Section ---
-          Text(
+          const Text(
             'Eco Impact',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
@@ -475,7 +669,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 12),
 
           // --- Environmental Warnings Section ---
-          Text(
+          const Text(
             'Environmental Warnings:',
             style: TextStyle(color: Colors.white70, fontSize: 14),
           ),
@@ -535,6 +729,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildActivityTile(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    // ... (Activity tile logic remains the same)
     final data = doc.data();
     final product =
         (data['product_name'] ?? data['product'] ?? 'Unknown product')
@@ -674,27 +869,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-  // Widget _buildScoreIndicator() {
-  //   // Simple linear progress indicator to represent the score bar
-  //   return Column(
-  //     crossAxisAlignment: CrossAxisAlignment.start,
-  //     children: [
-  //       ClipRRect(
-  //         borderRadius: BorderRadius.circular(10),
-  //         child: LinearProgressIndicator(
-  //           value: 0.8, // 80% progress
-  //           minHeight: 15,
-  //           backgroundColor: Colors.grey.shade200,
-  //           valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
-  //         ),
-  //       ),
-  //     ],
-  //   );
-  // }
-  /// Use this widget in the StreamBuilder instead of mapping docs directly.
-  /// Example replacement in the StreamBuilder:
-  ///   final docs = snapshot.data!.docs;
-  ///   return _buildActivityList(docs);
+
   Widget _buildActivityList(
     List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
   ) {
@@ -742,24 +917,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     );
   }
-
-  // Widget _buildScoreIndicator() {
-  //   // Simple linear progress indicator to represent the score bar
-  //   return Column(
-  //     crossAxisAlignment: CrossAxisAlignment.start,
-  //     children: [
-  //       ClipRRect(
-  //         borderRadius: BorderRadius.circular(10),
-  //         child: LinearProgressIndicator(
-  //           value: 0.8, // 80% progress
-  //           minHeight: 15,
-  //           backgroundColor: Colors.grey.shade200,
-  //           valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
-  //         ),
-  //       ),
-  //     ],
-  //   );
-  // }
 
   Widget _buildBottomNavBar() {
     return BottomNavigationBar(
@@ -836,9 +993,18 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
-        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
-        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_cart),
+          label: 'Alternative',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.qr_code_scanner),
+          label: 'Scan',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.delete_sweep),
+          label: 'Dispose',
+        ),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );

@@ -16,3 +16,11 @@ const Color kDiscoverMoreGreen = kPrimaryGreen;
 // Asset Paths
 const String kLogoAsset = 'assets/ecopilot_logo.png';
 const String kLogoWhiteAsset = 'assets/ecopilot_logo_white.png';
+
+// Rank colors (theme-aware)
+const Color kRankPlanetGuardian = Color(0xFF6A1B9A); // Purple
+const Color kRankSustainabilityHero = Color(0xFFF57C00); // Orange
+const Color kRankEcoChampion = kDiscoverMoreBlue; // Blue
+const Color kRankSustainabilityAlly =
+    kDiscoverMoreGreen; // Light green / theme green
+const Color kRankGreenExplorer = kPrimaryGreen; // Base green

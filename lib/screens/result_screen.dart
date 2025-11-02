@@ -79,11 +79,11 @@ class ResultScreen extends StatelessWidget {
 
   Widget _buildEcoScoreDisplay(String ecoScore) {
     Map<String, Color> ecoScoreColors = {
-      'A': Colors.green.shade700,
-      'B': Colors.lightGreen.shade700,
-      'C': Colors.yellow.shade800,
-      'D': Colors.orange.shade800,
-      'E': Colors.red.shade800,
+      'A': kResultCardGreen,
+      'B': kDiscoverMoreGreen, // lighter green from theme
+      'C': kPrimaryYellow,
+      'D': kRankSustainabilityHero,
+      'E': kWarningRed,
       'N/A': Colors.grey.shade600,
     };
     String displayScore = ecoScore.toUpperCase().trim();

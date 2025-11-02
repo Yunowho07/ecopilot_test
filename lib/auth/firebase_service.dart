@@ -286,7 +286,8 @@ class FirebaseService {
       if (user == null) throw Exception('No user signed in');
 
       final uid = user.uid;
-      final name = fileName ?? 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final name =
+          fileName ?? 'profile_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
       // Prepare bytes (prefer provided bytes so callers can reuse them)
       Uint8List uploadBytes;
@@ -312,10 +313,13 @@ class FirebaseService {
       final uploadPreset = dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
       if (cloudName.isEmpty || uploadPreset.isEmpty) {
         throw Exception(
-            'Cloudinary configuration missing. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env');
+          'Cloudinary configuration missing. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env',
+        );
       }
 
-      final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
+      );
 
       int attempt = 0;
       int backoffMs = 500;
@@ -325,18 +329,24 @@ class FirebaseService {
           final request = http.MultipartRequest('POST', uri);
           request.fields['upload_preset'] = uploadPreset;
           request.fields['folder'] = 'profile_photos/$uid';
-          request.files.add(http.MultipartFile.fromBytes('file', uploadBytes, filename: name));
+          request.files.add(
+            http.MultipartFile.fromBytes('file', uploadBytes, filename: name),
+          );
 
           final streamed = await request.send();
-          if (onProgress != null) onProgress(uploadBytes.length, uploadBytes.length);
+          if (onProgress != null)
+            onProgress(uploadBytes.length, uploadBytes.length);
 
           final respStr = await streamed.stream.bytesToString();
           if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-            throw Exception('Cloudinary upload failed: ${streamed.statusCode} ${respStr}');
+            throw Exception(
+              'Cloudinary upload failed: ${streamed.statusCode} ${respStr}',
+            );
           }
           final Map<String, dynamic> decoded = jsonDecode(respStr);
           final url = decoded['secure_url'] as String?;
-          if (url == null || url.isEmpty) throw Exception('Cloudinary response missing secure_url');
+          if (url == null || url.isEmpty)
+            throw Exception('Cloudinary response missing secure_url');
 
           await updatePhotoUrl(url);
           return url;
@@ -366,7 +376,8 @@ class FirebaseService {
       if (user == null) throw Exception('No user signed in');
       final uid = user.uid;
 
-      final name = fileName ?? 'scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final name =
+          fileName ?? 'scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
 
       Uint8List uploadBytes;
       if (bytes != null) {
@@ -388,10 +399,14 @@ class FirebaseService {
       final cloudName = dotenv.env['CLOUDINARY_CLOUD_NAME'] ?? '';
       final uploadPreset = dotenv.env['CLOUDINARY_UPLOAD_PRESET'] ?? '';
       if (cloudName.isEmpty || uploadPreset.isEmpty) {
-        throw Exception('Cloudinary configuration missing. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env');
+        throw Exception(
+          'Cloudinary configuration missing. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env',
+        );
       }
 
-      final uri = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/image/upload');
+      final uri = Uri.parse(
+        'https://api.cloudinary.com/v1_1/$cloudName/image/upload',
+      );
 
       int attempt = 0;
       int backoffMs = 500;
@@ -401,21 +416,29 @@ class FirebaseService {
           final request = http.MultipartRequest('POST', uri);
           request.fields['upload_preset'] = uploadPreset;
           request.fields['folder'] = 'scanned_images/$uid';
-          request.files.add(http.MultipartFile.fromBytes('file', uploadBytes, filename: name));
+          request.files.add(
+            http.MultipartFile.fromBytes('file', uploadBytes, filename: name),
+          );
 
           final streamed = await request.send();
-          if (onProgress != null) onProgress(uploadBytes.length, uploadBytes.length);
+          if (onProgress != null)
+            onProgress(uploadBytes.length, uploadBytes.length);
 
           final respStr = await streamed.stream.bytesToString();
           if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
-            throw Exception('Cloudinary upload failed: ${streamed.statusCode} ${respStr}');
+            throw Exception(
+              'Cloudinary upload failed: ${streamed.statusCode} ${respStr}',
+            );
           }
           final Map<String, dynamic> decoded = jsonDecode(respStr);
           final url = decoded['secure_url'] as String?;
-          if (url == null || url.isEmpty) throw Exception('Cloudinary response missing secure_url');
+          if (url == null || url.isEmpty)
+            throw Exception('Cloudinary response missing secure_url');
           return url;
         } catch (e) {
-          debugPrint('Cloudinary scanned image upload attempt $attempt failed: $e');
+          debugPrint(
+            'Cloudinary scanned image upload attempt $attempt failed: $e',
+          );
           if (attempt >= maxAttempts) rethrow;
           await Future<void>.delayed(Duration(milliseconds: backoffMs));
           backoffMs *= 2;
@@ -458,6 +481,21 @@ class FirebaseService {
   Future<DocumentSnapshot<Map<String, dynamic>>> getUserProfile() async {
     final uid = _auth.currentUser!.uid;
     return _firestore.collection('users').doc(uid).get();
+  }
+
+  /// Return a small summary for the user used by UI (streak, ecoScore, etc.).
+  /// If the document doesn't exist, returns defaults.
+  Future<Map<String, dynamic>> getUserSummary(String uid) async {
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      final data = doc.data() ?? {};
+      final streak = data['streak'] ?? data['streakDays'] ?? 0;
+      final ecoScore = data['ecoScore'] ?? data['ecoPoints'] ?? 0;
+      return {'streak': streak, 'ecoScore': ecoScore, 'profile': data};
+    } catch (e) {
+      debugPrint('getUserSummary failed: $e');
+      return {'streak': 0, 'ecoScore': 0, 'profile': {}};
+    }
   }
 
   Future<void> updateUserProfile({String? name, String? photoUrl}) async {
@@ -626,6 +664,57 @@ class FirebaseService {
       'points': points,
       'date': date,
       'createdAt': Timestamp.now(),
+    });
+  }
+
+  /// Mark a daily challenge as completed for the current user.
+  ///
+  /// This will create/update a document under `user_challenges/{uid}-{yyyy-MM-dd}`
+  /// recording which challenges were completed and increment the user's eco score.
+  Future<void> completeChallenge(int challengeIndex, int points) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('No user signed in');
+
+    final uid = user.uid;
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final docRef = _firestore.collection('user_challenges').doc('$uid-$today');
+    final userRef = _firestore.collection('users').doc(uid);
+
+    await _firestore.runTransaction((tx) async {
+      final docSnap = await tx.get(docRef);
+      List<dynamic> completed = [];
+      int currentPoints = 0;
+
+      if (docSnap.exists) {
+        final data = docSnap.data()!;
+        completed = List.from(data['completed'] ?? []);
+        currentPoints = data['pointsEarned'] ?? 0;
+      } else {
+        // Default to two challenge slots if not present — callers may have different counts.
+        completed = [false, false];
+      }
+
+      // Expand list if needed
+      while (completed.length <= challengeIndex) completed.add(false);
+
+      // Already completed -> nothing to do
+      if (completed[challengeIndex] == true) return;
+
+      completed[challengeIndex] = true;
+
+      // Update the user_challenges doc (merge to avoid clobbering)
+      tx.set(docRef, {
+        'completed': completed,
+        'pointsEarned': currentPoints + points,
+        'updatedAt': Timestamp.now(),
+      }, SetOptions(merge: true));
+
+      // Update user's eco score
+      final userSnap = await tx.get(userRef);
+      final existingEco = userSnap.exists
+          ? (userSnap.data()?['ecoScore'] ?? 0) as int
+          : 0;
+      tx.update(userRef, {'ecoScore': existingEco + points});
     });
   }
 
