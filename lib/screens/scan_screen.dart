@@ -1,10 +1,12 @@
 import 'dart:io';
 // NOTE: ⚠️ UNCOMMENT THESE IMPORTS AFTER ADDING THE 'camera' PACKAGE TO PUBSPEC.YAML
 import 'package:camera/camera.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -53,7 +55,7 @@ class _ScanScreenState extends State<ScanScreen> {
   final ImagePicker _picker = ImagePicker();
   int _selectedIndex = 2; // Default to 'Scan' tab
   bool _isFlashOn = false; // State for flashlight (controls the icon)
-  bool _isFrontCamera = false; // State for camera toggle (controls the icon)
+  // bool _isFrontCamera = false; // State for camera toggle (controls the icon)
 
   // NOTE: This variable is now unused, as the flip button is replaced by Capture.
   // We keep the state logic for conceptual camera control.
@@ -129,7 +131,102 @@ class _ScanScreenState extends State<ScanScreen> {
   // NOTE: This handles the bottom FAB tap
   Future<void> _scanBarcodeAndAnalyze() async {
     debugPrint("Triggering Barcode/Camera Scan (FAB Tapped)...");
-    // If using a dedicated barcode package, call it here.
+
+    // Launch a full-screen camera scanner that returns the first barcode scanned
+    final scannedCode = await Navigator.of(context).push<String?>(
+      MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
+    );
+
+    if (scannedCode == null || scannedCode.isEmpty) return;
+
+    // Lookup the barcode in Open Beauty Facts first
+    final data = await _lookupBarcode(scannedCode);
+    if (data != null) {
+      _navigateToResultScreen(data);
+      return;
+    }
+
+    // If not found, notify the user
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Product not found in Open Beauty Facts')),
+    );
+  }
+
+  // Lookup product by barcode from Open Beauty Facts
+  Future<ProductAnalysisData?> _lookupBarcode(String barcode) async {
+    try {
+      final uri = Uri.parse(
+        'https://world.openbeautyfacts.org/api/v0/product/$barcode.json',
+      );
+      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) return null;
+
+      final Map<String, dynamic> json = resp.body.isNotEmpty
+          ? (await Future.value(jsonDecode(resp.body)) as Map<String, dynamic>)
+          : {};
+      if (json['status'] != 1) return null; // Not found
+
+      final prod = json['product'] as Map<String, dynamic>;
+
+      String name =
+          (prod['product_name'] as String?) ??
+          (prod['brands'] as String?) ??
+          'Unknown Product';
+      String ingredients = (prod['ingredients_text'] as String?) ?? 'N/A';
+      String packaging =
+          (prod['packaging'] as String?) ??
+          (prod['packaging_tags'] != null
+              ? (prod['packaging_tags'] as List).join(', ')
+              : 'N/A');
+      String eco =
+          (prod['ecoscore_grade'] as String?) ??
+          (prod['environment_impact_grade'] as String?) ??
+          'N/A';
+
+      final ingredientsLower = ingredients.toLowerCase();
+      final containsMicroplastics = RegExp(
+        r'polyethylene|polypropylene|polymethyl|polystyrene|microplastic',
+      ).hasMatch(ingredientsLower);
+      final palmOilDerivative =
+          ingredientsLower.contains('palm') ||
+          ingredientsLower.contains('palmitate') ||
+          ingredientsLower.contains('palmitic');
+
+      bool crueltyFree = false;
+      if (prod['labels_tags'] is List) {
+        final labels = (prod['labels_tags'] as List)
+            .map((e) => e.toString().toLowerCase())
+            .toList();
+        crueltyFree = labels.any(
+          (l) =>
+              l.contains('cruelty') ||
+              l.contains('not-tested-on-animals') ||
+              l.contains('no-animal-testing'),
+        );
+      }
+
+      final analysis = ProductAnalysisData(
+        imageFile: null,
+        imageUrl:
+            (prod['image_front_url'] as String?) ??
+            (prod['image_url'] as String?),
+        productName: name,
+        category: (prod['categories'] as String?) ?? 'N/A',
+        ingredients: ingredients,
+        carbonFootprint: 'N/A',
+        packagingType: packaging,
+        disposalMethod: 'N/A',
+        containsMicroplastics: containsMicroplastics,
+        palmOilDerivative: palmOilDerivative,
+        crueltyFree: crueltyFree,
+        ecoScore: eco,
+      );
+
+      return analysis;
+    } catch (e) {
+      debugPrint('Barcode lookup error: $e');
+      return null;
+    }
   }
 
   // NOTE: This handles the top-right button tap (now Capture)
@@ -763,4 +860,83 @@ class _CornerPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+// Full screen barcode scanner page using mobile_scanner. Returns the scanned
+// barcode string via Navigator.pop(context, code).
+class BarcodeScannerPage extends StatefulWidget {
+  const BarcodeScannerPage({Key? key}) : super(key: key);
+
+  @override
+  State<BarcodeScannerPage> createState() => _BarcodeScannerPageState();
+}
+
+class _BarcodeScannerPageState extends State<BarcodeScannerPage> {
+  final MobileScannerController _controller = MobileScannerController();
+  bool _scanned = false;
+  bool _torchOn = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
+            onPressed: () async {
+              try {
+                await _controller.toggleTorch();
+                setState(() {
+                  _torchOn = !_torchOn;
+                });
+              } catch (_) {}
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: _controller,
+            onDetect: (capture) {
+              if (_scanned) return;
+              final List<Barcode> barcodes = capture.barcodes;
+              if (barcodes.isEmpty) return;
+              final String? raw = barcodes.first.rawValue;
+              if (raw == null || raw.isEmpty) return;
+              _scanned = true;
+              // Stop the camera before popping to avoid camera errors on some devices
+              _controller.stop();
+              Navigator.of(context).pop(raw);
+            },
+          ),
+
+          // Center guide box
+          Center(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.8,
+              height: MediaQuery.of(context).size.width * 0.4,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white54, width: 2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

@@ -836,18 +836,9 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
+        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
+        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );

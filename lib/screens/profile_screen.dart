@@ -740,7 +740,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return;
         }
         if (index == 3) {
-          // already on Dispose screen
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const dispose_screen.DisposalGuidanceScreen()));
           return;
         }
         if (index == 4) {
@@ -752,18 +754,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
+        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
+        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );
