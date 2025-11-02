@@ -97,6 +97,23 @@ class _HomeScreenState extends State<HomeScreen> {
             _buildChallengeCard(),
             const SizedBox(height: 30),
 
+            const Text(
+              'Your Weekly Eco Score',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            _buildScoreIndicator(),
+            const SizedBox(height: 5),
+            Row(
+              children: [
+                const Text(
+                  "You're doing great keep doing! ",
+                  style: TextStyle(color: Colors.grey),
+                ),
+                const Icon(Icons.eco, color: Colors.green, size: 18),
+              ],
+            ),
+            const SizedBox(height: 30),
             // Recent Activity
             const Text(
               'Recent Activity',
@@ -167,22 +184,22 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 30),
 
             // Weekly Eco Score
-            const Text(
-              'Your Weekly Eco Score',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            _buildScoreIndicator(),
-            const SizedBox(height: 5),
-            Row(
-              children: [
-                const Text(
-                  "You're doing great keep doing! ",
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const Icon(Icons.eco, color: Colors.green, size: 18),
-              ],
-            ),
+            // const Text(
+            //   'Your Weekly Eco Score',
+            //   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            // ),
+            // const SizedBox(height: 10),
+            // _buildScoreIndicator(),
+            // const SizedBox(height: 5),
+            // Row(
+            //   children: [
+            //     const Text(
+            //       "You're doing great keep doing! ",
+            //       style: TextStyle(color: Colors.grey),
+            //     ),
+            //     const Icon(Icons.eco, color: Colors.green, size: 18),
+            //   ],
+            // ),
           ],
         ),
       ),
@@ -305,6 +322,24 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildScoreIndicator() {
+    // Simple linear progress indicator to represent the score bar
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: LinearProgressIndicator(
+            value: 0.8, // 80% progress
+            minHeight: 15,
+            backgroundColor: Colors.grey.shade200,
+            valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
+          ),
+        ),
+      ],
     );
   }
 
@@ -639,7 +674,23 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
+  // Widget _buildScoreIndicator() {
+  //   // Simple linear progress indicator to represent the score bar
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       ClipRRect(
+  //         borderRadius: BorderRadius.circular(10),
+  //         child: LinearProgressIndicator(
+  //           value: 0.8, // 80% progress
+  //           minHeight: 15,
+  //           backgroundColor: Colors.grey.shade200,
+  //           valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
   /// Use this widget in the StreamBuilder instead of mapping docs directly.
   /// Example replacement in the StreamBuilder:
   ///   final docs = snapshot.data!.docs;
@@ -692,23 +743,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildScoreIndicator() {
-    // Simple linear progress indicator to represent the score bar
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: LinearProgressIndicator(
-            value: 0.8, // 80% progress
-            minHeight: 15,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
-          ),
-        ),
-      ],
-    );
-  }
+  // Widget _buildScoreIndicator() {
+  //   // Simple linear progress indicator to represent the score bar
+  //   return Column(
+  //     crossAxisAlignment: CrossAxisAlignment.start,
+  //     children: [
+  //       ClipRRect(
+  //         borderRadius: BorderRadius.circular(10),
+  //         child: LinearProgressIndicator(
+  //           value: 0.8, // 80% progress
+  //           minHeight: 15,
+  //           backgroundColor: Colors.grey.shade200,
+  //           valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
+  //         ),
+  //       ),
+  //     ],
+  //   );
+  // }
 
   Widget _buildBottomNavBar() {
     return BottomNavigationBar(

@@ -643,6 +643,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: _buildBottomNavBar(context),
     );
   }
 
@@ -709,13 +710,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBottomNavBar(BuildContext context) {
-    const int currentIndex = 3; // Dispose tab
-    const Color primaryGreen = Color(0xFF1DB954);
+    const int currentIndex = 4; // Profile tab
 
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
       currentIndex: currentIndex,
-      selectedItemColor: primaryGreen,
+      selectedItemColor: constants.kPrimaryGreen,
       unselectedItemColor: Colors.grey,
       onTap: (index) async {
         // Simple navigation that doesn't rely on state located outside this widget

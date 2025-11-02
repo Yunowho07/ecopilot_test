@@ -1,5 +1,6 @@
 // lib/home/support_screen.dart
 
+import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import '../../utils/constants.dart';
 
@@ -15,7 +16,13 @@ class SupportScreen extends StatelessWidget {
         title: const Text('Support', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(), 
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const HomeScreen(),
+              ),
+                            );
+                          },
         ),
       ),
       body: SingleChildScrollView(

@@ -9,6 +9,8 @@ import 'scan_screen.dart'; // Assume this file exists
 // for this standalone screen, we'll keep the import minimal.
 // import 'package:flutter/services.dart';
 
+const Color primaryGreen = Color(0xFF1DB954,);
+
 class DisposalGuidanceScreen extends StatelessWidget {
   const DisposalGuidanceScreen({super.key});
 
@@ -20,16 +22,17 @@ class DisposalGuidanceScreen extends StatelessWidget {
         // Provide a visible menu button to open the Drawer
         leading: Builder(
           builder: (context) => IconButton(
-            icon: const Icon(Icons.menu, color: Colors.black87),
+            icon: const Icon(Icons.menu, color: Colors.white),
             onPressed: () => Scaffold.of(context).openDrawer(),
           ),
         ),
+        centerTitle: true,
         title: const Text(
           'Disposal Guidance',
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
-        backgroundColor: Colors.white,
-        elevation: 0,
+        backgroundColor: primaryGreen,
+        elevation: 2,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),

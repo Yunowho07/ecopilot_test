@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '/screens/scan_screen.dart' show ResultScreen, ProductAnalysisData;
+import 'package:ecopilot_test/screens/result_screen.dart';
+import 'package:ecopilot_test/models/product_analysis_data.dart';
 import '/utils/constants.dart';
 
 class RecentActivityScreen extends StatelessWidget {
@@ -39,7 +40,8 @@ class RecentActivityScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('All Scans'),
+        centerTitle: true,
+        title: const Text('Scan History', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         backgroundColor: kPrimaryGreen,
       ),
       body: scansStream == null

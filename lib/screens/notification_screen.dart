@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -441,7 +442,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const HomeScreen(),
+              ),
+            );
+          },
         ),
         actions: [
           Center(

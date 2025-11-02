@@ -8,9 +8,7 @@ import 'dispose_screen.dart' as dispose_screen; // Assume this file exists
 import 'profile_screen.dart' as profile_screen; // Assume this file exists
 
 // Define global constants used in the provided navigation logic
-const Color primaryGreen = Color(
-  0xFF1DB954,
-); // Assuming primaryGreen is the same as _kPrimaryGreenAlt
+const Color primaryGreen = Color(0xFF1DB954,); // Assuming primaryGreen is the same as _kPrimaryGreenAlt
 
 // The primary green color from the previous context
 const Color _kPrimaryGreenAlt = Color(0xFF1DB954);
