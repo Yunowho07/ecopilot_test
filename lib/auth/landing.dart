@@ -5,6 +5,7 @@ import '../../utils/constants.dart';
 import '/screens/onboarding_screen.dart'; // To navigate back to onboarding
 import 'login.dart';
 import 'signup.dart';
+import 'forgot_password.dart';
 
 class AuthLandingScreen extends StatelessWidget {
   const AuthLandingScreen({super.key});
@@ -148,7 +149,7 @@ class AuthLandingScreen extends StatelessWidget {
                   // Forgot Password (Optional, similar to FireFit design)
                   TextButton(
                     onPressed: () {
-                      // TODO: Implement navigation to Forgot Password screen
+                      showForgotPasswordDialog(context);
                     },
                     child: const Text(
                       'Forgot your password?',

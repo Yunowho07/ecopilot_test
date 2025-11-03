@@ -154,11 +154,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleSignOut() async {
-    // Open the Notification screen instead of signing out
-    if (mounted) {
-      Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const AuthLandingScreen()));
+    try {
+      await FirebaseService().signOut();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthLandingScreen()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Sign out failed: $e')));
+      }
     }
   }
 
@@ -286,7 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   "You're doing great keep doing! ",
                   style: TextStyle(color: Colors.grey),
                 ),
-                const Icon(Icons.eco, color: Colors.green, size: 18),
+                const Icon(Icons.eco, color: kPrimaryGreen, size: 18),
               ],
             ),
             const SizedBox(height: 30),
@@ -389,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             child: CircleAvatar(
               radius: 20,
-              backgroundColor: primaryGreen,
+              backgroundColor: kPrimaryGreen,
               child: const Icon(Icons.notifications_none, color: Colors.white),
             ),
           ),
@@ -414,7 +423,7 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute(
             builder: (_) => DailyChallengeScreen(
               userName: _userName,
-              primaryGreen: primaryGreen,
+              primaryGreen: kPrimaryGreen,
             ),
           ),
         );
@@ -434,7 +443,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Icon(
                     isCompleted ? Icons.check_circle : Icons.flag,
-                    color: isCompleted ? Colors.green.shade600 : primaryGreen,
+                    color: isCompleted ? kPrimaryGreen : kPrimaryGreen,
                     size: 28,
                   ),
                   const SizedBox(width: 10),
@@ -476,7 +485,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         MaterialPageRoute(
                           builder: (_) => DailyChallengeScreen(
                             userName: _userName,
-                            primaryGreen: primaryGreen,
+                            primaryGreen: kPrimaryGreen,
                           ),
                         ),
                       );
@@ -502,7 +511,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       }
                     },
               style: ElevatedButton.styleFrom(
-                backgroundColor: isCompleted ? Colors.grey : primaryGreen,
+                backgroundColor: isCompleted ? Colors.grey : kPrimaryGreen,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -529,7 +538,7 @@ class _HomeScreenState extends State<HomeScreen> {
             value: 0.8, // 80% progress
             minHeight: 15,
             backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
+            valueColor: AlwaysStoppedAnimation<Color>(kPrimaryGreen),
           ),
         ),
       ],
@@ -539,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // Placeholder for the icon and text used for the boolean checks (✔ / ❌)
   Widget _buildBooleanRow(String label, bool value) {
     final icon = value ? Icons.check_circle : Icons.cancel;
-    final color = value ? Colors.green.shade600 : Colors.red.shade600;
+    final color = value ? kPrimaryGreen : Colors.red.shade600;
     final text = value ? 'Yes' : 'No';
 
     return Padding(
@@ -635,7 +644,7 @@ class _HomeScreenState extends State<HomeScreen> {
           0.8,
         ), // Dark background for the card area
         borderRadius: BorderRadius.circular(15.0),
-        border: Border.all(color: Colors.green, width: 3.0),
+        border: Border.all(color: kPrimaryGreen, width: 3.0),
       ),
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -894,7 +903,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (_) => Scaffold(
                         appBar: AppBar(
                           title: const Text('All Recent Activity'),
-                          backgroundColor: primaryGreen,
+                          backgroundColor: kPrimaryGreen,
                         ),
                         body: ListView.separated(
                           padding: const EdgeInsets.all(12),
@@ -922,7 +931,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return BottomNavigationBar(
       type: BottomNavigationBarType.fixed,
       currentIndex: _selectedIndex,
-      selectedItemColor: primaryGreen,
+      selectedItemColor: kPrimaryGreen,
       unselectedItemColor: Colors.grey,
       onTap: (index) async {
         // When the Profile tab is tapped, open the Profile screen.

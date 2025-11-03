@@ -363,21 +363,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
             ),
           ),
-          Positioned(
-            bottom: size.height * 0.05,
-            right: size.width * 0.15,
-            child: Container(
-              width: size.width * 0.2,
-              height: size.width * 0.2,
-              decoration: BoxDecoration(
-                color: colorWithOpacity(
-                  const Color(0xFF9CCC65),
-                  0.8,
-                ), // Lighter Green Accent
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
+          // Positioned(
+          //   bottom: size.height * 0.05,
+          //   right: size.width * 0.15,
+          //   child: Container(
+          //     width: size.width * 0.2,
+          //     height: size.width * 0.2,
+          //     decoration: BoxDecoration(
+          //       color: colorWithOpacity(
+          //         const Color(0xFF9CCC65),
+          //         0.8,
+          //       ), // Lighter Green Accent
+          //       shape: BoxShape.circle,
+          //     ),
+          //   ),
+          // ),
 
           // Back Button (Top Left)
           Positioned(
@@ -440,6 +440,19 @@ class _SignUpScreenState extends State<SignUpScreen> {
           keyboardType: keyboardType,
           validator: validator,
           decoration: InputDecoration(
+            hintText: isPassword
+                ? 'At least 6 characters'
+                : label.toLowerCase().contains('name')
+                ? 'John Snow'
+                : 'example@gmail.com',
+            prefixIcon: Icon(
+              isPassword
+                  ? Icons.lock_outline
+                  : label.toLowerCase().contains('name')
+                  ? Icons.person_outline
+                  : Icons.email_outlined,
+              color: Colors.grey[700],
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 15,
               vertical: 15,
@@ -491,8 +504,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Placeholder for Google Icon
-          const Icon(Icons.account_circle, size: 24),
+          // Use project asset icon if available, otherwise fall back to a generic avatar icon
+          Image.asset(
+            assetPath,
+            width: 24,
+            height: 24,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.account_circle, size: 24),
+          ),
           const SizedBox(width: 10),
           Text(
             text,

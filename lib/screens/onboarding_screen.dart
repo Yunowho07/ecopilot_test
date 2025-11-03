@@ -20,17 +20,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     {
       'title': 'Scan Any Product',
       'image': 'assets/onboarding_eco_product.png',
-      'price': r'Scan, dispose and learn how to reduce waste with EcoPilot',
+      'price': r'Instantly scan products to see their Eco-Score and environmental impact',
     },
     {
       'title': 'Discover Eco Friendly',
       'image': 'assets/onboarding_eco_product_2.png',
-      'price': r'Get tips and progress on your eco impact',
+      'price': r'Find greener alternatives to make smarter, sustainable choices',
     },
     {
       'title': 'Track & Improve',
       'image': 'assets/onboarding_eco_product_3.png',
-      'price': r'Participate in challenges and earn rewards',
+      'price': r'Track your progress and grow your positive impact every day',
     },
   ];
 
@@ -90,24 +90,37 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                 color: kPrimaryGreen,
                               ),
                             ),
-                            const SizedBox(width: 8),
-                            const Icon(
-                              Icons.eco,
-                              size: 22,
-                              color: Colors.green,
-                            ),
+                            // const SizedBox(width: 8),
+                            // const Icon(
+                            //   Icons.eco,
+                            //   size: 22,
+                            //   color: Colors.green,
+                            // ),
                           ],
                         ),
                         // small cart-like icon to mirror the wireframe spacing
-                        CircleAvatar(
-                          backgroundColor: Colors.white,
-                          radius: 18,
-                          child: Icon(
-                            Icons.shopping_bag_outlined,
-                            color: kPrimaryGreen,
-                            size: 20,
+                        Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white, // Border color
+                              width: 3, // Border thickness
+                            ),
                           ),
-                        ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6.0), // Space between image and border
+                            child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(15), // Adjust the curve value
+                                  child: Image.asset('assets/ecopilot_logo_white.png',
+                                  width: 150,   // Set your preferred size
+                                  height: 150,
+                                  fit: BoxFit.cover,
+                                  ),
+                                )
+                          ),
+                        )
                       ],
                     ),
 
@@ -133,15 +146,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       height: 86,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _smallFeatureCircle('Hot Coffee', Icons.local_cafe),
-                          _smallFeatureCircle(
-                            'Drinks',
-                            Icons.emoji_food_beverage,
-                          ),
-                          _smallFeatureCircle('Hot Teas', Icons.local_drink),
-                          _smallFeatureCircle('Bakery', Icons.cake),
-                        ],
+                        // children: [
+                        //   _smallFeatureCircle('Hot Coffee', Icons.local_cafe),
+                        //   _smallFeatureCircle('Drinks',Icons.emoji_food_beverage,),
+                        //   _smallFeatureCircle('Hot Teas', Icons.local_drink),
+                        //   _smallFeatureCircle('Bakery', Icons.cake),
+                        // ],
                       ),
                     ),
 
@@ -230,11 +240,20 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                                     Text(
                                       page['price'] ?? '',
                                       style: const TextStyle(
-                                        fontSize: 18,
-                                        color: Colors.white,
+                                        fontSize: 16,
                                         fontWeight: FontWeight.bold,
+                                        color: Colors.white70,
                                       ),
+                                      textAlign: TextAlign.center,
                                     ),
+                                    // Text(
+                                    //   page['price'] ?? '',
+                                    //   style: const TextStyle(
+                                    //     fontSize: 18,
+                                    //     color: Colors.white,
+                                    //     fontWeight: FontWeight.bold,
+                                    //   ),
+                                    // ),
                                   ],
                                 ),
                               ),

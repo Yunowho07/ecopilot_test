@@ -228,15 +228,16 @@ class _SplashScreenState extends State<SplashScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                // House (Green)
-                                Icon(Icons.home, size: 70, color: Colors.white),
-                                // Leaf (Yellow/White - Snaps onto the house)
-                                Icon(
-                                  Icons.spa,
-                                  size: 50,
-                                  color: kPrimaryYellow,
-                                ),
-                              ],
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(15), // Adjust the curve value
+                                  child: Image.asset(
+                                    'assets/ecopilot_logo_white.png',
+                                  width: 150,   // Set your preferred size
+                                  height: 150,
+                                  fit: BoxFit.cover,
+                                  ),
+                                )
+                              ]
                             ),
                           ),
                         ),
@@ -251,7 +252,7 @@ class _SplashScreenState extends State<SplashScreen>
                 Opacity(
                   opacity: scaleValue, // Fades in with the final logo
                   child: const Text(
-                    'ECOPILOT',
+                    'EcoPilot',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 24,

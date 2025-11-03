@@ -7,6 +7,7 @@ import 'dart:io' show Platform;
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'firebase_service.dart';
 import '../screens/home_screen.dart';
+import 'forgot_password.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -257,14 +258,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         TextButton(
                           onPressed: () {
-                            // TODO: Implement forgot password navigation
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Forgot Password feature is not implemented.',
-                                ),
-                              ),
-                            );
+                            showForgotPasswordDialog(context);
                           },
                           child: Text(
                             'Forgot password?',
@@ -388,21 +382,21 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          Positioned(
-            bottom: size.height * 0.05,
-            right: size.width * 0.15,
-            child: Container(
-              width: size.width * 0.2,
-              height: size.width * 0.2,
-              decoration: BoxDecoration(
-                color: colorWithOpacity(
-                  const Color(0xFF9CCC65),
-                  0.8,
-                ), // Lighter Green Accent
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
+          // Positioned(
+          //   bottom: size.height * 0.0,
+          //   right: size.width * 0.50,
+          //   child: Container(
+          //     width: size.width * 0.2,
+          //     height: size.width * 0.2,
+          //     decoration: BoxDecoration(
+          //       color: colorWithOpacity(
+          //         const Color(0xFF9CCC65),
+          //         0.8,
+          //       ), // Lighter Green Accent
+          //       shape: BoxShape.circle,
+          //     ),
+          //   ),
+          // ),
 
           // Back Button (Top Left) - Placeholder as Login is usually the first screen
           Positioned(
@@ -465,6 +459,11 @@ class _LoginScreenState extends State<LoginScreen> {
           keyboardType: keyboardType,
           validator: validator,
           decoration: InputDecoration(
+            hintText: isPassword ? 'Enter your password' : 'example@gmail.com',
+            prefixIcon: Icon(
+              isPassword ? Icons.lock_outline : Icons.email_outlined,
+              color: Colors.grey[700],
+            ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 15,
               vertical: 15,
@@ -518,8 +517,14 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Placeholder for Google/Facebook/Apple Icon
-          const Icon(Icons.account_circle, size: 24),
+          // Use project asset icon if available, otherwise fall back to a generic avatar icon
+          Image.asset(
+            assetPath,
+            width: 24,
+            height: 24,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.account_circle, size: 24),
+          ),
           const SizedBox(width: 10),
           Text(
             text,

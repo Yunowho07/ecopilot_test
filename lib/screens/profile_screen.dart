@@ -27,7 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _nameController = TextEditingController();
   final _photoUrlController = TextEditingController();
   final _emailController = TextEditingController();
-  String _rank = 'Rookie'; // Placeholder for user rank
+  // String _rank = 'Rookie'; // Placeholder for user rank
   bool _isSaving = false;
   int _ecoPoints = 0;
   Color _rankColor = constants.kRankGreenExplorer;
@@ -63,7 +63,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (!mounted) return;
       setState(() {
         _ecoPoints = points;
-        _rank = rankInfo.title;
+        // _rank = rankInfo.title;
         _rankColor = rankInfo.color;
       });
     } catch (e) {
@@ -572,14 +572,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               children: [
                                 Icon(Icons.star, color: _rankColor, size: 18),
                                 const SizedBox(width: 8),
-                                Text(
-                                  _rank,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: _rankColor,
-                                  ),
-                                ),
+                                // Text(
+                                //   _rank,
+                                //   style: TextStyle(
+                                //     fontWeight: FontWeight.bold,
+                                //     fontSize: 16,
+                                //     color: _rankColor,
+                                //   ),
+                                // ),
                               ],
                             ),
                             const SizedBox(height: 4),

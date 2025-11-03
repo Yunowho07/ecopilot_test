@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ecopilot_test/auth/firebase_service.dart';
+import 'package:ecopilot_test/auth/landing.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart' as profile_screen;
-import 'package:ecopilot_test/screens/alternative_screen.dart' as alternative_screen;
+import 'package:ecopilot_test/screens/alternative_screen.dart'
+    as alternative_screen;
 import 'package:ecopilot_test/screens/dispose_screen.dart' as dispose_screen;
-import 'package:ecopilot_test/screens/home_screen.dart';
-import 'package:ecopilot_test/screens/scan_screen.dart';
+// Note: Home & Scan screens are not directly referenced here anymore
 import 'package:ecopilot_test/screens/notification_screen.dart';
 import 'package:ecopilot_test/screens/setting_screen.dart';
 import 'package:ecopilot_test/screens/support_screen.dart';
@@ -14,10 +16,12 @@ class AppDrawer extends StatelessWidget {
 
   Future<void> _handleSignOut(BuildContext context) async {
     try {
-      await FirebaseAuth.instance.signOut();
-      // After sign out, navigate to Home and remove all previous routes
+      // Use FirebaseService to ensure provider sessions are cleared as well
+      await FirebaseService().signOut();
+
+      // After sign out, navigate to the Auth landing screen and remove all previous routes
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const HomeScreen()),
+        MaterialPageRoute(builder: (_) => const AuthLandingScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -46,7 +50,8 @@ class AppDrawer extends StatelessWidget {
                   StreamBuilder<User?>(
                     stream: FirebaseAuth.instance.userChanges(),
                     builder: (context, snapshot) {
-                      final currentUser = snapshot.data ?? FirebaseAuth.instance.currentUser;
+                      final currentUser =
+                          snapshot.data ?? FirebaseAuth.instance.currentUser;
                       final photoUrl = currentUser?.photoURL;
                       return Container(
                         width: 72,
@@ -60,7 +65,9 @@ class AppDrawer extends StatelessWidget {
                         ),
                         child: CircleAvatar(
                           backgroundColor: Colors.white,
-                          backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                          backgroundImage: photoUrl != null
+                              ? NetworkImage(photoUrl)
+                              : null,
                           child: photoUrl == null
                               ? const Icon(
                                   Icons.person,
@@ -81,7 +88,7 @@ class AppDrawer extends StatelessWidget {
                           userName,
                           style: const TextStyle(
                             fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -99,13 +106,22 @@ class AppDrawer extends StatelessWidget {
                 onPressed: () {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Become a Supporter')),
+                    SnackBar(
+                      content: const Text(
+                        'Become a Supporter',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   );
+                  // TODO: Implement supporter functionality
                 },
                 icon: const Icon(Icons.favorite, color: Colors.white),
                 label: const Text(
                   'Become a Supporter',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.w800),
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1DB954),
@@ -259,7 +275,7 @@ class AppDrawer extends StatelessWidget {
                         child: const Text(
                           'Log Out',
                           style: TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                             color: Colors.white,
                           ),
                         ),
@@ -293,7 +309,7 @@ class AppDrawer extends StatelessWidget {
                       'Share Ecopilot with your friends',
                       style: TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),

@@ -95,7 +95,22 @@ class FirebaseService {
   }
 
   Future<void> signOut() async {
-    await _auth.signOut();
+    try {
+      // Try to sign out from provider SDKs where applicable to fully clear tokens
+      try {
+        final google = GoogleSignIn();
+        await google.signOut();
+      } catch (_) {}
+
+      try {
+        await FacebookAuth.instance.logOut();
+      } catch (_) {}
+
+      await _auth.signOut();
+    } catch (e) {
+      debugPrint('signOut failed: $e');
+      rethrow;
+    }
   }
 
   /// Update the current user's password. This will fail if the user's
@@ -105,6 +120,13 @@ class FirebaseService {
     if (user == null) throw Exception('No user signed in');
     await user.updatePassword(newPassword);
     await user.reload();
+  }
+
+  /// Send a password reset email to the provided [email].
+  ///
+  /// Throws a [FirebaseAuthException] on failure.
+  Future<void> sendPasswordReset({required String email}) async {
+    await _auth.sendPasswordResetEmail(email: email);
   }
 
   // --- Social Sign-In Methods ---

@@ -13,6 +13,7 @@ class SupportScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: kPrimaryGreen,
         elevation: 0,
+        centerTitle: true,
         title: const Text('Support', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
