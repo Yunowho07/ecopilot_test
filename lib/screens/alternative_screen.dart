@@ -1,10 +1,11 @@
 // NOTE: These are required imports for the navigation logic provided.
 // Since the full project structure is not provided, these are assumed imports.
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'home_screen.dart'; // Assume this file exists
 import 'scan_screen.dart'; // Assume this file exists
-import 'dispose_screen.dart' as dispose_screen; // Assume this file exists
+import 'disposal_guidance_screen.dart' as disposal_guidance_screen; // Assume this file exists
 import 'profile_screen.dart' as profile_screen; // Assume this file exists
 
 // Define global constants used in the provided navigation logic
@@ -329,13 +330,14 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
           return;
         }
         if (index == 3) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const dispose_screen.DisposalGuidanceScreen(),
-            ),
-          );
-          return;
-        }
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            // ⬅️ CRUCIAL CHANGE HERE
+            builder: (_) => const DisposalGuidanceScreen(), 
+          ),
+        );
+        return; 
+      }
         // When the Profile tab is tapped, open the Profile screen.
         if (index == 4) {
           Navigator.of(context).push(

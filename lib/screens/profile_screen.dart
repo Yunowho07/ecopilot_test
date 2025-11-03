@@ -1,3 +1,4 @@
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
 import '/auth/firebase_service.dart';
 import 'package:ecopilot_test/utils/rank_utils.dart';
@@ -12,7 +13,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'alternative_screen.dart' as alternative_screen;
 import 'home_screen.dart'; // Assume this file exists
 import 'scan_screen.dart'; // Assume this file exists
-import 'dispose_screen.dart' as dispose_screen; // Assume this file exists
+import 'disposal_guidance_screen.dart' as disposal_guidance_screen; // Assume this file exists
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -783,10 +784,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (index == 3) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const dispose_screen.DisposalGuidanceScreen(),
+              // ⬅️ CRUCIAL CHANGE HERE
+              builder: (_) => const DisposalGuidanceScreen(productId: null), 
             ),
           );
-          return;
+          return; 
         }
         if (index == 4) {
           Navigator.of(
@@ -885,8 +887,10 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     Padding(
                       padding: const EdgeInsets.only(left: 8.0),
                       child: IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const HomeScreen()),
+                      ),
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
                       ),
                     ),
                     const Expanded(

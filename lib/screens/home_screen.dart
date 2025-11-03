@@ -1,3 +1,4 @@
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,7 +7,7 @@ import '../auth/firebase_service.dart';
 import '/auth/landing.dart';
 import 'profile_screen.dart' as profile_screen;
 import 'alternative_screen.dart' as alternative_screen;
-import 'dispose_screen.dart' as dispose_screen;
+import 'disposal_guidance_screen.dart' as disposal_guidance_screen;
 import '/screens/scan_screen.dart';
 import 'notification_screen.dart';
 import 'setting_screen.dart';
@@ -16,6 +17,8 @@ import 'package:ecopilot_test/utils/color_extensions.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'daily_challenge_screen.dart'; // ⚠️ NEW IMPORT
+
+
 
 // Placeholder data structure for challenge and user progress
 class DailyChallenge {
@@ -94,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _userName = user.displayName ?? 'User';
       });
       // ⚠️ CONCEPTUAL: Fetch user streak and points summary here
-
+      
       _firebaseService.getUserSummary(user.uid).then((summary) {
         if (mounted) {
           setState(() {
@@ -102,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       });
+      
     }
   }
 
@@ -112,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 2. Simulate fetching the first challenge and user progress for the home screen preview
     // In a real app, this uses Firestore:
-
+    
     final challengeDoc = await FirebaseFirestore.instance
         .collection('challenges')
         .doc(today)
@@ -131,7 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
             : false;
 
         setState(() {
-          // 🚫 REMOVED: _tip = "Recycling today is key!"; // Tip fetching moved to FutureBuilder
           _dailyChallenge = DailyChallenge(
             firstChallenge['title'],
             firstChallenge['points'],
@@ -140,10 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     }
+    
 
     // Using simulated data for now:
     setState(() {
-      // 🚫 REMOVED: _tip = "Remember to reuse your shopping bags today to reduce plastic waste!";
       _dailyChallenge = DailyChallenge(
         "Bring your own reusable bottle",
         10,
@@ -258,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 25),
 
-            // Today's Tips - NOW USING FUTUREBUILDER (Replaces old _buildTipsCard())
+            // Today's Tips - NOW USING FUTUREBUILDER
             FutureBuilder<String>(
               future: _fetchTodayTip(),
               builder: (context, snapshot) {
@@ -389,25 +392,61 @@ class _HomeScreenState extends State<HomeScreen> {
             },
             child: const Icon(Icons.menu, size: 30),
           ),
-          // Notification Icon — navigate to NotificationScreen on tap
-          GestureDetector(
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const NotificationScreen()),
+          const SizedBox(width: 12),
+          // 🏆 NOTIFICATION ICON WITH RED BADGE (FIXED)
+          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            // Streams unread notifications for the current user.
+            stream: FirebaseAuth.instance.currentUser != null
+                ? FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(FirebaseAuth.instance.currentUser!.uid)
+                    .collection('notifications')
+                    .where('read', isEqualTo: false)
+                    .snapshots()
+                : null,
+            builder: (context, snapshot) {
+              final hasUnread =
+                  snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+              return GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const NotificationScreen()),
+                  );
+                },
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: kPrimaryGreen,
+                      child: const Icon(Icons.notifications_none,
+                          color: Colors.white),
+                    ),
+                    if (hasUnread)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                            border:
+                                Border.all(color: Colors.white, width: 1.5),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               );
             },
-            child: CircleAvatar(
-              radius: 20,
-              backgroundColor: kPrimaryGreen,
-              child: const Icon(Icons.notifications_none, color: Colors.white),
-            ),
           ),
         ],
       ),
     );
   }
-
-  // 🚫 REMOVED: The old _buildTipsCard() is replaced by _TipCardContent and the FutureBuilder in the build method.
 
   Widget _buildChallengeCard() {
     final challenge = _dailyChallenge;
@@ -417,9 +456,9 @@ class _HomeScreenState extends State<HomeScreen> {
         : _challenge; // Fallback to old _challenge text
 
     return GestureDetector(
-      onTap: () {
-        // Navigate to the new detailed challenge screen
-        Navigator.of(context).push(
+      onTap: () async {
+        // Use a consistent navigation flow for both card tap and button press
+        final result = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
             builder: (_) => DailyChallengeScreen(
               userName: _userName,
@@ -427,6 +466,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         );
+        if (result == true) {
+          // If the challenge screen returns true (meaning a challenge was completed)
+          // reload the data to update the preview card's status and potentially the streak.
+          _loadDailyChallengeData();
+        }
       },
       child: Container(
         padding: const EdgeInsets.all(15),
@@ -490,24 +534,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       );
                       if (result == true) {
-                        // mark the preview challenge as completed
-                        if (challenge != null) {
-                          setState(() {
-                            _dailyChallenge = DailyChallenge(
-                              challenge.title,
-                              challenge.points,
-                              true,
-                            );
-                          });
-                        } else {
-                          setState(() {
-                            _dailyChallenge = DailyChallenge(
-                              _challenge,
-                              0,
-                              true,
-                            );
-                          });
-                        }
+                        // Mark the preview challenge as completed by reloading the data
+                        _loadDailyChallengeData();
                       }
                     },
               style: ElevatedButton.styleFrom(
@@ -980,10 +1008,11 @@ class _HomeScreenState extends State<HomeScreen> {
         if (index == 3) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const dispose_screen.DisposalGuidanceScreen(),
+              // ⬅️ CRUCIAL CHANGE HERE
+              builder: (_) => const DisposalGuidanceScreen(productId: null), 
             ),
           );
-          return; // don't change selected index when opening dispose as a separate route
+          return; 
         }
         // When the Profile tab is tapped, open the Profile screen.
         if (index == 4) {
@@ -1002,18 +1031,9 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
+        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
+        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );

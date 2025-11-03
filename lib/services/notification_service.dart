@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -85,7 +86,7 @@ class NotificationService {
     required String title,
     required String body,
     required int hour,
-    required int minute,
+    required int minute, required Color color,
   }) async {
     final android = AndroidNotificationDetails(
       'ecopilot.daily',

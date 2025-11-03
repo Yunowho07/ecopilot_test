@@ -277,6 +277,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         await NotificationService().scheduleDaily(
           id: _dailyChallengeNotifId,
           title: 'Today\'s Eco Challenge',
+          color: kPrimaryGreen,
           body:
               '🌞 Good morning! Complete today\'s challenge and earn +20 EcoPoints.',
           hour: 8,
@@ -299,7 +300,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
       } else {
         await NotificationService().scheduleDaily(
           id: _ecoTipNotifId,
-          title: 'Eco Tip',
+            title: 'Eco Tip',
+            color: Colors.white,
           body:
               '♻️ Eco Tip: Switch to reusable water bottles to cut down on waste.',
           hour: 12,

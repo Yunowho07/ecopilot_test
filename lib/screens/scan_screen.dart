@@ -1,6 +1,7 @@
 import 'dart:io';
 // NOTE: ⚠️ UNCOMMENT THESE IMPORTS AFTER ADDING THE 'camera' PACKAGE TO PUBSPEC.YAML
 import 'package:camera/camera.dart';
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -13,7 +14,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'profile_screen.dart' as profile_screen;
 import 'alternative_screen.dart' as alternative_screen;
-import 'dispose_screen.dart' as dispose_screen;
+import 'disposal_guidance_screen.dart' as disposal_guidance_screen;
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import '/utils/constants.dart';
 import 'package:ecopilot_test/models/product_analysis_data.dart';
@@ -744,10 +745,11 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
         if (index == 3) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const dispose_screen.DisposalGuidanceScreen(),
+              // ⬅️ CRUCIAL CHANGE HERE
+              builder: (_) => const DisposalGuidanceScreen(productId: null), 
             ),
           );
-          return;
+          return; 
         }
         if (index == 4) {
           Navigator.of(context).push(

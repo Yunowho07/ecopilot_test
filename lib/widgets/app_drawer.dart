@@ -1,3 +1,4 @@
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
@@ -5,7 +6,7 @@ import 'package:ecopilot_test/auth/landing.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart' as profile_screen;
 import 'package:ecopilot_test/screens/alternative_screen.dart'
     as alternative_screen;
-import 'package:ecopilot_test/screens/dispose_screen.dart' as dispose_screen;
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart' as dispose_screen;
 // Note: Home & Scan screens are not directly referenced here anymore
 import 'package:ecopilot_test/screens/notification_screen.dart';
 import 'package:ecopilot_test/screens/setting_screen.dart';
@@ -35,6 +36,8 @@ class AppDrawer extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final String userName = user?.displayName ?? (user?.email ?? 'User');
+    // Define the primary brand color for the dialog accent
+    final Color primaryGreen = const Color(0xFF1DB954);
 
     return Drawer(
       width: 320,
@@ -106,8 +109,8 @@ class AppDrawer extends StatelessWidget {
                 onPressed: () {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text(
+                    const SnackBar(
+                      content: Text(
                         'Become a Supporter',
                         style: TextStyle(
                           color: Colors.white,
@@ -121,10 +124,10 @@ class AppDrawer extends StatelessWidget {
                 icon: const Icon(Icons.favorite, color: Colors.white),
                 label: const Text(
                   'Become a Supporter',
-                  style: TextStyle(fontWeight: FontWeight.w800),
+                  style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white,),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1DB954),
+                  backgroundColor: primaryGreen,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
                   ),
@@ -185,7 +188,7 @@ class AppDrawer extends StatelessWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) =>
-                              const dispose_screen.DisposalGuidanceScreen(),
+                              const DisposalGuidanceScreen(),
                         ),
                       );
                     },
@@ -239,28 +242,57 @@ class AppDrawer extends StatelessWidget {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () async {
+                          // --- START: Themed Logout Dialog ---
                           final shouldLogout = await showDialog<bool>(
                             context: context,
                             builder: (ctx) => AlertDialog(
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(15),
                               ),
-                              title: const Text('Confirm Logout'),
+                              // 🟢 Themed Title
+                              title: Row(
+                                children: [
+                                  Icon(Icons.logout, color: primaryGreen),
+                                  const SizedBox(width: 10),
+                                  const Text(
+                                    'Confirm Logout',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                               content: const Text(
-                                'Are you sure you want to log out?',
+                                'Are you sure you want to log out of EcoPilot?',
+                                style: TextStyle(color: Colors.black87),
                               ),
                               actions: [
                                 TextButton(
                                   onPressed: () => Navigator.of(ctx).pop(false),
-                                  child: const Text('Cancel'),
+                                  child: const Text(
+                                    'Cancel',
+                                    style: TextStyle(color: Colors.black54),
+                                  ),
                                 ),
+                                // 🔴 Themed Logout Button (Red for security, but follows button style)
                                 ElevatedButton(
                                   onPressed: () => Navigator.of(ctx).pop(true),
-                                  child: const Text('Logout'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red.shade600, 
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Log Out',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
                                 ),
                               ],
                             ),
                           );
+                          // --- END: Themed Logout Dialog ---
 
                           if (shouldLogout == true) {
                             await _handleSignOut(context);
@@ -290,7 +322,7 @@ class AppDrawer extends StatelessWidget {
 
             // Bottom green share bar
             Container(
-              color: const Color(0xFF1DB954),
+              color: primaryGreen,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
@@ -301,7 +333,7 @@ class AppDrawer extends StatelessWidget {
                       shape: BoxShape.circle,
                       color: Colors.white,
                     ),
-                    child: const Icon(Icons.group, color: Color(0xFF1DB954)),
+                    child: Icon(Icons.group, color: primaryGreen),
                   ),
                   const SizedBox(width: 12),
                   const Expanded(
