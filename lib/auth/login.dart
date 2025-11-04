@@ -184,178 +184,188 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 30.0,
-                vertical: 20.0,
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'LOGIN',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [kPrimaryGreen.withOpacity(0.1), Colors.white],
+            ),
+          ),
+          child: Column(
+            children: [
+              _buildHeader(context),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 30.0,
+                  vertical: 20.0,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'LOGIN',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    const Text(
-                      'Enter your login details to access your account',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 30),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Enter your login details to access your account',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 30),
 
-                    // Email Field
-                    _buildTextField(
-                      controller: _emailController,
-                      label: 'Email',
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) => v!.isEmpty || !v.contains('@')
-                          ? 'Enter a valid email'
-                          : null,
-                    ),
-                    const SizedBox(height: 20),
+                      // Email Field
+                      _buildTextField(
+                        controller: _emailController,
+                        label: 'Email',
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) => v!.isEmpty || !v.contains('@')
+                            ? 'Enter a valid email'
+                            : null,
+                      ),
+                      const SizedBox(height: 20),
 
-                    // Password Field
-                    _buildTextField(
-                      controller: _passwordController,
-                      label: 'Password',
-                      isPassword: true,
-                      validator: (v) =>
-                          v!.isEmpty ? 'Please enter your password' : null,
-                    ),
-                    const SizedBox(height: 10),
+                      // Password Field
+                      _buildTextField(
+                        controller: _passwordController,
+                        label: 'Password',
+                        isPassword: true,
+                        validator: (v) =>
+                            v!.isEmpty ? 'Please enter your password' : null,
+                      ),
+                      const SizedBox(height: 10),
 
-                    // Remember Me and Forgot Password
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: _rememberMe,
-                              onChanged: (bool? newValue) {
-                                setState(() {
-                                  _rememberMe = newValue!;
-                                });
-                              },
-                              activeColor: kPrimaryGreen,
-                            ),
-                            const Text(
-                              'Remember',
-                              style: TextStyle(fontSize: 14),
-                            ),
-                          ],
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            showForgotPasswordDialog(context);
-                          },
-                          child: Text(
-                            'Forgot password?',
-                            style: TextStyle(
-                              color: kPrimaryGreen,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Sign In Button
-                    _isLoading
-                        ? Center(
-                            child: CircularProgressIndicator(
-                              color: kPrimaryGreen,
-                            ),
-                          )
-                        : SizedBox(
-                            width: double.infinity,
-                            height: 55,
-                            child: ElevatedButton(
-                              onPressed: _handleSignIn,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: kPrimaryGreen,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 5,
+                      // Remember Me and Forgot Password
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _rememberMe,
+                                onChanged: (bool? newValue) {
+                                  setState(() {
+                                    _rememberMe = newValue!;
+                                  });
+                                },
+                                activeColor: kPrimaryGreen,
                               ),
-                              child: const Text(
-                                'Sign In',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
+                              const Text(
+                                'Remember',
+                                style: TextStyle(fontSize: 14),
+                              ),
+                            ],
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              showForgotPasswordDialog(context);
+                            },
+                            child: Text(
+                              'Forgot password?',
+                              style: TextStyle(
+                                color: kPrimaryGreen,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
-                    const SizedBox(height: 20),
-
-                    // Social Login Separator
-                    Center(
-                      child: Text(
-                        'or login with',
-                        style: TextStyle(color: Colors.grey[600]),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 30),
 
-                    // Social Login Buttons
-                    _buildSocialButton(
-                      'SIGN IN WITH GOOGLE',
-                      'assets/google.png',
-                      kPrimaryGreen,
-                      onPressed: _handleGoogleSignIn,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildSocialButton(
-                      'SIGN IN WITH FACEBOOK',
-                      'assets/facebook.png',
-                      kPrimaryGreen,
-                      onPressed: _handleFacebookSignIn,
-                    ),
-                    const SizedBox(height: 15),
-                    if (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
-                      // Use the native Apple sign-in button on supported Apple platforms
-                      SignInWithAppleButton(
-                        onPressed: _handleAppleSignIn,
-                        style: SignInWithAppleButtonStyle.white,
-                      )
-                    else
-                      // Fallback button for other platforms (shows Apple asset)
+                      // Sign In Button
+                      _isLoading
+                          ? Center(
+                              child: CircularProgressIndicator(
+                                color: kPrimaryGreen,
+                              ),
+                            )
+                          : SizedBox(
+                              width: double.infinity,
+                              height: 55,
+                              child: ElevatedButton(
+                                onPressed: _handleSignIn,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: kPrimaryGreen,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 5,
+                                ),
+                                child: const Text(
+                                  'Sign In',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                      const SizedBox(height: 20),
+
+                      // Social Login Separator
+                      Center(
+                        child: Text(
+                          'or login with',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Social Login Buttons
                       _buildSocialButton(
-                        'SIGN IN WITH APPLE',
-                        'assets/apple.png',
+                        'SIGN IN WITH GOOGLE',
+                        'assets/google.png',
                         kPrimaryGreen,
-                        onPressed: _handleAppleSignIn,
+                        onPressed: _handleGoogleSignIn,
                       ),
-                    const SizedBox(height: 30),
+                      const SizedBox(height: 15),
+                      _buildSocialButton(
+                        'SIGN IN WITH FACEBOOK',
+                        'assets/facebook.png',
+                        kPrimaryGreen,
+                        onPressed: _handleFacebookSignIn,
+                      ),
+                      const SizedBox(height: 15),
+                      if (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
+                        // Use the native Apple sign-in button on supported Apple platforms
+                        SignInWithAppleButton(
+                          onPressed: _handleAppleSignIn,
+                          style: SignInWithAppleButtonStyle.white,
+                        )
+                      else
+                        // Fallback button for other platforms (shows Apple asset)
+                        _buildSocialButton(
+                          'SIGN IN WITH APPLE',
+                          'assets/apple.png',
+                          kPrimaryGreen,
+                          onPressed: _handleAppleSignIn,
+                        ),
+                      const SizedBox(height: 30),
 
-                    // Terms and Services
-                    const Center(
-                      child: Text(
-                        'By clicking Sign In you agree with our\nServices and Terms',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      // Terms and Services
+                      const Center(
+                        child: Text(
+                          'By clicking Sign In you agree with our\nServices and Terms',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

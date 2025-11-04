@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/notification_service.dart';
 import '../utils/constants.dart';
 
+const Color kPrimaryGreen = Color(0xFF1db954);
+
 // Notification categories used by the app
 enum NotificationCategory {
   dailyChallenge,

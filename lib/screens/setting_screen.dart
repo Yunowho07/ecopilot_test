@@ -9,6 +9,8 @@ import 'package:ecopilot_test/screens/profile_screen.dart'
     as ps
     show ChangePasswordScreen;
 
+const Color kPrimaryGreen = Color(0xFF1db954);
+
 class SettingScreen extends StatefulWidget {
   const SettingScreen({super.key});
 

@@ -186,157 +186,168 @@ class _SignUpScreenState extends State<SignUpScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      // Transparent scaffold with a full-screen Container that provides the gradient
+      backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 30.0,
-                vertical: 20.0,
-              ),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'SIGN UP',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [primaryGreen.withOpacity(0.1), Colors.white],
+            ),
+          ),
+          child: Column(
+            children: [
+              _buildHeader(context),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 30.0,
+                  vertical: 20.0,
+                ),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'SIGN UP',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 5),
-                    const Text(
-                      'Enter your personal details to create your account',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 30),
-
-                    // Full Name Field
-                    _buildTextField(
-                      controller: _fullNameController,
-                      label: 'Full Name',
-                      validator: (v) =>
-                          v!.isEmpty ? 'Please enter your full name' : null,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Email Field
-                    _buildTextField(
-                      controller: _emailController,
-                      label: 'Email',
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) => v!.isEmpty || !v.contains('@')
-                          ? 'Enter a valid email'
-                          : null,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Password Field
-                    _buildTextField(
-                      controller: _passwordController,
-                      label: 'Password',
-                      isPassword: true,
-                      validator: (v) => v!.length < 6
-                          ? 'Password must be at least 6 characters'
-                          : null,
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Confirm Password Field
-                    _buildTextField(
-                      controller: _confirmPasswordController,
-                      label: 'Confirm Password',
-                      isPassword: true,
-                      validator: (v) =>
-                          v!.isEmpty ? 'Please confirm your password' : null,
-                    ),
-                    const SizedBox(height: 40),
-
-                    // Sign Up Button
-                    _isLoading
-                        ? Center(
-                            child: CircularProgressIndicator(
-                              color: primaryGreen,
-                            ),
-                          )
-                        : SizedBox(
-                            width: double.infinity,
-                            height: 55,
-                            child: ElevatedButton(
-                              onPressed: _handleSignUp,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: primaryGreen,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 5,
-                              ),
-                              child: const Text(
-                                'Sign Up',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ),
-                    const SizedBox(height: 30),
-
-                    // Social Sign Up Separator
-                    Center(
-                      child: Text(
-                        'or sign up with',
-                        style: TextStyle(color: Colors.grey[600]),
+                      const SizedBox(height: 5),
+                      const Text(
+                        'Enter your personal details to create your account',
+                        style: TextStyle(fontSize: 14, color: Colors.grey),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    _buildSocialButton(
-                      'SIGN UP WITH GOOGLE',
-                      'assets/google.png',
-                      primaryGreen,
-                      onPressed: _handleGoogleSignIn,
-                    ),
-                    const SizedBox(height: 15),
-                    _buildSocialButton(
-                      'SIGN UP WITH FACEBOOK',
-                      'assets/facebook.png',
-                      primaryGreen,
-                      onPressed: _handleFacebookSignIn,
-                    ),
-                    const SizedBox(height: 15),
-                    if (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
-                      SignInWithAppleButton(
-                        onPressed: _handleAppleSignIn,
-                        style: SignInWithAppleButtonStyle.white,
-                      )
-                    else
+                      const SizedBox(height: 30),
+
+                      // Full Name Field
+                      _buildTextField(
+                        controller: _fullNameController,
+                        label: 'Full Name',
+                        validator: (v) =>
+                            v!.isEmpty ? 'Please enter your full name' : null,
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Email Field
+                      _buildTextField(
+                        controller: _emailController,
+                        label: 'Email',
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) => v!.isEmpty || !v.contains('@')
+                            ? 'Enter a valid email'
+                            : null,
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Password Field
+                      _buildTextField(
+                        controller: _passwordController,
+                        label: 'Password',
+                        isPassword: true,
+                        validator: (v) => v!.length < 6
+                            ? 'Password must be at least 6 characters'
+                            : null,
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Confirm Password Field
+                      _buildTextField(
+                        controller: _confirmPasswordController,
+                        label: 'Confirm Password',
+                        isPassword: true,
+                        validator: (v) =>
+                            v!.isEmpty ? 'Please confirm your password' : null,
+                      ),
+                      const SizedBox(height: 40),
+
+                      // Sign Up Button
+                      _isLoading
+                          ? Center(
+                              child: CircularProgressIndicator(
+                                color: primaryGreen,
+                              ),
+                            )
+                          : SizedBox(
+                              width: double.infinity,
+                              height: 55,
+                              child: ElevatedButton(
+                                onPressed: _handleSignUp,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryGreen,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 5,
+                                ),
+                                child: const Text(
+                                  'Sign Up',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                      const SizedBox(height: 30),
+
+                      // Social Sign Up Separator
+                      Center(
+                        child: Text(
+                          'or sign up with',
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                       _buildSocialButton(
-                        'SIGN IN WITH APPLE',
-                        'assets/apple.png',
+                        'SIGN UP WITH GOOGLE',
+                        'assets/google.png',
                         primaryGreen,
-                        onPressed: _handleAppleSignIn,
+                        onPressed: _handleGoogleSignIn,
                       ),
-                    const SizedBox(height: 30),
+                      const SizedBox(height: 15),
+                      _buildSocialButton(
+                        'SIGN UP WITH FACEBOOK',
+                        'assets/facebook.png',
+                        primaryGreen,
+                        onPressed: _handleFacebookSignIn,
+                      ),
+                      const SizedBox(height: 15),
+                      if (!kIsWeb && (Platform.isIOS || Platform.isMacOS))
+                        SignInWithAppleButton(
+                          onPressed: _handleAppleSignIn,
+                          style: SignInWithAppleButtonStyle.white,
+                        )
+                      else
+                        _buildSocialButton(
+                          'SIGN IN WITH APPLE',
+                          'assets/apple.png',
+                          primaryGreen,
+                          onPressed: _handleAppleSignIn,
+                        ),
+                      const SizedBox(height: 30),
 
-                    // Terms and Services
-                    const Center(
-                      child: Text(
-                        'By clicking Sign Up you agree with our\nServices and Terms',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                      // Terms and Services
+                      const Center(
+                        child: Text(
+                          'By clicking Sign Up you agree with our\nServices and Terms',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

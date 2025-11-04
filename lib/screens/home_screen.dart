@@ -18,7 +18,7 @@ import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'daily_challenge_screen.dart'; // ⚠️ NEW IMPORT
 
-
+const Color kPrimaryGreen = Color(0xFF1db954);
 
 // Placeholder data structure for challenge and user progress
 class DailyChallenge {

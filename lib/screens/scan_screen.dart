@@ -23,7 +23,7 @@ import 'package:ecopilot_test/screens/result_screen.dart';
 // Colors are defined in lib/utils/constants.dart
 
 // ProductAnalysisData moved to lib/models/product_analysis_data.dart
-
+const Color kPrimaryGreen = Color(0xFF1db954);
 // --- III. Helper Widgets (ResultScreen, ProfileScreen) ---
 // (ResultScreen and ProfileScreen remain unchanged for brevity, but are included in the final file)
 

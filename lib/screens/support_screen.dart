@@ -4,6 +4,8 @@ import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import '../../utils/constants.dart';
 
+const Color kPrimaryGreen = Color(0xFF1db954);
+
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
 
