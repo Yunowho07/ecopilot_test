@@ -1,23 +1,20 @@
 import 'package:ecopilot_test/screens/alternative_screen.dart';
 import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:ecopilot_test/screens/scan_screen.dart' as scan_screen;
+import 'package:ecopilot_test/screens/disposal_scan_screen.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart' as profile_screen;
 import 'package:flutter/material.dart';
-import 'package:ecopilot_test/utils/constants.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:ecopilot_test/utils/cloudinary_config.dart';
-import 'package:ecopilot_test/services/cloudinary_service.dart';
-import 'dart:io' show File;
-import 'dart:typed_data';
+import 'package:ecopilot_test/utils/constants.dart';
+import 'package:ecopilot_test/widgets/app_drawer.dart';
 
 // Use the project's global primary color from utils/constants.dart
 
 class DisposalGuidanceScreen extends StatefulWidget {
-  // productId remains optional to allow calling this screen as the main hub (null)
-  // or as the detail view (when productId is provided).
   final String? productId;
+
   const DisposalGuidanceScreen({Key? key, this.productId}) : super(key: key);
 
   @override
@@ -25,16 +22,15 @@ class DisposalGuidanceScreen extends StatefulWidget {
 }
 
 class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
-  // theme color (use the top-level constant)
-
-  // --- State for the Detail View (Used if productId is NOT null) ---
   bool _loading = true;
   Map<String, dynamic>? _product;
   String? _error;
   static const Map<String, dynamic> _defaultData = {
     'name': 'General Recycling Guidance',
+    'material': 'Plastic (PET) / Aluminum',
     'ecoScore': 'B',
-    'imageUrl': null,
+    'imageUrl':
+        'https://example.com/placeholder_bottle.png', // Placeholder URL for demo image
     'materials': ['Plastic (General)', 'Paper', 'Aluminum'],
     'disposalSteps': [
       'Separate plastics, paper, and glass.',
@@ -47,68 +43,61 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
       'Composting food waste significantly reduces landfill volume.',
     ],
   };
-  // -----------------------------------------------------------------
 
-  // State used by the bottom navigation helper
   int _selectedIndex = 3;
-  final List<Map<String, dynamic>> _recentActivity = [];
-
-  // Simulated recent products for the main hub view (matching image)
-  final List<Map<String, dynamic>> _simulatedRecentProducts = [
-    {
-      'id': 'prod1',
-      'name': 'Green Tea Sunblock',
-      'ecoScore': 'C',
-      'co2': '36g CO2 saved',
-    },
-    {
-      'id': 'prod2',
-      'name': 'BambooClean 2.0',
-      'ecoScore': 'A+',
-      'co2': '123g CO2 saved',
-    },
-    {
-      'id': 'prod3',
-      'name': 'EcoPaste Mint+',
-      'ecoScore': 'B+',
-      'co2': '50g CO2 saved',
-    },
-    {
-      'id': 'prod4',
-      'name': 'RefillRoll Deodorant',
-      'ecoScore': 'A-',
-      'co2': '74g CO2 saved',
-    },
-    {
-      'id': 'prod5',
-      'name': 'GreenBrush Eco',
-      'ecoScore': 'A',
-      'co2': '98g CO2 saved',
-    },
-  ];
+  List<Map<String, dynamic>> _recentActivity = [];
 
   @override
   void initState() {
     super.initState();
-    // Only attempt to load product data if we have an ID (i.e., we are in detail mode)
-    if (widget.productId != null) {
+    _loadRecentActivity();
+    if (widget.productId != null && widget.productId != 'general_fallback') {
       _loadProduct();
     } else {
-      // If no ID, immediately show the main hub UI
+      _product = _defaultData;
       _loading = false;
     }
   }
 
-  // --- PRODUCT LOADING LOGIC (Detail Mode) ---
+  Future<void> _loadRecentActivity() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('scans')
+          .orderBy('createdAt', descending: true)
+          .limit(10)
+          .get();
+
+      setState(() {
+        // Map the Firebase scan data to a simplified list for the Recent Activity preview
+        _recentActivity = snapshot.docs
+            .map(
+              (doc) => {
+                'id': doc.id,
+                'name': doc['name'] ?? 'Scanned product',
+                'ecoScore': doc['ecoScore'] ?? 'N/A',
+                'co2': doc['co2'] ?? '—',
+                'imageUrl': doc['imageUrl'] ?? '',
+              },
+            )
+            .toList();
+      });
+    } catch (e) {
+      debugPrint('Error loading recent activity: $e');
+    }
+  }
+
   Future<void> _loadProduct() async {
-    // This logic is only executed if widget.productId != null
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      // ⚠️ NOTE: This assumes a 'products' collection exists in Firestore
       final doc = await FirebaseFirestore.instance
           .collection('products')
           .doc(widget.productId)
@@ -135,42 +124,31 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
     }
   }
 
-  // --- MAPS FUNCTIONALITY (Detail Mode) ---
   Future<void> _openMapsForRecycling() async {
-    final query = Uri.encodeComponent('Recycling center near me');
-    // Using a standard map search URL
-    final googleMapsUrl = Uri.parse(
-      'https://www.google.com/maps/search/?api=1&query=$query',
-    );
+    const mapsUrl =
+        'https://www.google.com/maps/search/?api=1&query=recycling+center+near+me';
+    final url = Uri.parse(mapsUrl);
 
-    if (await canLaunchUrl(googleMapsUrl)) {
-      await launchUrl(googleMapsUrl, mode: LaunchMode.externalApplication);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not open maps. Please ensure you have a browser or map app installed.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open maps.')));
     }
   }
 
-  // Handle result returned by the Scan screen.
-  // The Scan screen is expected to return a Map<String, dynamic> with product info.
   Future<void> _handleScanResult(dynamic result) async {
     if (result == null) return;
 
-    // Normalize result into a product map
     Map<String, dynamic> product = {};
     if (result is Map<String, dynamic>) {
       product = Map<String, dynamic>.from(result);
     } else {
-      // If it's another shape, try to stringify it minimally
       product = {'name': result.toString()};
     }
 
-    // Ensure there's an ID we can use for storage/navigation
+    // --- Generate a unique ID if not provided by the scanning system ---
     final String productId =
         (product['productId'] ??
                 product['id'] ??
@@ -178,18 +156,10 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
             .toString();
     product['productId'] = productId;
 
-    // Persist the scanned product to Firestore under the user's scans collection
+    // Simulate saving the product data returned from the ScanScreen/Gemini
+    // NOTE: This relies on the ScanScreen returning a comprehensive map.
     await _saveScannedProduct(product);
-
-    // Update local recent activity list for immediate UX feedback
-    setState(() {
-      _recentActivity.insert(0, {
-        'id': productId,
-        'name': product['name'] ?? 'Scanned product',
-        'ecoScore': product['ecoScore'] ?? 'N/A',
-        'co2': product['co2'] ?? '—',
-      });
-    });
+    await _loadRecentActivity(); // Reload list to show new item
 
     // Open the detail view for the newly scanned product
     if (mounted) {
@@ -201,56 +171,9 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
     }
   }
 
-  // Save a scanned product to Firestore under the current user's scans subcollection.
   Future<void> _saveScannedProduct(Map<String, dynamic> product) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
-
-      // If the product contains local image bytes or a local file path and
-      // Cloudinary configuration is provided, attempt to upload.
-      try {
-        final cloudName = kCloudinaryCloudName;
-        final preset = kCloudinaryUploadPreset;
-
-        if ((cloudName.isNotEmpty && cloudName != '<YOUR_CLOUD_NAME>') &&
-            (preset.isNotEmpty && preset != '<YOUR_UNSIGNED_UPLOAD_PRESET>')) {
-          String? uploadedUrl;
-
-          if (product['imageBytes'] != null &&
-              product['imageBytes'] is Uint8List) {
-            uploadedUrl = await CloudinaryService.uploadImageBytes(
-              product['imageBytes'] as Uint8List,
-              filename:
-                  '${product['productId'] ?? DateTime.now().millisecondsSinceEpoch}.jpg',
-              cloudName: cloudName,
-              uploadPreset: preset,
-            );
-          } else if (product['localImagePath'] != null &&
-              product['localImagePath'] is String) {
-            try {
-              final file = File(product['localImagePath'] as String);
-              if (await file.exists()) {
-                final bytes = await file.readAsBytes();
-                uploadedUrl = await CloudinaryService.uploadImageBytes(
-                  bytes,
-                  filename:
-                      '${product['productId'] ?? DateTime.now().millisecondsSinceEpoch}.jpg',
-                  cloudName: cloudName,
-                  uploadPreset: preset,
-                );
-              }
-            } catch (_) {
-              // ignore file read errors, we'll continue to save without image
-            }
-          }
-
-          if (uploadedUrl != null) {
-            product['imageUrl'] = uploadedUrl;
-          }
-        }
-      } catch (_) {
-        // Non-fatal: if upload fails, continue and store product without imageUrl
-      }
       final docRef = FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -261,10 +184,9 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
         'name': product['name'] ?? 'Scanned product',
         'ecoScore': product['ecoScore'] ?? 'N/A',
         'imageUrl': product['imageUrl'] ?? '',
-        'materials': product['materials'] ?? [],
-        'disposalSteps': product['disposalSteps'] ?? [],
-        'tips': product['tips'] ?? [],
-        'raw': product['raw'] ?? null,
+        'material': product['material'] ?? 'Unknown',
+        'disposalSteps': product['disposalSteps'] ?? ['Rinse and recycle'],
+        'tips': product['tips'] ?? ['Reduce waste'],
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
@@ -278,66 +200,54 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
 
   // --- UI Builders for Hub Elements ---
 
-  Widget _buildScanCard() {
-    return Card(
-      elevation: 0,
+  Widget _styledHubCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    VoidCallback? onTap,
+  }) {
+    // Styling adjusted to match the clean, rounded look of the reference image
+    return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-        side: BorderSide(color: Colors.grey.shade300, width: 1.5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: ListTile(
+        onTap: onTap,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
+          horizontal: 18,
+          vertical: 14, // Increased vertical padding for taller cards
         ),
-        leading: Icon(
-          Icons.camera_alt_outlined,
-          color: kPrimaryGreen,
-          size: 36,
+        leading: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: kPrimaryGreen.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: kPrimaryGreen, size: 30),
         ),
-        title: const Text(
-          'Scan Product',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 18),
-        onTap: () async {
-          // Navigate to the Scan screen to start a new analysis and await the result
-          final result = await Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const scan_screen.ScanScreen()),
-          );
-
-          // If a scan result is returned, persist it and open the detail view
-          if (result != null) {
-            await _handleScanResult(result);
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _buildSearchCard() {
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15),
-        side: BorderSide(color: Colors.grey.shade300, width: 1.5),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: const Icon(Icons.search, color: Colors.black54, size: 32),
         title: Text(
-          'Search Product',
-          style: TextStyle(color: Colors.grey.shade600),
+          title,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
-        subtitle: const Text('Sunblock Shampoo'), // Placeholder text
-        onTap: () {
-          // TODO: Implement search functionality
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Search functionality coming soon!')),
-          );
-        },
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(fontSize: 14, color: Colors.black54),
+        ),
+        trailing: const Icon(
+          Icons.arrow_forward_ios,
+          size: 18,
+          color: Colors.black38,
+        ),
       ),
     );
   }
@@ -360,7 +270,6 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
       ),
       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
       onTap: () {
-        // Navigate to the detail view for this specific product ID
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => DisposalGuidanceScreen(productId: product['id']),
@@ -372,135 +281,291 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
 
   // --- MAIN HUB VIEW ---
   Widget _buildDisposalHub() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 10),
-        const Center(
-          child: Text(
-            'Scan a Product to',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.normal),
+    return SingleChildScrollView(
+      child: Container(
+        // Background gradient effect to match the reference image
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [kPrimaryGreen.withOpacity(0.1), Colors.white],
           ),
         ),
-        const Center(
-          child: Text(
-            'Get Disposal Guidance',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header content moved to AppBar, only body elements remain here
+            const SizedBox(height: 10),
 
-        // 1. Scan Product Button
-        _buildScanCard(),
+            // Action Cards
+            _styledHubCard(
+              icon: Icons.camera_alt_outlined,
+              title: 'Scan Product',
+              subtitle: 'Use your camera to identify product materials',
+              onTap: () async {
+                final result = await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DisposalScanScreen()),
+                );
+                if (result != null) await _handleScanResult(result);
+              },
+            ),
 
-        // 2. Search Product Card
-        _buildSearchCard(),
+            _styledHubCard(
+              icon: Icons.qr_code,
+              title: 'Find Product',
+              subtitle: 'Search by barcode or product name',
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Search functionality coming soon!'),
+                  ),
+                );
+              },
+            ),
 
-        const SizedBox(height: 20),
+            _styledHubCard(
+              icon: Icons.history,
+              title: 'Recent Activity',
+              subtitle: 'View your recently scanned products',
+              onTap: () {
+                showModalBottomSheet(
+                  context: context,
+                  builder: (_) => SizedBox(
+                    height: 400, // Increased height for better view
+                    child: ListView(
+                      children: _recentActivity.isEmpty
+                          ? [
+                              const ListTile(
+                                title: Text('No recent scans to display'),
+                              ),
+                            ]
+                          : _recentActivity
+                                .map((p) => _buildRecentProductTile(p))
+                                .toList(),
+                    ),
+                  ),
+                );
+              },
+            ),
 
-        // 3. Recent Product List Header
-        const Text(
-          'Recent Product',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
+            const SizedBox(height: 24),
 
-        // Recent Products
-        // NOTE: In a real app, this should be a StreamBuilder fetching data from Firebase
-        ..._simulatedRecentProducts
-            .map((p) => _buildRecentProductTile(p))
-            .toList(),
-
-        const SizedBox(height: 30),
-
-        // 4. Analyzed Product Button (For general/fallback tips)
-        SizedBox(
-          width: double.infinity,
-          height: 55,
-          child: ElevatedButton(
-            onPressed: () {
-              // Open the General Guidance view (uses a placeholder ID or null)
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const DisposalGuidanceScreen(
-                    productId: 'general_fallback',
+            // Large CTA - Scan New Product
+            SizedBox(
+              width: double.infinity,
+              height: 64,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.add, size: 22, color: Colors.white),
+                label: const Text(
+                  '+ Scan New Product',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
                   ),
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimaryGreen,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimaryGreen,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  elevation: 4,
+                ),
+                onPressed: () async {
+                  final result = await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const DisposalScanScreen(),
+                    ),
+                  );
+                  if (result != null) await _handleScanResult(result);
+                },
               ),
-              elevation: 4,
             ),
-            child: const Text(
-              'ANALYZED PRODUCT',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-          ),
+
+            const SizedBox(height: 24),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  // --- DETAIL GUIDANCE VIEW ---
+  // --- DETAIL GUIDANCE VIEW (Updated to match image) ---
   Widget _buildGuidanceDetail(BuildContext context) {
-    const kGreen = Color(0xFF1db954);
+    final kGreen = kPrimaryGreen;
     final productData = _product!;
 
-    // This widget serves as the detail view, only rendered when productId is not null
+    final String name = productData['name'] ?? 'Unknown Item';
+    final String material = productData['material'] ?? 'N/A';
+    final String ecoScore = productData['ecoScore'] ?? 'N/A';
+    final List disposalSteps = productData['disposalSteps'] ?? [];
+    final List tips = productData['tips'] ?? [];
+    final String imageUrl = productData['imageUrl'] ?? '';
+
+    // --- Helper to style the Eco Score badge ---
+    Color getScoreColor(String score) {
+      if (score.startsWith('A')) return Colors.green.shade600;
+      if (score.startsWith('B')) return Colors.lightGreen.shade600;
+      if (score.startsWith('C')) return Colors.amber.shade600;
+      return Colors.grey;
+    }
+
+    // --- Placeholder for Nearby Center ---
+    Widget _buildRecyclingCenterCard() {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        color: Colors.grey.shade50,
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              //  - Placeholder map image
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: Colors.green.shade50,
+                ),
+                child: Icon(Icons.map, color: kGreen),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Green Recycling Center',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const Text(
+                      '0.5 km',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                    Text(
+                      'Open',
+                      style: TextStyle(
+                        color: kGreen,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ElevatedButton.icon(
+                onPressed: _openMapsForRecycling,
+                icon: const Icon(Icons.navigation, size: 18),
+                label: const Text('Navigate'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kGreen,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header Card
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+          // Top Product Card Section (Matches Image)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 5),
+                ),
+              ],
             ),
-            elevation: 3,
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(12),
-              leading:
-                  productData['imageUrl'] != null &&
-                      (productData['imageUrl'] as String).isNotEmpty
-                  ? Image.network(
-                      productData['imageUrl'] as String,
-                      width: 72,
-                      height: 72,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Icon(
-                        Icons.recycling, // Default icon for disposal screen
-                        size: 48,
-                        color: kGreen,
+            child: Row(
+              children: [
+                // Product Image
+                Container(
+                  width: 90,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: imageUrl.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: Image.network(imageUrl, fit: BoxFit.cover),
+                        )
+                      : Icon(
+                          Icons.image_outlined,
+                          size: 40,
+                          color: Colors.grey.shade400,
+                        ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    )
-                  : SizedBox(
-                      width: 72,
-                      height: 72,
-                      child: Icon(Icons.recycling, size: 48, color: kGreen),
-                    ),
-              title: Text(
-                productData['name'] ?? 'Unknown product',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text('Eco Score: ${productData['ecoScore'] ?? 'N/A'}'),
-              trailing: widget.productId != null && _error != null
-                  ? const Icon(Icons.warning, color: Colors.orange)
-                  : null,
+                      const SizedBox(height: 4),
+                      Text(
+                        'Material',
+                        style: TextStyle(color: Colors.black54, fontSize: 13),
+                      ),
+                      Text(
+                        material,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      const SizedBox(height: 8),
+                      // Eco Score Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: getScoreColor(ecoScore).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: getScoreColor(ecoScore),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          'Eco Score $ecoScore',
+                          style: TextStyle(
+                            color: getScoreColor(ecoScore),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
 
           if (_error != null)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10.0),
+              padding: const EdgeInsets.only(top: 12.0, bottom: 8.0),
               child: Text(
                 _error!,
                 style: TextStyle(
@@ -510,113 +575,90 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
               ),
             ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
-          // Material Section
-          const Text(
-            'Detected Materials',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: List<Widget>.from(
-              ((productData['materials'] ?? <dynamic>[]) as List).map(
-                (m) => Chip(
-                  label: Text(m.toString()),
-                  backgroundColor: kGreen.withOpacity(0.1),
-                  labelStyle: TextStyle(color: kGreen),
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Guidance Section
+          // --- How to Dispose Section ---
           const Text(
             'How to Dispose',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Column(
-            children: List<Widget>.from(
-              ((productData['disposalSteps'] ?? <dynamic>[]) as List).map((
-                step,
-              ) {
-                final s = step.toString().toLowerCase();
-                IconData icon = Icons.recycling;
-                Color color = kGreen;
-                if (s.contains('compost')) {
-                  icon = Icons.eco;
-                  color = Colors.brown;
-                } else if (s.contains('trash') || s.contains('landfill')) {
-                  icon = Icons.delete_outline;
-                  color = Colors.grey;
-                } else if (s.contains('recycle') || s.contains('recycling')) {
-                  icon = Icons.recycling;
-                  color = kGreen;
-                }
-
-                return ListTile(
-                  leading: Icon(icon, color: color),
-                  title: Text(step.toString()),
-                );
-              }),
-            ),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: disposalSteps.asMap().entries.map((entry) {
+              final index = entry.key;
+              final step = entry.value.toString();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text(
+                  '${index + 1}. $step',
+                  style: const TextStyle(fontSize: 16, height: 1.5),
+                ),
+              );
+            }).toList(),
           ),
-
-          const SizedBox(height: 20),
-
-          // Map Button
-          ElevatedButton.icon(
-            onPressed: _openMapsForRecycling,
-            icon: const Icon(Icons.location_on),
-            label: const Text('Find Nearest Recycling Center'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimaryGreen,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Showing full details...')),
+              );
+            },
+            child: Text(
+              'View More Details',
+              style: TextStyle(
+                color: kPrimaryGreen,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
-          // Tips Section
+          // --- Nearby Recycling Center Section ---
+          const Text(
+            'Nearby Recycling Center',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          _buildRecyclingCenterCard(),
+
+          const SizedBox(height: 24),
+
+          // --- Eco Tips Section ---
           const Text(
             'Eco Tips',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: List<Widget>.from(
-              ((productData['tips'] ?? <dynamic>[]) as List).map(
+          const SizedBox(height: 12),
+          ...tips
+              .map(
                 (t) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6.0),
+                  padding: const EdgeInsets.only(bottom: 12.0),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.lightbulb_outline,
-                        size: 20,
-                        color: Colors.orange,
+                        size: 24,
+                        color: Colors.orange.shade700,
                       ),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(t.toString())),
+                      Expanded(
+                        child: Text(
+                          t.toString(),
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
-            ),
-          ),
+              )
+              .toList(),
 
-          const SizedBox(height: 30),
+          const SizedBox(height: 40),
 
-          // Done Button
+          // Done Button (Returns to Hub)
           SizedBox(
             width: double.infinity,
             height: 55,
@@ -632,10 +674,15 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
               ),
               child: const Text(
                 'Done',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
+          const SizedBox(height: 30),
         ],
       ),
     );
@@ -705,21 +752,54 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // If loading or if a specific product ID was passed, show the detail view.
-    // Otherwise, show the main hub view.
     final bool showDetail = widget.productId != null && !_loading;
 
     return Scaffold(
+      drawer: const AppDrawer(),
       appBar: AppBar(
-        title: Text(showDetail ? 'Disposal Guidance' : 'Dispose'),
-        backgroundColor: kPrimaryGreen,
-        automaticallyImplyLeading:
-            showDetail, // Only show back button in detail mode
+        // Ensure the title bar uses the primary green color for the Hub view
+        backgroundColor: showDetail ? Colors.white : kPrimaryGreen,
+        foregroundColor: showDetail ? Colors.black : Colors.white,
+        elevation: showDetail ? 4 : 0,
+        centerTitle: true,
+        title: Text(
+          showDetail ? 'Disposal Details' : 'Disposal Guidance',
+          style: TextStyle(
+            color: showDetail ? Colors.black : Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        automaticallyImplyLeading: showDetail,
+        // Menu button on the Hub, back button on Details
+        leading: showDetail
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : Builder(
+                builder: (context) => IconButton(
+                  icon: const Icon(Icons.menu, color: Colors.white),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
+              ),
+        actions: showDetail
+            ? [
+                IconButton(
+                  icon: const Icon(
+                    Icons.recycling,
+                    color: kPrimaryGreen,
+                    size: 28,
+                  ),
+                  onPressed: () {},
+                ),
+              ]
+            : null,
       ),
+      // Body color is white/transparent for the gradient effect
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: showDetail
                   ? _buildGuidanceDetail(context)
                   : _buildDisposalHub(),
