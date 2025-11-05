@@ -597,8 +597,17 @@ class FirebaseService {
     required String ecoScore,
     required String carbonFootprint,
     String? imageUrl,
+    String? category,
+    String? packagingType,
+    List<dynamic>? disposalSteps,
+    String? tips,
+    String? nearbyCenter,
+    bool isDisposal = false,
   }) async {
-    final uid = _auth.currentUser!.uid;
+    // Allow saving scans even when no FirebaseAuth user is signed in by
+    // falling back to the 'anonymous' UID. Callers (UI) already sometimes
+    // write to users/anonymous directly, so make the helper consistent.
+    final uid = _auth.currentUser?.uid ?? 'anonymous';
     final scansRef = _firestore
         .collection('users')
         .doc(uid)
@@ -609,6 +618,12 @@ class FirebaseService {
       'eco_score': ecoScore,
       'carbon_footprint': carbonFootprint,
       'image_url': imageUrl ?? null,
+      'category': category ?? null,
+      'packaging': packagingType ?? null,
+      'disposalSteps': disposalSteps ?? null,
+      'tips': tips ?? null,
+      'nearbyCenter': nearbyCenter ?? null,
+      'isDisposal': isDisposal,
       'timestamp': FieldValue.serverTimestamp(),
       'date': DateFormat('yyyy-MM-dd – kk:mm').format(DateTime.now()),
     });

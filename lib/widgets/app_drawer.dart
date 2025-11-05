@@ -4,8 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'package:ecopilot_test/auth/landing.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart' as profile_screen;
-import 'package:ecopilot_test/screens/alternative_screen.dart'
-    as alternative_screen;
+import 'package:ecopilot_test/screens/alternative_screen.dart'as alternative_screen;
 import 'package:ecopilot_test/screens/disposal_guidance_screen.dart' as dispose_screen;
 // Note: Home & Scan screens are not directly referenced here anymore
 import 'package:ecopilot_test/screens/notification_screen.dart';

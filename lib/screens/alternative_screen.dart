@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'home_screen.dart'; // Assume this file exists
 import 'scan_screen.dart'; // Assume this file exists
-import 'disposal_guidance_screen.dart' as disposal_guidance_screen; // Assume this file exists
-import 'profile_screen.dart' as profile_screen; // Assume this file exists
+import 'disposal_guidance_screen.dart'; // Assume this file exists
+import 'profile_screen.dart'; // Assume this file exists
 
 // Define global constants used in the provided navigation logic
 const Color primaryGreen = Color(0xFF1DB954,); // Assuming primaryGreen is the same as _kPrimaryGreenAlt
@@ -342,7 +342,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
         if (index == 4) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const profile_screen.ProfileScreen(),
+              builder: (_) => const ProfileScreen(),
             ),
           );
           return;

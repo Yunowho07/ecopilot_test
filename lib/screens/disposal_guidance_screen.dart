@@ -1,16 +1,16 @@
-﻿import 'package:flutter/material.dart';
+﻿import 'package:ecopilot_test/screens/scan_screen.dart' hide ProfileScreen;
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ecopilot_test/screens/disposal_scan_screen.dart';
-// Avoid importing kPrimaryGreen twice: hide it from the recent_activity import
-import 'package:ecopilot_test/screens/recent_activity_disposal.dart';
+// Avoid importing kPrimaryGreen twice: hide it from the recent_disposal import
+import 'package:ecopilot_test/screens/recent_disposal.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
-import 'package:ecopilot_test/screens/home_screen.dart' as home_screen;
-import 'package:ecopilot_test/screens/alternative_screen.dart'
-    as alternative_screen;
-import 'package:ecopilot_test/screens/profile_screen.dart' as profile_screen;
+import 'package:ecopilot_test/screens/home_screen.dart';
+import 'package:ecopilot_test/screens/alternative_screen.dart';
+import 'package:ecopilot_test/screens/profile_screen.dart';
 
 /// Clean Disposal Guidance screen (hub + details).
 class DisposalGuidanceScreen extends StatefulWidget {
@@ -25,6 +25,8 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
   bool _loading = true;
   Map<String, dynamic>? _product;
   int _selectedIndex = 3; // default to Dispose tab
+  // Recent disposal list used when returning from ScanScreen (kept in memory for this view)
+  final List<Map<String, dynamic>> _recentDisposal = [];
 
   static const Map<String, dynamic> _defaultData = {
     'name': 'General Recycling Guidance',
@@ -242,10 +244,10 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
             ),
             _styledHubCard(
               icon: Icons.history,
-              title: 'Recent Activity',
-              subtitle: 'View your recently scanned products',
+              title: 'Recent Disposal',
+              subtitle: 'View your recently disposed products',
               onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const RecentActivityScreen()),
+                MaterialPageRoute(builder: (_) => const RecentDisposalScreen()),
               ),
             ),
             const SizedBox(height: 32),
@@ -521,27 +523,57 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
       unselectedItemColor: Colors.grey,
       onTap: (index) async {
         if (index == 0) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const home_screen.HomeScreen()),
-          );
-        } else if (index == 1) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const alternative_screen.AlternativeScreen(),
-            ),
-          );
-        } else if (index == 2) {
           Navigator.of(
             context,
-          ).push(MaterialPageRoute(builder: (_) => const DisposalScanScreen()));
-        } else if (index == 3) {
-          // Stay on this screen (Dispose)
-        } else if (index == 4) {
+          ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
+          return;
+        }
+        if (index == 1) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const AlternativeScreen()));
+          return;
+        }
+        if (index == 2) {
+          final result = await Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ScanScreen()));
+
+          if (result != null && result is Map<String, dynamic>) {
+            // Add to recent disposal list (basic shape for the home screen)
+            setState(() {
+              _recentDisposal.insert(0, {
+                'product': result['product'] ?? 'Scanned product',
+                'score':
+                    result['raw'] != null &&
+                        result['raw']['ecoscore_score'] != null
+                    ? (result['raw']['ecoscore_score'].toString())
+                    : 'N/A',
+                'co2':
+                    result['raw'] != null &&
+                        result['raw']['carbon_footprint'] != null
+                    ? result['raw']['carbon_footprint'].toString()
+                    : '—',
+              });
+            });
+          }
+
+          return;
+        }
+        if (index == 3) {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const profile_screen.ProfileScreen(),
+              // ⬅️ CRUCIAL CHANGE HERE
+              builder: (_) => const DisposalGuidanceScreen(productId: null),
             ),
           );
+          return;
+        }
+        if (index == 4) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          return;
         }
         setState(() {
           _selectedIndex = index;

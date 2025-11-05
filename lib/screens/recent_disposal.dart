@@ -4,81 +4,45 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 
-class RecentActivityScreen extends StatefulWidget {
-  const RecentActivityScreen({super.key});
+class RecentDisposalScreen extends StatefulWidget {
+  const RecentDisposalScreen({super.key});
 
   @override
-  State<RecentActivityScreen> createState() => _RecentActivityScreenState();
+  State<RecentDisposalScreen> createState() => _RecentDisposalScreenState();
 }
 
-class _RecentActivityScreenState extends State<RecentActivityScreen> {
-  List<Map<String, dynamic>> _recentActivity = [];
+class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
+  List<Map<String, dynamic>> _recentDisposal = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadRecentActivity();
+    _loadRecentDisposal();
   }
 
-  Future<void> _loadRecentActivity() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      setState(() => _loading = false);
-      return;
-    }
+  Future<void> _loadRecentDisposal() async {
+    // Match the save behavior: scans are saved under 'anonymous' when not signed in.
+    // Use the same default so recently-saved anonymous scans show up in this list.
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
 
     try {
-      // Query only scans that include disposal information to separate
-      // disposal activity from general scan activity. We attempt to
-      // filter by a few possible disposal-related fields. Firestore
-      // supports 'isNotEqualTo' filters; here we check for a non-null
-      // value for 'disposal_method' OR 'disposalSteps' by running two
-      // queries and merging results to be safe across existing documents.
+      // Read from the dedicated `disposal_scans` collection for the user.
       final coll = FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
-          .collection('scans');
+          .collection('disposal_scans');
 
-      final q1 = await coll
-          .where('disposal_method', isNotEqualTo: null)
+      final q = await coll
           .orderBy('createdAt', descending: true)
           .limit(20)
           .get();
 
-      final q2 = await coll
-          .where('disposalSteps', isNotEqualTo: null)
-          .orderBy('createdAt', descending: true)
-          .limit(20)
-          .get();
-
-      // Merge docs (by id) preserving order by createdAt roughly
-      final map = <String, QueryDocumentSnapshot>{};
-      for (final d in q1.docs) map[d.id] = d;
-      for (final d in q2.docs) map[d.id] = d;
-      final merged = map.values.toList()
-        ..sort((a, b) {
-          final aData = a.data() as Map<String, dynamic>?;
-          final bData = b.data() as Map<String, dynamic>?;
-          final aTs = aData?['createdAt'];
-          final bTs = bData?['createdAt'];
-          DateTime? ad;
-          DateTime? bd;
-          if (aTs is Timestamp) ad = aTs.toDate();
-          if (bTs is Timestamp) bd = bTs.toDate();
-          if (ad != null && bd != null) return bd.compareTo(ad);
-          return 0;
-        });
-
-      // Limit merged results
-      final limited = merged.take(20).toList();
-
-      // Build a safe list of maps for UI consumption
       setState(() {
-        _recentActivity = limited.map((doc) {
-          final data = (doc.data() ?? {}) as Map<String, dynamic>;
+        _recentDisposal = q.docs.map((doc) {
+          final data = doc.data();
           final name =
-              data['name'] ?? data['product_name'] ?? 'Scanned product';
+              data['product_name'] ?? data['name'] ?? 'Scanned product';
           final category = data['category'] ?? 'N/A';
           final material = data['material'] ?? 'Unknown';
           final imageUrl =
@@ -96,7 +60,7 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
         }).toList();
       });
     } catch (e) {
-      debugPrint('Error loading recent activity: $e');
+      debugPrint('Error loading recent Disposal: $e');
     } finally {
       setState(() {
         _loading = false;
@@ -184,7 +148,7 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
       backgroundColor: kPrimaryGreen,
       appBar: AppBar(
         title: const Text(
-          'Recent Activity',
+          'Recent Disposal',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -203,7 +167,7 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
         ),
         child: _loading
             ? const Center(child: CircularProgressIndicator())
-            : _recentActivity.isEmpty
+            : _recentDisposal.isEmpty
             ? const Center(
                 child: Text(
                   'No recent scans yet. Go scan a product!',
@@ -212,9 +176,9 @@ class _RecentActivityScreenState extends State<RecentActivityScreen> {
               )
             : ListView.builder(
                 padding: const EdgeInsets.only(top: 20, bottom: 20),
-                itemCount: _recentActivity.length,
+                itemCount: _recentDisposal.length,
                 itemBuilder: (context, index) {
-                  return _buildRecentProductTile(_recentActivity[index]);
+                  return _buildRecentProductTile(_recentDisposal[index]);
                 },
               ),
       ),

@@ -35,6 +35,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _ecoPoints = 0;
   Color _rankColor = constants.kRankGreenExplorer;
 
+  // Recent activity list used to store results from the Scan screen
+  List<Map<String, dynamic>> _recentActivity = [];
+
   // State variables for photo upload preview and error handling
   bool _isUploading = false;
   Uint8List? _pickedImageBytes;
@@ -765,9 +768,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return;
         }
         if (index == 2) {
-          Navigator.of(
+          final result = await Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const ScanScreen()));
+
+          if (result != null && result is Map<String, dynamic>) {
+            // Add to recent activity list (basic shape for the home screen)
+            setState(() {
+              _recentActivity.insert(0, {
+                'product': result['product'] ?? 'Scanned product',
+                'score':
+                    result['raw'] != null &&
+                        result['raw']['ecoscore_score'] != null
+                    ? (result['raw']['ecoscore_score'].toString())
+                    : 'N/A',
+                'co2':
+                    result['raw'] != null &&
+                        result['raw']['carbon_footprint'] != null
+                    ? result['raw']['carbon_footprint'].toString()
+                    : '—',
+              });
+            });
+          }
+
           return;
         }
         if (index == 3) {
@@ -788,18 +811,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
+        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
+        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );

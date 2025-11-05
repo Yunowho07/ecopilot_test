@@ -26,16 +26,16 @@ import 'package:ecopilot_test/screens/result_screen.dart';
 // --- III. Helper Widgets (ResultScreen, ProfileScreen) ---
 // (ResultScreen and ProfileScreen remain unchanged for brevity, but are included in the final file)
 
-class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({Key? key}) : super(key: key);
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: const Center(child: Text('Profile Screen - Implement me!')),
-    );
-  }
-}
+// class ProfileScreen extends StatelessWidget {
+//   const ProfileScreen({Key? key}) : super(key: key);
+//   @override
+//   Widget build(BuildContext context) {
+//     return Scaffold(
+//       appBar: AppBar(title: const Text('Profile')),
+//       body: const Center(child: Text('Profile Screen - Implement me!')),
+//     );
+//   }
+// }
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({Key? key}) : super(key: key);
@@ -455,24 +455,50 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
   // B. Live Preview (_buildCameraView)
   Widget _buildCameraView() {
     // ⚠️ UNCOMMENT this block for actual camera initialization check
-
     if (_cameraController == null || !_isCameraInitialized) {
       return const Expanded(
         child: Center(child: CircularProgressIndicator(color: kPrimaryGreen)),
       );
     }
 
-    // FIX: Removed Expanded and set height to cover the screen minus the bottom overlay
-    return Flexible(
-      // Use MediaQuery to calculate the height above the bottom section.
-      // NOTE: This height calculation is conceptual and might need fine-tuning
-      // depending on the size of _buildScannerOverlay().
+    // When initialized, compute a size that fills the screen width while
+    // preserving the camera preview aspect ratio. This prevents the preview
+    // from appearing cropped to one side.
+    final media = MediaQuery.of(context);
+    final screenWidth = media.size.width;
+    // cameraController.value.previewSize may be null on some platforms; guard it.
+    final previewSize = _cameraController!.value.previewSize;
+    double aspectRatio = 16 / 9;
+    if (previewSize != null && previewSize.height != 0) {
+      aspectRatio = previewSize.width / previewSize.height;
+    } else if (_cameraController!.value.aspectRatio != 0) {
+      aspectRatio = _cameraController!.value.aspectRatio;
+    }
+
+    final previewHeight = screenWidth / aspectRatio;
+
+    return Expanded(
       child: Container(
-        color: Colors.black, // Simulating a live camera feed's dark background
+        color: Colors.black,
+        width: double.infinity,
         child: Stack(
           children: [
-            // ⚠️ UNCOMMENT the line below to show the live preview
-            CameraPreview(_cameraController!),
+            // Center a SizedBox with the exact width/height calculated so the
+            // CameraPreview paints into the correct area and fills the width.
+            Center(
+              child: SizedBox(
+                width: screenWidth,
+                height: previewHeight,
+                child: ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.center,
+                    maxWidth: double.infinity,
+                    maxHeight: double.infinity,
+                    child: CameraPreview(_cameraController!),
+                  ),
+                ),
+              ),
+            ),
 
             // Scanner Frame/Corner Indicators (White borders for scanning area)
             Center(

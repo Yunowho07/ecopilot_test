@@ -197,6 +197,13 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
     }
   }
 
+  /// Local simulator used when Gemini API key is not configured or fails.
+  /// Returns a map in the same shape other barcode lookups produce so the
+  /// rest of the flow can build a ProductAnalysisData from it.
+  // NOTE: Removed the previous local simulator fallback. Image analysis
+  // now requires a configured Gemini API key. If it's not present we
+  // inform the user and do not attempt to fabricate results.
+
   Future<void> _toggleFlash() async {
     try {
       await _mobileScannerController.toggleTorch();
@@ -204,30 +211,6 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
     } catch (e) {
       debugPrint('Flash toggle failed: $e');
     }
-  }
-
-  // Small local simulator kept for offline testing
-  Future<Map<String, dynamic>> _simulateAnalyze(Uint8List bytes) async {
-    await Future.delayed(const Duration(seconds: 1));
-    final isYogurt = bytes.length % 2 == 0;
-    return {
-      'name': isYogurt ? 'Coconut Yogurt' : 'Shampoo 2',
-      'category': isYogurt ? 'Food' : 'Cosmetic',
-      'material': 'Plastic',
-      'ecoScore': isYogurt ? 'C' : 'A',
-      'disposalSteps': isYogurt
-          ? [
-              'Rinse the container thoroughly to remove all food residue.',
-              'Place the plastic container in the designated mixed plastics bin.',
-            ]
-          : [
-              'Empty the bottle completely.',
-              'Separate the cap if different material.',
-            ],
-      'tips': isYogurt
-          ? ['Compost any residual food.']
-          : ['Consider refillable alternatives.'],
-    };
   }
 
   // Handle barcode lookups using OpenFoodFacts and OpenBeautyFacts
@@ -331,9 +314,54 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
           ecoScore: analysisData.ecoScore,
           carbonFootprint: analysisData.carbonFootprint,
           imageUrl: imageUrl,
+          category: analysisData.category,
+          packagingType: analysisData.packagingType,
+          disposalSteps: product['disposalSteps'] is List
+              ? product['disposalSteps']
+              : null,
+          tips: product['tips'] is String
+              ? product['tips']
+              : (product['tips'] is List
+                    ? (product['tips'] as List).join('\n')
+                    : null),
+          nearbyCenter: product['nearbyCenter'] ?? null,
+          isDisposal: true,
         );
       } catch (e) {
         debugPrint('Failed to save barcode scan: $e');
+      }
+
+      // Also create a disposal_scans document so Disposals view shows this item
+      try {
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+        final String productId = DateTime.now().millisecondsSinceEpoch
+            .toString();
+        final docRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('disposal_scans')
+            .doc(productId);
+
+        await docRef.set({
+          'product_name': analysisData.productName,
+          'category': analysisData.category,
+          'material': analysisData.packagingType,
+          'ecoScore': analysisData.ecoScore,
+          'imageUrl': imageUrl ?? analysisData.imageUrl ?? '',
+          'disposalSteps': product['disposalSteps'] is List
+              ? product['disposalSteps']
+              : (product['disposalSteps'] is String
+                    ? [product['disposalSteps']]
+                    : []),
+          'tips': product['tips'] is List
+              ? product['tips']
+              : (product['tips'] is String ? [product['tips']] : []),
+          'nearbyCenter': product['nearbyCenter'] ?? null,
+          'isDisposal': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Failed to save disposal_scans record for barcode: $e');
       }
 
       if (mounted) {
@@ -372,22 +400,30 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
       ProductAnalysisData analysisData;
 
       if (_geminiApiKey.isEmpty) {
-        // No API key — use the local simulator and convert to ProductAnalysisData
-        final result = await _simulateAnalyze(_bytes!);
-        outputText = result.toString();
-        final tempFile = (_picked != null && _picked!.path.isNotEmpty)
-            ? File(_picked!.path)
-            : null;
-        analysisData = ProductAnalysisData(
-          imageFile: tempFile,
-          productName: result['name'] ?? 'N/A',
-          category: result['category'] ?? 'N/A',
-          ecoScore: result['ecoScore'] ?? 'N/A',
-          packagingType: result['material'] ?? 'N/A',
-          disposalMethod: (result['disposalSteps'] is List)
-              ? (result['disposalSteps'] as List).join('\n')
-              : 'N/A',
-        );
+        // No API key — inform the user and stop. We no longer use a
+        // simulated offline analyzer to avoid fabricating results.
+        if (mounted) {
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Analysis not available'),
+              content: const Text(
+                'Image analysis requires a configured Gemini API key.\n'
+                'Please add GEMINI_API_KEY to your .env file to enable AI analysis,\n'
+                'or scan a barcode which will perform a lookup via OpenFoodFacts / OpenBeautyFacts.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        }
+        // Ensure we clear the busy indicator before returning
+        setState(() => _busy = false);
+        return;
       } else {
         // Use Gemini via google_generative_ai
         final model = GenerativeModel(
@@ -396,18 +432,34 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         );
 
         const prompt = '''
-You are an eco-disposal assistant AI. Analyze the uploaded or scanned product image and provide clear, structured information for a disposal guidance app. 
-Follow this exact format. Use 'N/A' if any detail is not visible or available.
+You are an eco-disposal assistant AI. Analyze the uploaded or scanned product image and return ONLY a single JSON object (no additional text) that contains the following keys when available. Use 'N/A' or empty lists/false for missing values.
 
-Product name?: [Exact product name as seen or recognized, e.g., Plastic Bottle]
-Material?: [Primary material, e.g., PET Plastic, Glass, Aluminum, Paperboard]
-Eco Score?: [Eco rating A–E, based on recyclability and environmental impact]
-How to Dispose?:
-1. [Step 1 for proper disposal, e.g., Rinse the bottle to remove residue]
-2. [Step 2, e.g., Separate the cap and label]
-3. [Step 3, e.g., Place in the plastic recycling bin]
-Nearby Recycling Center?: [Example name, e.g., Green Recycling Center, or N/A if not applicable]
-Eco Tips?: [One sustainability tip related to the product, e.g., Reuse bottles for storage before recycling]
+- product_name (string)
+- packaging_type (string)
+- ingredients (string)
+- eco_score (string)
+- carbon_footprint (string)
+- disposal_steps (array of strings)
+- nearby_center (string)
+- tips (array of strings)
+- contains_microplastics (boolean)
+- palm_oil_derivative (boolean)
+- cruelty_free (boolean)
+
+Example valid response (JSON only):
+{
+  "product_name": "Plastic Bottle - Sparkling Water",
+  "packaging_type": "PET Plastic",
+  "ingredients": "Water, Carbon Dioxide",
+  "eco_score": "C",
+  "carbon_footprint": "0.15 kg CO2e",
+  "disposal_steps": ["Rinse the bottle", "Remove cap", "Place in plastic recycling bin"],
+  "nearby_center": "Green Recycling Center",
+  "tips": ["Refill and reuse before recycling"],
+  "contains_microplastics": false,
+  "palm_oil_derivative": false,
+  "cruelty_free": true
+}
 ''';
 
         final content = [
@@ -421,10 +473,60 @@ Eco Tips?: [One sustainability tip related to the product, e.g., Reuse bottles f
             ? File(_picked!.path)
             : null;
 
-        analysisData = ProductAnalysisData.fromGeminiOutput(
-          outputText,
-          imageFile: tempFile,
-        );
+        // Attempt to parse structured JSON output from Gemini first.
+        ProductAnalysisData? parsedFromJson;
+        Map<String, dynamic>? parsedMap;
+        try {
+          final decoded = json.decode(outputText);
+          if (decoded is Map<String, dynamic>) {
+            parsedMap = decoded;
+          }
+        } catch (_) {
+          // If the model returned text with an embedded JSON block, try to extract it
+          final jsonStart = outputText.indexOf('{');
+          final jsonEnd = outputText.lastIndexOf('}');
+          if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            final possible = outputText.substring(jsonStart, jsonEnd + 1);
+            try {
+              final dec = json.decode(possible);
+              if (dec is Map<String, dynamic>) parsedMap = dec;
+            } catch (_) {}
+          }
+        }
+
+        if (parsedMap != null) {
+          // Build typed model from structured map
+          parsedFromJson = ProductAnalysisData.fromMap(
+            parsedMap,
+            imageFile: tempFile,
+          );
+          analysisData = parsedFromJson;
+          // keep analysis map for potential save/return
+          _analysis = parsedMap;
+        } else {
+          // If the model returned free-form text, parse via the existing parser which
+          // extracts fields from Gemini-style responses. This still comes from Gemini
+          // (no local simulation) — we only parse the original AI text.
+          analysisData = ProductAnalysisData.fromGeminiOutput(
+            outputText,
+            imageFile: tempFile,
+          );
+          _analysis = {
+            'name': analysisData.productName,
+            'category': analysisData.category,
+            'material': analysisData.packagingType,
+            'ecoScore': analysisData.ecoScore,
+            'disposalSteps': analysisData.disposalMethod
+                .split('\n')
+                .where((s) => s.trim().isNotEmpty)
+                .toList(),
+            'tips': analysisData.tips,
+            'nearbyCenter': analysisData.nearbyCenter,
+            'containsMicroplastics': analysisData.containsMicroplastics,
+            'palmOilDerivative': analysisData.palmOilDerivative,
+            'crueltyFree': analysisData.crueltyFree,
+          };
+        }
       }
 
       // Upload image and persist to Firestore using FirebaseService
@@ -446,9 +548,49 @@ Eco Tips?: [One sustainability tip related to the product, e.g., Reuse bottles f
           ecoScore: analysisData.ecoScore,
           carbonFootprint: analysisData.carbonFootprint,
           imageUrl: uploadedImageUrl,
+          category: analysisData.category,
+          packagingType: analysisData.packagingType,
+          disposalSteps: analysisData.disposalMethod
+              .split('\n')
+              .where((s) => s.trim().isNotEmpty)
+              .toList(),
+          tips: analysisData.tips,
+          nearbyCenter: analysisData.nearbyCenter,
+          isDisposal: true,
         );
       } catch (e) {
         debugPrint('Failed to save scan metadata: $e');
+      }
+
+      // Also persist a dedicated disposal-scans record so the Disposal
+      // Guidance Recent Activity view can show only disposal-related items.
+      try {
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+        final String productId = DateTime.now().millisecondsSinceEpoch
+            .toString();
+        final docRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('disposal_scans')
+            .doc(productId);
+
+        await docRef.set({
+          'product_name': analysisData.productName,
+          'category': analysisData.category,
+          'material': analysisData.packagingType,
+          'ecoScore': analysisData.ecoScore,
+          'imageUrl': uploadedImageUrl ?? analysisData.imageUrl ?? '',
+          'disposalSteps': analysisData.disposalMethod
+              .split('\n')
+              .where((s) => s.trim().isNotEmpty)
+              .toList(),
+          'tips': analysisData.tips,
+          'nearbyCenter': analysisData.nearbyCenter,
+          'isDisposal': true,
+          'createdAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Failed to save disposal_scans record: $e');
       }
 
       final analysisToShow = uploadedImageUrl != null
@@ -568,25 +710,8 @@ Eco Tips?: [One sustainability tip related to the product, e.g., Reuse bottles f
                                         capture.barcodes;
                                     if (barcodes.isNotEmpty) {
                                       final raw = barcodes.first.rawValue ?? '';
-                                      setState(() {
-                                        _analysis = {
-                                          'barcode': raw,
-                                          'name': 'Scanned barcode',
-                                          'category': 'N/A',
-                                        };
-                                      });
-                                      if (mounted) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Barcode: $raw'),
-                                            duration: const Duration(
-                                              seconds: 2,
-                                            ),
-                                          ),
-                                        );
-                                      }
+                                      // Delegate barcode handling to the lookup method
+                                      if (!_busy) _handleBarcode(raw);
                                     }
                                   },
                                 ),
@@ -729,39 +854,35 @@ Eco Tips?: [One sustainability tip related to the product, e.g., Reuse bottles f
             if (_analysis != null) ...[
               const Divider(height: 24),
               const Text(
-                'Analysis Result (Simulated)',
+                'Analysis Result',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
               const SizedBox(height: 8),
-              Text('Product: ${_analysis!['name'] ?? 'N/A'}'),
-              Text('Category: ${_analysis!['category'] ?? 'N/A'}'),
-              Text('Material: ${_analysis!['material'] ?? 'N/A'}'),
-              Text('Eco Score: ${_analysis!['ecoScore'] ?? 'N/A'}'),
+              Text(
+                'Product: ${_analysis!['name'] ?? _analysis!['product_name'] ?? 'N/A'}',
+              ),
+              Text(
+                'Category: ${_analysis!['category'] ?? _analysis!['Category'] ?? 'N/A'}',
+              ),
+              Text(
+                'Material: ${_analysis!['material'] ?? _analysis!['material'] ?? 'N/A'}',
+              ),
+              Text(
+                'Eco Score: ${_analysis!['ecoScore'] ?? _analysis!['eco_score'] ?? 'N/A'}',
+              ),
               const SizedBox(height: 8),
             ],
 
             const SizedBox(height: 12),
             Row(
               children: [
+                // Capture button (opens native camera capture) - replaces "Open Camera"
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            // If scanner already enabled, try starting it, otherwise init
-                            if (_scanningEnabled) {
-                              try {
-                                await _mobileScannerController.start();
-                              } catch (_) {
-                                await _initScanner();
-                              }
-                            } else {
-                              await _initScanner();
-                            }
-                          },
+                    onPressed: _busy ? null : () => _pick(ImageSource.camera),
                     icon: const Icon(Icons.camera_alt, color: Colors.white),
                     label: const Text(
-                      'Open Camera',
+                      'Capture',
                       style: TextStyle(color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
@@ -829,24 +950,8 @@ Eco Tips?: [One sustainability tip related to the product, e.g., Reuse bottles f
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: (_analysis == null || _busy || _bytes == null)
-                        ? null
-                        : _saveAndReturn,
-                    child: const Text(
-                      'Save & View Details',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black87,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
+                // Removed "Save & View Details" per request. Keep space for layout balance.
+                Expanded(child: Container()),
               ],
             ),
             const SizedBox(height: 12),

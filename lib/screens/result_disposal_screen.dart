@@ -264,26 +264,42 @@ class ResultDisposalScreen extends StatelessWidget {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
                             Text(
-                              'Green Recycling Center',
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                              analysisData.nearbyCenter != 'N/A' &&
+                                      analysisData.nearbyCenter.isNotEmpty
+                                  ? analysisData.nearbyCenter
+                                  : 'Nearest recycling center',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              '0.5 km',
-                              style: TextStyle(color: Colors.black54),
+                              analysisData.nearbyCenter != 'N/A' &&
+                                      analysisData.nearbyCenter.isNotEmpty
+                                  ? 'Show on map'
+                                  : 'Search for nearby centers',
+                              style: const TextStyle(color: Colors.black54),
                             ),
-                            SizedBox(height: 4),
+                            const SizedBox(height: 4),
                             Text(
-                              'Open',
-                              style: TextStyle(color: kPrimaryGreen),
+                              analysisData.nearbyCenter != 'N/A' &&
+                                      analysisData.nearbyCenter.isNotEmpty
+                                  ? 'Open'
+                                  : '—',
+                              style: const TextStyle(color: kPrimaryGreen),
                             ),
                           ],
                         ),
                       ),
                       ElevatedButton.icon(
-                        onPressed: () => _openMaps('Green Recycling Center'),
+                        onPressed: () => _openMaps(
+                          analysisData.nearbyCenter != 'N/A' &&
+                                  analysisData.nearbyCenter.isNotEmpty
+                              ? analysisData.nearbyCenter
+                              : '${analysisData.productName} recycling center',
+                        ),
                         icon: const Icon(Icons.navigation, color: Colors.white),
                         label: const Text(
                           'Navigate',
@@ -334,9 +350,10 @@ class ResultDisposalScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              analysisData.ingredients.isNotEmpty
-                                  ? analysisData.ingredients
-                                  : analysisData.ecoScore,
+                              analysisData.tips.isNotEmpty &&
+                                      analysisData.tips != 'N/A'
+                                  ? analysisData.tips
+                                  : 'No specific tips available. Consider reducing single-use packaging and rinsing containers before recycling.',
                               style: const TextStyle(color: Colors.black87),
                             ),
                           ],

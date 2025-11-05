@@ -12,6 +12,8 @@ class ProductAnalysisData {
   final bool containsMicroplastics;
   final bool palmOilDerivative;
   final bool crueltyFree;
+  final String nearbyCenter;
+  final String tips;
   final String ecoScore;
 
   ProductAnalysisData({
@@ -26,6 +28,8 @@ class ProductAnalysisData {
     this.containsMicroplastics = false,
     this.palmOilDerivative = false,
     this.crueltyFree = false,
+    this.nearbyCenter = 'N/A',
+    this.tips = 'N/A',
     this.ecoScore = 'N/A',
   });
 
@@ -41,6 +45,8 @@ class ProductAnalysisData {
     bool? containsMicroplastics,
     bool? palmOilDerivative,
     bool? crueltyFree,
+    String? nearbyCenter,
+    String? tips,
     String? ecoScore,
   }) {
     return ProductAnalysisData(
@@ -56,6 +62,8 @@ class ProductAnalysisData {
           containsMicroplastics ?? this.containsMicroplastics,
       palmOilDerivative: palmOilDerivative ?? this.palmOilDerivative,
       crueltyFree: crueltyFree ?? this.crueltyFree,
+      nearbyCenter: nearbyCenter ?? this.nearbyCenter,
+      tips: tips ?? this.tips,
       ecoScore: ecoScore ?? this.ecoScore,
     );
   }
@@ -82,6 +90,11 @@ class ProductAnalysisData {
       geminiOutput,
       r'Disposal method:\s*(.*?)\n',
     );
+    String nearbyCenter = _extractValue(
+      geminiOutput,
+      r'Nearby Recycling Center\?:?\s*(.*?)\n',
+    );
+    String tips = _extractValue(geminiOutput, r'Eco Tips\?:?\s*(.*?)\n');
     String ecoScore = _extractValue(
       geminiOutput,
       r'Eco-friendliness rating:\s*(.*?)\n',
@@ -117,6 +130,8 @@ class ProductAnalysisData {
 
     packagingType = _sanitizeField(packagingType);
     disposalMethod = _sanitizeField(disposalMethod);
+    nearbyCenter = _sanitizeField(nearbyCenter);
+    tips = _sanitizeField(tips);
 
     return ProductAnalysisData(
       imageFile: imageFile,
@@ -129,6 +144,114 @@ class ProductAnalysisData {
       containsMicroplastics: microplastics,
       palmOilDerivative: palmOil,
       crueltyFree: crueltyFree,
+      nearbyCenter: nearbyCenter,
+      tips: tips,
+      ecoScore: ecoScore,
+    );
+  }
+
+  /// Build from a structured Map (e.g. parsed JSON from Gemini).
+  factory ProductAnalysisData.fromMap(
+    Map<String, dynamic> m, {
+    File? imageFile,
+  }) {
+    String readString(List<String> keys) {
+      for (final k in keys) {
+        if (m.containsKey(k) && m[k] != null) return m[k].toString();
+      }
+      return 'N/A';
+    }
+
+    String productName = readString(['product_name', 'name', 'Product name']);
+    String category = readString(['category', 'Category']);
+    String ingredients = readString(['ingredients', 'Ingredients']);
+    String carbonFootprint = readString([
+      'carbon_footprint',
+      'carbonFootprint',
+      'Carbon Footprint',
+    ]);
+    String packagingType = readString([
+      'packaging_type',
+      'packaging',
+      'material',
+      'Material',
+    ]);
+    String ecoScore = readString([
+      'eco_score',
+      'ecoScore',
+      'Eco Score',
+      'Eco-friendliness rating',
+    ]);
+
+    // disposal steps may be array or string
+    String disposalMethod = 'N/A';
+    final ds =
+        m['disposal_steps'] ??
+        m['disposalSteps'] ??
+        m['disposal_method'] ??
+        m['How to Dispose'] ??
+        m['How to Dispose?'];
+    if (ds is List) {
+      disposalMethod = ds
+          .map((e) => e.toString())
+          .where((s) => s.trim().isNotEmpty)
+          .join('\n');
+    } else if (ds != null) {
+      disposalMethod = ds.toString();
+    }
+
+    // tips may be array or string
+    String tips = 'N/A';
+    final t = m['tips'] ?? m['eco_tips'] ?? m['Eco Tips'] ?? m['ecoTips'];
+    if (t is List) {
+      tips = t
+          .map((e) => e.toString())
+          .where((s) => s.trim().isNotEmpty)
+          .join('\n');
+    } else if (t != null) {
+      tips = t.toString();
+    }
+
+    String nearbyCenter = readString([
+      'nearby_center',
+      'nearbyCenter',
+      'Nearby Recycling Center',
+    ]);
+
+    bool microplastics = false;
+    final mp = m['contains_microplastics'] ?? m['containsMicroplastics'];
+    if (mp is bool)
+      microplastics = mp;
+    else if (mp is String)
+      microplastics = mp.toLowerCase() == 'yes' || mp.toLowerCase() == 'true';
+
+    bool palmOil = false;
+    final po = m['palm_oil_derivative'] ?? m['palmOilDerivative'];
+    if (po is bool)
+      palmOil = po;
+    else if (po is String)
+      palmOil = po.toLowerCase() == 'yes' || po.toLowerCase() == 'true';
+
+    bool crueltyFree = false;
+    final cf = m['cruelty_free'] ?? m['crueltyFree'];
+    if (cf is bool)
+      crueltyFree = cf;
+    else if (cf is String)
+      crueltyFree = cf.toLowerCase() == 'yes' || cf.toLowerCase() == 'true';
+
+    return ProductAnalysisData(
+      imageFile: imageFile,
+      productName: productName,
+      category: category,
+      ingredients: ingredients,
+      carbonFootprint: carbonFootprint,
+      packagingType: packagingType,
+      disposalMethod: disposalMethod,
+      containsMicroplastics: microplastics,
+      palmOilDerivative: palmOil,
+      crueltyFree: crueltyFree,
+      nearbyCenter: nearbyCenter,
+      tips: tips,
       ecoScore: ecoScore,
     );
   }

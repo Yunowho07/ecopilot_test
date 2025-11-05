@@ -282,7 +282,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(height: 30),
 
             const Text(
-              'Your Weekly Eco Score',
+              'Your Weekly Eco Point',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 10),
@@ -308,6 +308,10 @@ class _HomeScreenState extends State<HomeScreen> {
             Builder(
               builder: (context) {
                 final user = FirebaseAuth.instance.currentUser;
+                // We don't filter by 'isDisposal' server-side because older
+                // documents may not include that field and would be excluded.
+                // Instead retrieve recent scans and filter client-side so
+                // legacy documents remain visible.
                 final Stream<QuerySnapshot<Map<String, dynamic>>>? scansStream =
                     user != null
                     ? FirebaseFirestore.instance
@@ -336,15 +340,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     }
                     final docs = snapshot.data!.docs;
-                    // Show only the 3 most recent items on the home screen
-                    final previewDocs = docs.take(3).toList();
+                    // Filter out disposal entries (client-side) so legacy docs
+                    // without an `isDisposal` field remain visible.
+                    final filtered = docs.where((doc) {
+                      final m = doc.data();
+                      // treat missing flag as non-disposal
+                      final v = m['isDisposal'];
+                      return v == null ? true : (v == false);
+                    }).toList();
+
+                    // Show only the 3 most recent non-disposal items on Home
+                    final previewDocs = filtered.take(3).toList();
+
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         ...previewDocs
                             .map((doc) => _buildActivityTile(doc))
                             .toList(),
-                        if (docs.length > 3)
+                        if (filtered.length > 3)
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(

@@ -25,14 +25,14 @@ class RecentActivityScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    // Note: saved documents use 'createdAt' (server timestamp) — order by that field.
+    // Query the per-user scans saved by the scan flows (they write 'timestamp').
     final Stream<QuerySnapshot<Map<String, dynamic>>>? scansStream =
         user != null
         ? FirebaseFirestore.instance
               .collection('users')
               .doc(user.uid)
               .collection('scans')
-              .orderBy('createdAt', descending: true)
+              .orderBy('timestamp', descending: true)
               .withConverter<Map<String, dynamic>>(
                 fromFirestore: (snap, _) => snap.data() ?? <String, dynamic>{},
                 toFirestore: (m, _) => m,
@@ -80,12 +80,18 @@ class RecentActivityScreen extends StatelessWidget {
                   }
 
                   final docs = snapshot.data!.docs;
+                  // Client-side filter to exclude disposal-specific scans
+                  final filtered = docs.where((doc) {
+                    final m = doc.data();
+                    final v = m['isDisposal'];
+                    return v == null ? true : (v == false);
+                  }).toList();
                   return ListView.separated(
                     padding: const EdgeInsets.all(12),
-                    itemCount: docs.length,
+                    itemCount: filtered.length,
                     separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
-                      final doc = docs[index];
+                      final doc = filtered[index];
                       final data = doc.data();
 
                       final product = _readString(
