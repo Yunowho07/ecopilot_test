@@ -188,13 +188,13 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SingleChildScrollView(
         child: Container(
           width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [kPrimaryGreen.withOpacity(0.1), Colors.white],
-            ),
-          ),
+          // decoration: BoxDecoration(
+          //   gradient: LinearGradient(
+          //     begin: Alignment.topCenter,
+          //     end: Alignment.bottomCenter,
+          //     colors: [kPrimaryGreen.withOpacity(0.1), Colors.white],
+          //   ),
+          // ),
           child: Column(
             children: [
               _buildHeader(context),

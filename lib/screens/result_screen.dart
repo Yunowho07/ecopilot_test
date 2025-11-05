@@ -156,6 +156,7 @@ class ResultScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: const Text(
           'Product Details',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),

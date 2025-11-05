@@ -18,8 +18,6 @@ import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'daily_challenge_screen.dart'; // ⚠️ NEW IMPORT
 
-const Color kPrimaryGreen = Color(0xFF1db954);
-
 // Placeholder data structure for challenge and user progress
 class DailyChallenge {
   final String title;
@@ -97,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _userName = user.displayName ?? 'User';
       });
       // ⚠️ CONCEPTUAL: Fetch user streak and points summary here
-      
+
       _firebaseService.getUserSummary(user.uid).then((summary) {
         if (mounted) {
           setState(() {
@@ -105,7 +103,6 @@ class _HomeScreenState extends State<HomeScreen> {
           });
         }
       });
-      
     }
   }
 
@@ -116,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 2. Simulate fetching the first challenge and user progress for the home screen preview
     // In a real app, this uses Firestore:
-    
+
     final challengeDoc = await FirebaseFirestore.instance
         .collection('challenges')
         .doc(today)
@@ -143,7 +140,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     }
-    
 
     // Using simulated data for now:
     setState(() {
@@ -380,7 +376,7 @@ class _HomeScreenState extends State<HomeScreen> {
   AppBar _buildAppBar() {
     return AppBar(
       automaticallyImplyLeading: false,
-      backgroundColor: Colors.white,
+      backgroundColor: kPrimaryGreen,
       elevation: 0,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -390,7 +386,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () {
               _scaffoldKey.currentState?.openDrawer();
             },
-            child: const Icon(Icons.menu, size: 30),
+            child: const Icon(Icons.menu, color: Colors.white, size: 30),
           ),
           const SizedBox(width: 12),
           // 🏆 NOTIFICATION ICON WITH RED BADGE (FIXED)
@@ -398,11 +394,11 @@ class _HomeScreenState extends State<HomeScreen> {
             // Streams unread notifications for the current user.
             stream: FirebaseAuth.instance.currentUser != null
                 ? FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(FirebaseAuth.instance.currentUser!.uid)
-                    .collection('notifications')
-                    .where('read', isEqualTo: false)
-                    .snapshots()
+                      .collection('users')
+                      .doc(FirebaseAuth.instance.currentUser!.uid)
+                      .collection('notifications')
+                      .where('read', isEqualTo: false)
+                      .snapshots()
                 : null,
             builder: (context, snapshot) {
               final hasUnread =
@@ -411,7 +407,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                        builder: (_) => const NotificationScreen()),
+                      builder: (_) => const NotificationScreen(),
+                    ),
                   );
                 },
                 child: Stack(
@@ -420,8 +417,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     CircleAvatar(
                       radius: 20,
                       backgroundColor: kPrimaryGreen,
-                      child: const Icon(Icons.notifications_none,
-                          color: Colors.white),
+                      child: const Icon(
+                        Icons.notifications_none,
+                        color: Colors.white,
+                      ),
                     ),
                     if (hasUnread)
                       Positioned(
@@ -433,8 +432,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           decoration: BoxDecoration(
                             color: Colors.red,
                             shape: BoxShape.circle,
-                            border:
-                                Border.all(color: Colors.white, width: 1.5),
+                            border: Border.all(color: Colors.white, width: 1.5),
                           ),
                         ),
                       ),
@@ -1009,10 +1007,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.of(context).push(
             MaterialPageRoute(
               // ⬅️ CRUCIAL CHANGE HERE
-              builder: (_) => const DisposalGuidanceScreen(productId: null), 
+              builder: (_) => const DisposalGuidanceScreen(productId: null),
             ),
           );
-          return; 
+          return;
         }
         // When the Profile tab is tapped, open the Profile screen.
         if (index == 4) {
@@ -1031,9 +1029,18 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
-        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
-        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_cart),
+          label: 'Alternative',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.qr_code_scanner),
+          label: 'Scan',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.delete_sweep),
+          label: 'Dispose',
+        ),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );

@@ -9,13 +9,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:camera/camera.dart';
+// Use MobileScanner for live barcode scanning preview
+import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
+import 'package:ecopilot_test/models/product_analysis_data.dart';
+import 'package:ecopilot_test/auth/firebase_service.dart';
+import 'package:ecopilot_test/utils/constants.dart';
+import 'package:ecopilot_test/screens/result_disposal_screen.dart';
 
-// Placeholder definitions for missing imports (Cloudinary and Constants)
-const Color primaryGreen = Color(0xFF1DB954,);
+// Placeholder definitions for Cloudinary configuration
 const bool isCloudinaryConfigured = false;
-const String cloudinaryCloudName = 'YOUR_CLOUD_NAME';
-const String cloudinaryUploadPreset = 'YOUR_UPLOAD_PRESET';
+const String cloudinaryCloudName = 'dwxpph0wt';
+const String cloudinaryUploadPreset = 'unsigned_upload';
 
 // Placeholder for Cloudinary service since the actual implementation is not provided
 class CloudinaryService {
@@ -27,11 +37,21 @@ class CloudinaryService {
   }) async {
     // Simulation: in a real app, this would upload the image and return the URL
     await Future.delayed(const Duration(milliseconds: 500));
-    // Return a placeholder URL if configured, otherwise null
-    if (isCloudinaryConfigured && cloudName != 'YOUR_CLOUD_NAME') {
+    if (isCloudinaryConfigured && cloudName != 'dwxpph0wt') {
       return 'https://res.cloudinary.com/$cloudName/image/upload/v1/$filename';
     }
-    return 'https://placehold.co/600x800/A8D8B9/212121?text=Product+Image';
+
+    // Fall back to Firebase Storage via FirebaseService if Cloudinary not configured
+    try {
+      final url = await FirebaseService().uploadScannedImage(
+        bytes: bytes,
+        fileName: filename,
+      );
+      return url;
+    } catch (e) {
+      debugPrint('Firebase fallback upload failed: $e');
+      return 'https://placehold.co/600x800/A8D8B9/212121?text=Product+Image';
+    }
   }
 }
 
@@ -54,22 +74,25 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
   Map<String, dynamic>? _analysis;
   bool _photoConfirmed = false;
 
-  // Camera fields
-  List<CameraDescription>? _cameras;
-  CameraController? _cameraController;
-  bool _isCameraInitialized = false;
+  // Mobile scanner controller for live barcode scanning
+  final MobileScannerController _mobileScannerController =
+      MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates);
+  bool _scanningEnabled = false;
   bool _torchOn = false;
+  // track whether a barcode result is being processed (read but not used elsewhere)
 
   @override
   void initState() {
     super.initState();
-    // Initialize camera automatically when screen opens
-    _initCamera();
+    // Initialize the live scanner automatically when screen opens
+    _initScanner();
   }
 
   @override
   void dispose() {
-    _disposeCamera();
+    try {
+      _mobileScannerController.dispose();
+    } catch (_) {}
     super.dispose();
   }
 
@@ -79,6 +102,26 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         _busy = true;
         _analysis = null;
       });
+      // Request gallery permission when picking from gallery
+      if (source == ImageSource.gallery) {
+        PermissionStatus galleryStatus;
+        try {
+          galleryStatus = await Permission.photos.request();
+        } catch (_) {
+          galleryStatus = await Permission.storage.request();
+        }
+        if (!galleryStatus.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Gallery permission is required to pick images.'),
+              ),
+            );
+          }
+          return;
+        }
+      }
+
       final XFile? file = await _picker.pickImage(
         source: source,
         imageQuality: 80,
@@ -89,13 +132,11 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         _picked = file;
         _bytes = bytes;
         _photoConfirmed = false;
-        // If user picked an image from gallery, pause preview to save resources
-        if (_isCameraInitialized) {
-          try {
-            _cameraController?.pausePreview();
-          } catch (_) {}
-        }
       });
+      // If user picked an image from gallery, stop live scanning to save resources
+      try {
+        await _mobileScannerController.stop();
+      } catch (_) {}
     } catch (e) {
       debugPrint('Image pick failed: $e');
       if (mounted) {
@@ -110,90 +151,66 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
     }
   }
 
-  // Camera helpers: initialize, dispose, capture and flash toggle
-  Future<void> _initCamera() async {
+  // Initialize the mobile scanner (requests permission and enables scanning)
+  Future<void> _initScanner() async {
     try {
       setState(() => _busy = true);
-      _cameras = await availableCameras();
-      final back = _cameras?.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.back,
-        orElse: () => _cameras!.first,
-      );
-      _cameraController = CameraController(
-        back!,
-        ResolutionPreset.medium,
-        enableAudio: false,
-      );
-      await _cameraController!.initialize();
-      await _cameraController!.setFlashMode(FlashMode.off);
+      final status = await Permission.camera.status;
+      if (!status.isGranted) {
+        final result = await Permission.camera.request();
+        if (!result.isGranted) {
+          if (mounted) {
+            await showDialog<void>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Camera permission required'),
+                content: const Text(
+                  'Please allow camera access to scan products. You can enable it in app settings.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () async {
+                      Navigator.of(ctx).pop();
+                      await openAppSettings();
+                    },
+                    child: const Text('Open Settings'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return;
+        }
+      }
+
       setState(() {
-        _isCameraInitialized = true;
+        _scanningEnabled = true;
       });
     } catch (e) {
-      debugPrint('Camera init failed: $e');
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Failed to start camera')));
-    } finally {
-      setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _disposeCamera() async {
-    try {
-      await _cameraController?.dispose();
-    } catch (_) {}
-    _cameraController = null;
-    _isCameraInitialized = false;
-  }
-
-  Future<void> _captureFromCamera() async {
-    if (!_isCameraInitialized || _cameraController == null) return;
-    try {
-      setState(() => _busy = true);
-      final file = await _cameraController!.takePicture();
-      final bytes = await file.readAsBytes();
-      setState(() {
-        _picked = file;
-        _bytes = bytes;
-        _photoConfirmed = false;
-      });
-      try {
-        await _cameraController?.pausePreview();
-      } catch (_) {}
-    } catch (e) {
-      debugPrint('Capture failed: $e');
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Capture failed')));
+      debugPrint('Scanner init failed: $e');
     } finally {
       setState(() => _busy = false);
     }
   }
 
   Future<void> _toggleFlash() async {
-    if (!_isCameraInitialized || _cameraController == null) return;
     try {
+      await _mobileScannerController.toggleTorch();
       setState(() => _torchOn = !_torchOn);
-      await _cameraController!.setFlashMode(
-        _torchOn ? FlashMode.torch : FlashMode.off,
-      );
     } catch (e) {
       debugPrint('Flash toggle failed: $e');
     }
   }
 
-  Future<Map<String, dynamic>> _analyzeImage(Uint8List bytes) async {
-    // In a production app you'd call Google Gemini / google_generative_ai here.
-    // This simulates the powerful analysis mentioned in the prompt.
-    await Future.delayed(const Duration(seconds: 2));
-
-    // Simulated Gemini 2.5 Pro analysis response
-    final isYogurt = bytes.length % 2 == 0; // Simple random simulation
-
-    final simulated = <String, dynamic>{
+  // Small local simulator kept for offline testing
+  Future<Map<String, dynamic>> _simulateAnalyze(Uint8List bytes) async {
+    await Future.delayed(const Duration(seconds: 1));
+    final isYogurt = bytes.length % 2 == 0;
+    return {
       'name': isYogurt ? 'Coconut Yogurt' : 'Shampoo 2',
       'category': isYogurt ? 'Food' : 'Cosmetic',
       'material': 'Plastic',
@@ -202,41 +219,255 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
           ? [
               'Rinse the container thoroughly to remove all food residue.',
               'Place the plastic container in the designated mixed plastics bin.',
-              'Check if the label is peelable and recycle it with paper if possible.',
             ]
           : [
-              'Empty the bottle completely. Do not rinse into the drain.',
-              'If the cap is a different plastic type, separate it.',
-              'Place both the bottle and cap (if separated) in the plastics recycling bin.',
+              'Empty the bottle completely.',
+              'Separate the cap if different material.',
             ],
       'tips': isYogurt
-          ? [
-              'Try making your own yogurt to reduce plastic waste.',
-              'Compost any residual fruit/yogurt mixture.',
-            ]
-          : [
-              'Look for solid shampoo bars to eliminate plastic packaging entirely.',
-              'Refill stations are great for bulk purchases.',
-            ],
+          ? ['Compost any residual food.']
+          : ['Consider refillable alternatives.'],
     };
-
-    return simulated;
   }
 
+  // Handle barcode lookups using OpenFoodFacts and OpenBeautyFacts
+  Future<void> _handleBarcode(String code) async {
+    if (code.isEmpty) return;
+    // mark as processing (legacy flag removed)
+    setState(() => _busy = true);
+
+    // stop scanning to avoid duplicates
+    try {
+      await _mobileScannerController.stop();
+    } catch (_) {}
+
+    Map<String, dynamic>? product;
+    String? imageUrl;
+    String apiResultText = '';
+
+    try {
+      // Try OpenFoodFacts
+      final foodUrl = Uri.parse(
+        'https://world.openfoodfacts.org/api/v0/product/$code.json',
+      );
+      final r = await http.get(foodUrl).timeout(const Duration(seconds: 6));
+      if (r.statusCode == 200) {
+        final Map<String, dynamic> j = json.decode(r.body);
+        if ((j['status'] ?? 0) == 1) {
+          final p = j['product'] ?? {};
+          final name =
+              (p['product_name'] ?? p['product_name_en']) ?? 'Unknown product';
+          imageUrl = p['image_front_url'] ?? p['image_url'];
+          product = {
+            'name': name,
+            'category': p['categories'] ?? 'Food',
+            'material': p['packaging'] ?? 'Unknown',
+            'ecoScore': 'N/A',
+            'disposalSteps': ['Check local recycling rules for packaging.'],
+            'tips': ['Reduce single-use packaging when possible.'],
+            'barcode': code,
+          };
+          apiResultText = r.body;
+        }
+      }
+
+      // If not found, try OpenBeautyFacts
+      if (product == null) {
+        final beautyUrl = Uri.parse(
+          'https://world.openbeautyfacts.org/api/v0/product/$code.json',
+        );
+        final r2 = await http
+            .get(beautyUrl)
+            .timeout(const Duration(seconds: 6));
+        if (r2.statusCode == 200) {
+          final Map<String, dynamic> j = json.decode(r2.body);
+          if ((j['status'] ?? 0) == 1) {
+            final p = j['product'] ?? {};
+            final name =
+                (p['product_name'] ?? p['product_name_en']) ??
+                'Unknown product';
+            imageUrl = p['image_front_url'] ?? p['image_url'];
+            product = {
+              'name': name,
+              'category': p['categories'] ?? 'Cosmetic',
+              'material': p['packaging'] ?? 'Unknown',
+              'ecoScore': 'N/A',
+              'disposalSteps': [
+                'Follow local guidelines for cosmetics and hazardous waste.',
+              ],
+              'tips': ['Prefer solid bars to reduce packaging.'],
+              'barcode': code,
+            };
+            apiResultText = r2.body;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Barcode lookup failed: $e');
+    }
+
+    if (product != null) {
+      // Build ProductAnalysisData and persist simple record
+      final analysisData = ProductAnalysisData(
+        imageFile: null,
+        imageUrl: imageUrl,
+        productName: product['name'] ?? 'Scanned product',
+        category: product['category'] ?? 'N/A',
+        ingredients: 'N/A',
+        carbonFootprint: 'N/A',
+        packagingType: product['material'] ?? 'Unknown',
+        disposalMethod: (product['disposalSteps'] is List)
+            ? (product['disposalSteps'] as List).join('\n')
+            : (product['disposalSteps'] ?? 'N/A'),
+        ecoScore: (product['ecoScore'] ?? 'N/A'),
+      );
+
+      try {
+        await FirebaseService().saveUserScan(
+          analysis: apiResultText.isNotEmpty
+              ? apiResultText
+              : json.encode(product),
+          productName: analysisData.productName,
+          ecoScore: analysisData.ecoScore,
+          carbonFootprint: analysisData.carbonFootprint,
+          imageUrl: imageUrl,
+        );
+      } catch (e) {
+        debugPrint('Failed to save barcode scan: $e');
+      }
+
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ResultDisposalScreen(analysisData: analysisData),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No product found for barcode $code')),
+        );
+      }
+      // allow scanning again after short delay
+      await Future.delayed(const Duration(seconds: 1));
+      try {
+        await _mobileScannerController.start();
+      } catch (_) {}
+      // processing finished
+    }
+
+    setState(() => _busy = false);
+  }
+
+  /// Run Gemini analysis (if configured) and navigate to the Result screen.
+  /// Falls back to the local simulator when no API key is found or an error occurs.
   Future<void> _runAnalysis() async {
     if (_bytes == null) return;
     setState(() => _busy = true);
     try {
-      final result = await _analyzeImage(_bytes!);
-      setState(() {
-        _analysis = result;
-      });
+      final _geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+
+      String outputText;
+      ProductAnalysisData analysisData;
+
+      if (_geminiApiKey.isEmpty) {
+        // No API key — use the local simulator and convert to ProductAnalysisData
+        final result = await _simulateAnalyze(_bytes!);
+        outputText = result.toString();
+        final tempFile = (_picked != null && _picked!.path.isNotEmpty)
+            ? File(_picked!.path)
+            : null;
+        analysisData = ProductAnalysisData(
+          imageFile: tempFile,
+          productName: result['name'] ?? 'N/A',
+          category: result['category'] ?? 'N/A',
+          ecoScore: result['ecoScore'] ?? 'N/A',
+          packagingType: result['material'] ?? 'N/A',
+          disposalMethod: (result['disposalSteps'] is List)
+              ? (result['disposalSteps'] as List).join('\n')
+              : 'N/A',
+        );
+      } else {
+        // Use Gemini via google_generative_ai
+        final model = GenerativeModel(
+          model: 'models/gemini-2.5-pro',
+          apiKey: _geminiApiKey,
+        );
+
+        const prompt = '''
+You are an eco-disposal assistant AI. Analyze the uploaded or scanned product image and provide clear, structured information for a disposal guidance app. 
+Follow this exact format. Use 'N/A' if any detail is not visible or available.
+
+Product name?: [Exact product name as seen or recognized, e.g., Plastic Bottle]
+Material?: [Primary material, e.g., PET Plastic, Glass, Aluminum, Paperboard]
+Eco Score?: [Eco rating A–E, based on recyclability and environmental impact]
+How to Dispose?:
+1. [Step 1 for proper disposal, e.g., Rinse the bottle to remove residue]
+2. [Step 2, e.g., Separate the cap and label]
+3. [Step 3, e.g., Place in the plastic recycling bin]
+Nearby Recycling Center?: [Example name, e.g., Green Recycling Center, or N/A if not applicable]
+Eco Tips?: [One sustainability tip related to the product, e.g., Reuse bottles for storage before recycling]
+''';
+
+        final content = [
+          Content.multi([TextPart(prompt), DataPart('image/jpeg', _bytes!)]),
+        ];
+
+        final response = await model.generateContent(content);
+        outputText = response.text ?? 'No analysis result.';
+
+        final tempFile = (_picked != null && _picked!.path.isNotEmpty)
+            ? File(_picked!.path)
+            : null;
+
+        analysisData = ProductAnalysisData.fromGeminiOutput(
+          outputText,
+          imageFile: tempFile,
+        );
+      }
+
+      // Upload image and persist to Firestore using FirebaseService
+      String? uploadedImageUrl;
+      try {
+        uploadedImageUrl = await FirebaseService().uploadScannedImage(
+          bytes: _bytes,
+          fileName: '${DateTime.now().millisecondsSinceEpoch}.jpg',
+        );
+      } catch (e) {
+        debugPrint('Failed to upload scanned image: $e');
+        uploadedImageUrl = null;
+      }
+
+      try {
+        await FirebaseService().saveUserScan(
+          analysis: outputText,
+          productName: analysisData.productName,
+          ecoScore: analysisData.ecoScore,
+          carbonFootprint: analysisData.carbonFootprint,
+          imageUrl: uploadedImageUrl,
+        );
+      } catch (e) {
+        debugPrint('Failed to save scan metadata: $e');
+      }
+
+      final analysisToShow = uploadedImageUrl != null
+          ? analysisData.copyWith(imageUrl: uploadedImageUrl)
+          : analysisData;
+
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ResultDisposalScreen(analysisData: analysisToShow),
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('Analysis error: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Analysis failed')));
+        ).showSnackBar(SnackBar(content: Text('Analysis failed: $e')));
       }
     } finally {
       setState(() => _busy = false);
@@ -302,7 +533,7 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
-        backgroundColor: primaryGreen,
+        backgroundColor: kPrimaryGreen,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -324,11 +555,41 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                       width: double.infinity,
                       child: _picked != null
                           ? Image.memory(_bytes!, fit: BoxFit.contain)
-                          : _isCameraInitialized && _cameraController != null
+                          : _scanningEnabled
                           ? Stack(
                               alignment: Alignment.center,
                               children: [
-                                CameraPreview(_cameraController!),
+                                // Live barcode scanner preview
+                                MobileScanner(
+                                  controller: _mobileScannerController,
+                                  fit: BoxFit.cover,
+                                  onDetect: (capture) {
+                                    final List<Barcode> barcodes =
+                                        capture.barcodes;
+                                    if (barcodes.isNotEmpty) {
+                                      final raw = barcodes.first.rawValue ?? '';
+                                      setState(() {
+                                        _analysis = {
+                                          'barcode': raw,
+                                          'name': 'Scanned barcode',
+                                          'category': 'N/A',
+                                        };
+                                      });
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Barcode: $raw'),
+                                            duration: const Duration(
+                                              seconds: 2,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
                                 // Top-right flash toggle
                                 Positioned(
                                   top: 12,
@@ -349,11 +610,13 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                                     ),
                                   ),
                                 ),
-                                // Capture button bottom center
+                                // Capture button bottom center (opens native camera capture)
                                 Positioned(
                                   bottom: 20,
                                   child: GestureDetector(
-                                    onTap: _busy ? null : _captureFromCamera,
+                                    onTap: _busy
+                                        ? null
+                                        : () => _pick(ImageSource.camera),
                                     child: Container(
                                       width: 72,
                                       height: 72,
@@ -409,10 +672,10 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                                 _photoConfirmed = false;
                               });
                               try {
-                                if (_isCameraInitialized) {
-                                  await _cameraController?.resumePreview();
+                                if (_scanningEnabled) {
+                                  await _mobileScannerController.start();
                                 } else {
-                                  await _initCamera();
+                                  await _initScanner();
                                 }
                               } catch (_) {}
                             },
@@ -451,7 +714,7 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                         style: TextStyle(color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: primaryGreen,
+                        backgroundColor: kPrimaryGreen,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -485,15 +748,15 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                     onPressed: _busy
                         ? null
                         : () async {
-                            // If camera already initialized, try resuming preview, otherwise init
-                            if (_isCameraInitialized) {
+                            // If scanner already enabled, try starting it, otherwise init
+                            if (_scanningEnabled) {
                               try {
-                                await _cameraController?.resumePreview();
+                                await _mobileScannerController.start();
                               } catch (_) {
-                                await _initCamera();
+                                await _initScanner();
                               }
                             } else {
-                              await _initCamera();
+                              await _initScanner();
                             }
                           },
                     icon: const Icon(Icons.camera_alt, color: Colors.white),
@@ -502,7 +765,7 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                       style: TextStyle(color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryGreen,
+                      backgroundColor: kPrimaryGreen,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -557,7 +820,7 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                             style: TextStyle(color: Colors.white),
                           ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryGreen,
+                      backgroundColor: kPrimaryGreen,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -568,7 +831,7 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: (_analysis == null || _busy)
+                    onPressed: (_analysis == null || _busy || _bytes == null)
                         ? null
                         : _saveAndReturn,
                     child: const Text(

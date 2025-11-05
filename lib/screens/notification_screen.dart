@@ -8,8 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/notification_service.dart';
 import '../utils/constants.dart';
 
-const Color kPrimaryGreen = Color(0xFF1db954);
-
 // Notification categories used by the app
 enum NotificationCategory {
   dailyChallenge,
@@ -302,8 +300,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
       } else {
         await NotificationService().scheduleDaily(
           id: _ecoTipNotifId,
-            title: 'Eco Tip',
-            color: Colors.white,
+          title: 'Eco Tip',
+          color: Colors.white,
           body:
               '♻️ Eco Tip: Switch to reusable water bottles to cut down on waste.',
           hour: 12,
@@ -448,11 +446,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const HomeScreen(),
-              ),
-            );
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
           },
         ),
         actions: [

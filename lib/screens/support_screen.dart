@@ -4,8 +4,6 @@ import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import '../../utils/constants.dart';
 
-const Color kPrimaryGreen = Color(0xFF1db954);
-
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
 
@@ -16,16 +14,17 @@ class SupportScreen extends StatelessWidget {
         backgroundColor: kPrimaryGreen,
         elevation: 0,
         centerTitle: true,
-        title: const Text('Support', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Support',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const HomeScreen(),
-              ),
-                            );
-                          },
+            Navigator.of(
+              context,
+            ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
+          },
         ),
       ),
       body: SingleChildScrollView(
@@ -55,7 +54,8 @@ class SupportScreen extends StatelessWidget {
             _buildSupportOption(
               icon: Icons.question_answer,
               title: 'FAQ',
-              subtitle: 'Find answers to common questions about scanning and scoring.',
+              subtitle:
+                  'Find answers to common questions about scanning and scoring.',
               onTap: () {
                 // TODO: Navigate to FAQ screen
               },
@@ -82,7 +82,12 @@ class SupportScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSupportOption({required IconData icon, required String title, required String subtitle, required VoidCallback onTap}) {
+  Widget _buildSupportOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 15),
       elevation: 2,

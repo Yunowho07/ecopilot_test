@@ -191,13 +191,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
       body: SingleChildScrollView(
         child: Container(
           width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [primaryGreen.withOpacity(0.1), Colors.white],
-            ),
-          ),
+          // decoration: BoxDecoration(
+          //   gradient: LinearGradient(
+          //     begin: Alignment.topCenter,
+          //     end: Alignment.bottomCenter,
+          //     colors: [primaryGreen.withOpacity(0.1), Colors.white],
+          //   ),
+          // ),
           child: Column(
             children: [
               _buildHeader(context),

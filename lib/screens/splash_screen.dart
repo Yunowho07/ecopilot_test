@@ -232,8 +232,8 @@ class _SplashScreenState extends State<SplashScreen>
                                   borderRadius: BorderRadius.circular(15), // Adjust the curve value
                                   child: Image.asset(
                                     'assets/ecopilot_logo_white.png',
-                                  width: 150,   // Set your preferred size
-                                  height: 150,
+                                  width: 120,   // Set your preferred size
+                                  height: 120,
                                   fit: BoxFit.cover,
                                   ),
                                 )
@@ -255,7 +255,7 @@ class _SplashScreenState extends State<SplashScreen>
                     'EcoPilot',
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
+                      fontSize: 30,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 2,
                     ),

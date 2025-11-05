@@ -4,6 +4,7 @@ import '/auth/firebase_service.dart';
 import 'package:ecopilot_test/utils/rank_utils.dart';
 import '/utils/constants.dart'
     as constants; // Assumed location for kPrimaryGreen/kPrimaryYellow
+import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
@@ -13,7 +14,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'alternative_screen.dart' as alternative_screen;
 import 'home_screen.dart'; // Assume this file exists
 import 'scan_screen.dart'; // Assume this file exists
-import 'disposal_guidance_screen.dart' as disposal_guidance_screen; // Assume this file exists
+import 'disposal_guidance_screen.dart'
+    as disposal_guidance_screen; // Assume this file exists
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -294,52 +296,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: Colors.white,
+      drawer: const AppDrawer(),
+      appBar: AppBar(
+        backgroundColor: constants.kPrimaryGreen,
+        centerTitle: true,
+        title: const Text(
+          'Profile',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        // leading: IconButton(
+        //   onPressed: () => Navigator.of(context).pop(),
+        //   icon: const Icon(Icons.arrow_back, color: Colors.white),
+        // ),
+      ),
+
       body: Column(
         children: [
-          // Top green header (Fixed height, not curved)
-          Container(
-            height: 100,
-            decoration: const BoxDecoration(color: constants.kPrimaryGreen),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: Row(
-                  children: [
-                    // Back button
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      ),
-                    ),
-                    const Expanded(
-                      child: Align(
-                        alignment: Alignment(0, -0.5),
-                        child: Center(
-                          child: Text(
-                            'Profile',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 25,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
           // Scrollable Content
           Expanded(
             child: SingleChildScrollView(
               child: Container(
                 width: double.infinity,
+                // The main content area with a rounded white background
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(25),
+                    topRight: Radius.circular(25),
+                  ),
+                ),
                 padding: const EdgeInsets.fromLTRB(24, 12, 24, 12),
                 child: Form(
                   key: _formKey,
@@ -785,10 +774,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Navigator.of(context).push(
             MaterialPageRoute(
               // ⬅️ CRUCIAL CHANGE HERE
-              builder: (_) => const DisposalGuidanceScreen(productId: null), 
+              builder: (_) => const DisposalGuidanceScreen(productId: null),
             ),
           );
-          return; 
+          return;
         }
         if (index == 4) {
           Navigator.of(
@@ -873,49 +862,25 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      drawer: const AppDrawer(),
+      appBar: AppBar(
+        backgroundColor: constants.kPrimaryGreen,
+        centerTitle: true,
+        title: const Text(
+          'Change Password',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        leading: IconButton(
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+        ),
+      ),
       body: Column(
         children: [
-          // Top green header (Fixed height, not curved)
-          Container(
-            height: 100,
-            decoration: const BoxDecoration(color: constants.kPrimaryGreen),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 6.0),
-                child: Row(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8.0),
-                      child: IconButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const HomeScreen()),
-                      ),
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      ),
-                    ),
-                    const Expanded(
-                      child: Align(
-                        alignment: Alignment(0, -0.5),
-                        child: Center(
-                          child: Text(
-                            'Profile', // Title is 'Profile' when viewed from Change Password
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 25,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 48),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Content
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
@@ -924,6 +889,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    const SizedBox(height: 8),
                     const Text(
                       'Change Password',
                       style: TextStyle(
