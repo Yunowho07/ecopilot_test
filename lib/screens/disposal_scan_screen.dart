@@ -1,9 +1,8 @@
 import 'dart:typed_data';
 
-// Assuming the existence of these files
-// import 'package:ecopilot_test/utils/cloudinary_config.dart';
-// import 'package:ecopilot_test/services/cloudinary_service.dart';
-// import 'package:ecopilot_test/utils/constants.dart';
+import 'package:ecopilot_test/utils/cloudinary_config.dart';
+import 'package:ecopilot_test/services/cloudinary_service.dart';
+import 'package:ecopilot_test/utils/constants.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -22,38 +21,7 @@ import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/screens/result_disposal_screen.dart';
 
-// Placeholder definitions for Cloudinary configuration
-const bool isCloudinaryConfigured = false;
-const String cloudinaryCloudName = 'dwxpph0wt';
-const String cloudinaryUploadPreset = 'unsigned_upload';
-
-// Placeholder for Cloudinary service since the actual implementation is not provided
-class CloudinaryService {
-  static Future<String?> uploadImageBytes(
-    Uint8List bytes, {
-    required String filename,
-    required String cloudName,
-    required String uploadPreset,
-  }) async {
-    // Simulation: in a real app, this would upload the image and return the URL
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (isCloudinaryConfigured && cloudName != 'dwxpph0wt') {
-      return 'https://res.cloudinary.com/$cloudName/image/upload/v1/$filename';
-    }
-
-    // Fall back to Firebase Storage via FirebaseService if Cloudinary not configured
-    try {
-      final url = await FirebaseService().uploadScannedImage(
-        bytes: bytes,
-        fileName: filename,
-      );
-      return url;
-    } catch (e) {
-      debugPrint('Firebase fallback upload failed: $e');
-      return 'https://placehold.co/600x800/A8D8B9/212121?text=Product+Image';
-    }
-  }
-}
+// CloudinaryService and config are implemented in lib/services and lib/utils.
 
 /// A lightweight scan screen that lets the user take a photo or pick from gallery,
 /// runs a (stubbed) Gemini analysis to extract product info, uploads the image
@@ -624,17 +592,26 @@ Example valid response (JSON only):
     final String productId = DateTime.now().millisecondsSinceEpoch.toString();
     product['productId'] = productId;
 
-    // Upload image to Cloudinary if configured
-    try {
-      final imageUrl = await CloudinaryService.uploadImageBytes(
-        _bytes!,
-        filename: '$productId.jpg',
-        cloudName: cloudinaryCloudName,
-        uploadPreset: cloudinaryUploadPreset,
-      );
-      if (imageUrl != null) product['imageUrl'] = imageUrl;
-    } catch (e) {
-      debugPrint('Cloudinary upload failed: $e');
+    // Upload image to Cloudinary (required for image storage)
+    if (isCloudinaryConfigured) {
+      try {
+        final imageUrl = await CloudinaryService.uploadImageBytes(
+          _bytes!,
+          filename: '$productId.jpg',
+          cloudName: kCloudinaryCloudName,
+          uploadPreset: kCloudinaryUploadPreset,
+        );
+        if (imageUrl != null) product['imageUrl'] = imageUrl;
+      } catch (e) {
+        debugPrint('Cloudinary upload failed: $e');
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Cloudinary not configured. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env'),
+        ));
+      }
     }
 
     // Save to Firestore under current user's scans

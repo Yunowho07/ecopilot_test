@@ -8,14 +8,16 @@ class RankInfo {
   const RankInfo(this.title, this.color);
 }
 
-/// Compute a user rank and display color from their accumulated eco points.
+/// Eco Point tiers used by EcoPilot (implements the four requested ranks):
+/// - 0–50: Green Beginner
+/// - 51–150: Eco Explorer
+/// - 151–300: Planet Protector
+/// - 301+: Sustainability Hero
 RankInfo rankForPoints(int points) {
-  if (points >= 1000)
-    return const RankInfo('Planet Guardian', kRankPlanetGuardian);
-  if (points >= 600)
+  if (points >= 301)
     return const RankInfo('Sustainability Hero', kRankSustainabilityHero);
-  if (points >= 300) return const RankInfo('Eco Champion', kRankEcoChampion);
-  if (points >= 100)
-    return const RankInfo('Sustainability Ally', kRankSustainabilityAlly);
-  return const RankInfo('Green Explorer', kRankGreenExplorer);
+  if (points >= 151)
+    return const RankInfo('Planet Protector', kRankPlanetProtector);
+  if (points >= 51) return const RankInfo('Eco Explorer', kRankEcoExplorer);
+  return const RankInfo('Green Beginner', kRankGreenBeginner);
 }

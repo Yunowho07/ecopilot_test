@@ -17,6 +17,7 @@ import 'package:ecopilot_test/utils/color_extensions.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'daily_challenge_screen.dart'; // ⚠️ NEW IMPORT
+import 'leaderboard_screen.dart';
 
 // Placeholder data structure for challenge and user progress
 class DailyChallenge {
@@ -403,6 +404,20 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Icon(Icons.menu, color: Colors.white, size: 30),
           ),
           const SizedBox(width: 12),
+          // Leaderboard quick access
+          // GestureDetector(
+          //   onTap: () {
+          //     Navigator.of(context).push(
+          //       MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
+          //     );
+          //   },
+          //   child: CircleAvatar(
+          //     radius: 18,
+          //     backgroundColor: Colors.transparent,
+          //     child: Icon(Icons.emoji_events, color: Colors.white, size: 22),
+          //   ),
+          // ),
+          const SizedBox(width: 10),
           // 🏆 NOTIFICATION ICON WITH RED BADGE (FIXED)
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
             // Streams unread notifications for the current user.

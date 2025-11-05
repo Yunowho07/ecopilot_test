@@ -11,6 +11,7 @@ import 'package:image/image.dart' as img;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // Added for Firestore
 import 'package:intl/intl.dart';
+import 'package:ecopilot_test/utils/rank_utils.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
@@ -488,12 +489,13 @@ class FirebaseService {
 
     // Only create profile if it doesn't exist yet
     if (!existingUser.exists) {
+      // Default to the lowest rank title when creating a new profile
       await userRef.set({
         'name': name,
         'email': email,
         'photoUrl': photoUrl,
         'ecoScore': 0,
-        'title': 'Eco Beginner',
+        'title': 'Green Beginner',
         'streakDays': 0,
         'createdAt': Timestamp.now(),
       });
@@ -537,9 +539,35 @@ class FirebaseService {
     final userDoc = await userRef.get();
 
     if (userDoc.exists) {
-      final currentScore = userDoc.data()?['ecoScore'] ?? 0;
-      await userRef.update({'ecoScore': currentScore + points});
+      final currentScore = (userDoc.data()?['ecoScore'] ?? 0) as int;
+      final newScore = currentScore + points;
+
+      // Compute a new title based on the new score
+      final rank = rankForPoints(newScore);
+
+      await userRef.update({'ecoScore': newScore, 'title': rank.title});
     }
+  }
+
+  /// Return a simple leaderboard of users ordered by ecoScore desc.
+  /// Each entry will include the user's document data plus the uid.
+  Future<List<Map<String, dynamic>>> getLeaderboard({int limit = 50}) async {
+    final snapshot = await _firestore
+        .collection('users')
+        .orderBy('ecoScore', descending: true)
+        .limit(limit)
+        .get();
+
+    return snapshot.docs.map((d) {
+      final data = d.data();
+      return {
+        'uid': d.id,
+        'name': data['name'] ?? '',
+        'photoUrl': data['photoUrl'] ?? '',
+        'ecoScore': data['ecoScore'] ?? 0,
+        'title': data['title'] ?? '',
+      };
+    }).toList();
   }
 
   // ===============================================
@@ -627,6 +655,17 @@ class FirebaseService {
       'timestamp': FieldValue.serverTimestamp(),
       'date': DateFormat('yyyy-MM-dd – kk:mm').format(DateTime.now()),
     });
+
+    // Reward a small number of Eco Points for scanning a product when a user is signed in.
+    // This encourages engagement. If the caller passed an ecoScore string representing a
+    // numeric reward, that flow should be handled by the caller; here we award a default.
+    if (_auth.currentUser != null) {
+      try {
+        await updateEcoScore(5); // Default: +5 points per scan
+      } catch (e) {
+        debugPrint('Failed to update eco score after saveUserScan: $e');
+      }
+    }
   }
 
   Stream<QuerySnapshot<Map<String, dynamic>>> getUserRecentScans() {

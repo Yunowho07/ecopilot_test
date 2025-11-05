@@ -77,8 +77,8 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
   late UserChallengeProgress _progress;
   final FirebaseService _firebaseService = FirebaseService();
   int _userEcoPoints = 0;
-  String _userRank = 'Green Explorer';
-  Color _rankColor = kRankGreenExplorer;
+  String _userRank = 'Green Beginner';
+  Color _rankColor = kRankGreenBeginner;
   final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   @override

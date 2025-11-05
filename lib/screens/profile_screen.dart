@@ -16,6 +16,7 @@ import 'home_screen.dart'; // Assume this file exists
 import 'scan_screen.dart'; // Assume this file exists
 import 'disposal_guidance_screen.dart'
     as disposal_guidance_screen; // Assume this file exists
+import 'leaderboard_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -305,11 +306,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         centerTitle: true,
         title: const Text(
           'Profile',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
         // leading: IconButton(
         //   onPressed: () => Navigator.of(context).pop(),
@@ -554,7 +551,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // Rank (Placeholder)
+                      // Rank (shows title, points and progress to next tier)
                       _buildInfoCard(
                         icon: Icons.emoji_events,
                         label: 'Rank',
@@ -562,23 +559,101 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Icon(Icons.star, color: _rankColor, size: 18),
                                 const SizedBox(width: 8),
-                                // Text(
-                                //   _rank,
-                                //   style: TextStyle(
-                                //     fontWeight: FontWeight.bold,
-                                //     fontSize: 16,
-                                //     color: _rankColor,
-                                //   ),
-                                // ),
+                                Expanded(
+                                  child: Text(
+                                    // compute title from points if available
+                                    (() {
+                                      final rank = rankForPoints(_ecoPoints);
+                                      return rank.title;
+                                    })(),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: _rankColor,
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            const LeaderboardScreen(),
+                                      ),
+                                    );
+                                  },
+                                  child: const Text('View Leaderboard'),
+                                ),
                               ],
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 8),
                             Text(
                               '$_ecoPoints eco points',
                               style: const TextStyle(color: Colors.grey),
+                            ),
+                            const SizedBox(height: 8),
+                            // Progress to next tier
+                            Builder(
+                              builder: (ctx) {
+                                final int points = _ecoPoints;
+                                int currentMax = 50;
+                                int nextMax = 51;
+                                if (points >= 301) {
+                                  currentMax = 301;
+                                  nextMax = currentMax;
+                                } else if (points >= 151) {
+                                  currentMax = 151;
+                                  nextMax = 301;
+                                } else if (points >= 51) {
+                                  currentMax = 51;
+                                  nextMax = 151;
+                                } else {
+                                  currentMax = 0;
+                                  nextMax = 51;
+                                }
+
+                                final int range = (nextMax - currentMax) == 0
+                                    ? 1
+                                    : (nextMax - currentMax);
+                                final int relative = (points - currentMax)
+                                    .clamp(0, range);
+                                final double pct = (relative / range).clamp(
+                                  0.0,
+                                  1.0,
+                                );
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    LinearProgressIndicator(
+                                      value: pct,
+                                      minHeight: 8,
+                                      backgroundColor: Colors.grey.shade200,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        _rankColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      (points >= 301)
+                                          ? 'At top tier'
+                                          : '${(pct * 100).toStringAsFixed(0)}% to ${nextMax == 301
+                                                ? 'Sustainability Hero'
+                                                : nextMax == 151
+                                                ? 'Planet Protector'
+                                                : 'Eco Explorer'}',
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -811,9 +886,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
-        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
-        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_cart),
+          label: 'Alternative',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.qr_code_scanner),
+          label: 'Scan',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.delete_sweep),
+          label: 'Dispose',
+        ),
         BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
       ],
     );

@@ -24,3 +24,9 @@ const Color kRankEcoChampion = kDiscoverMoreBlue; // Blue
 const Color kRankSustainabilityAlly =
     kDiscoverMoreGreen; // Light green / theme green
 const Color kRankGreenExplorer = kPrimaryGreen; // Base green
+
+// New rank colors for Eco Point tiers
+const Color kRankGreenBeginner = kPrimaryGreen; // 0-50
+const Color kRankEcoExplorer = Color(0xFFFFC107); // 51-150 (amber)
+const Color kRankPlanetProtector = Color(0xFF388E3C); // 151-300 (dark green)
+// kRankSustainabilityHero already existed; keep it for 301+
