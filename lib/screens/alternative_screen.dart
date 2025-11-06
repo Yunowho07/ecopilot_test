@@ -5,11 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'home_screen.dart'; // Assume this file exists
 import 'scan_screen.dart'; // Assume this file exists
+import 'package:ecopilot_test/widgets/bottom_navigation.dart';
 import 'disposal_guidance_screen.dart'; // Assume this file exists
 import 'profile_screen.dart'; // Assume this file exists
 
 // Define global constants used in the provided navigation logic
-const Color primaryGreen = Color(0xFF1DB954,); // Assuming primaryGreen is the same as _kPrimaryGreenAlt
+const Color primaryGreen = Color(
+  0xFF1DB954,
+); // Assuming primaryGreen is the same as _kPrimaryGreenAlt
 
 // The primary green color from the previous context
 const Color _kPrimaryGreenAlt = Color(0xFF1DB954);
@@ -282,12 +285,8 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
   final List<Map<String, String>> _recentActivity = [];
 
   Widget _buildBottomNavBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      // Hardcode the index to 1 (Alternative) to visually highlight the current screen
+    return AppBottomNavigationBar(
       currentIndex: _selectedIndex,
-      selectedItemColor: primaryGreen,
-      unselectedItemColor: Colors.grey,
       onTap: (index) async {
         // When the Home tab is tapped, open the Home screen.
         if (index == 0) {
@@ -298,8 +297,9 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
         }
         // When the Alternative tab is tapped, open the Alternative screen (or do nothing if already here).
         if (index == 1) {
-          // Since we are already on the Alternative screen, we can simply pop to it
-          // or do nothing. Pushing a new route of the same screen is redundant.
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const AlternativeScreen()));
           return;
         }
         // When Scan tab is tapped, open the ScanScreen and wait for result
@@ -330,37 +330,19 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
           return;
         }
         if (index == 3) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            // ⬅️ CRUCIAL CHANGE HERE
-            builder: (_) => const DisposalGuidanceScreen(), 
-          ),
-        );
-        return; 
-      }
-        // When the Profile tab is tapped, open the Profile screen.
-        if (index == 4) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const ProfileScreen(),
-            ),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()));
           return;
         }
-
-        // NOTE: The provided logic does not allow the index to be changed (setState)
-        // because all navigations use push/return. Retaining the setState block just in case.
-        // setState(() {
-        //   _selectedIndex = index;
-        // });
+        // When the Profile tab is tapped, open the Profile screen.
+        if (index == 4) {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          return;
+        }
       },
-      items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.shopping_cart),label: 'Alternative',),
-        BottomNavigationBarItem(icon: Icon(Icons.qr_code_scanner),label: 'Scan',),
-        BottomNavigationBarItem(icon: Icon(Icons.delete_sweep),label: 'Dispose',),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-      ],
     );
   }
 

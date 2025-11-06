@@ -41,16 +41,19 @@ class RecentActivityScreen extends StatelessWidget {
         : null;
 
     return Scaffold(
+      backgroundColor: kPrimaryGreen,
       appBar: AppBar(
-        centerTitle: true,
         title: const Text(
-          'Scan History',
+          'Recent Activity',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: kPrimaryGreen,
+        elevation: 0,
+        centerTitle: true,
       ),
       body: Container(
+        // The main content area with a rounded white background
         decoration: BoxDecoration(
           borderRadius: BorderRadius.only(
             topLeft: Radius.circular(25),

@@ -5,17 +5,17 @@ import 'package:ecopilot_test/utils/rank_utils.dart';
 import '/utils/constants.dart'
     as constants; // Assumed location for kPrimaryGreen/kPrimaryYellow
 import 'package:ecopilot_test/widgets/app_drawer.dart';
+import 'package:ecopilot_test/widgets/bottom_navigation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
-import 'alternative_screen.dart' as alternative_screen;
-import 'home_screen.dart'; // Assume this file exists
-import 'scan_screen.dart'; // Assume this file exists
-import 'disposal_guidance_screen.dart'
-    as disposal_guidance_screen; // Assume this file exists
+import 'alternative_screen.dart';
+import 'home_screen.dart';
+import 'scan_screen.dart';
+import 'disposal_guidance_screen.dart';
 import 'leaderboard_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -304,6 +304,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         backgroundColor: constants.kPrimaryGreen,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
           'Profile',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
@@ -752,7 +753,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomNavBar(context),
+      bottomNavigationBar: _buildBottomNavBar(),
     );
   }
 
@@ -818,30 +819,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildBottomNavBar(BuildContext context) {
-    const int currentIndex = 4; // Profile tab
+  // Profile tab index in the shared bottom navigation (0=Home,1=Alternative,2=Scan,3=Dispose,4=Profile)
+  final int _selectedIndex = 4;
 
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: currentIndex,
-      selectedItemColor: constants.kPrimaryGreen,
-      unselectedItemColor: Colors.grey,
+  Widget _buildBottomNavBar() {
+    return AppBottomNavigationBar(
+      currentIndex: _selectedIndex,
       onTap: (index) async {
-        // Simple navigation that doesn't rely on state located outside this widget
+        // When the Home tab is tapped, open the Home screen.
         if (index == 0) {
           Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
           return;
         }
+        // When the Alternative tab is tapped, open the Alternative screen (or do nothing if already here).
         if (index == 1) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const alternative_screen.AlternativeScreen(),
-            ),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const AlternativeScreen()));
           return;
         }
+        // When Scan tab is tapped, open the ScanScreen and wait for result
         if (index == 2) {
           final result = await Navigator.of(
             context,
@@ -870,13 +869,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
         if (index == 3) {
           Navigator.of(context).push(
-            MaterialPageRoute(
-              // ⬅️ CRUCIAL CHANGE HERE
-              builder: (_) => const DisposalGuidanceScreen(productId: null),
-            ),
+            MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()),
           );
           return;
         }
+        // When the Profile tab is tapped, open the Profile screen.
         if (index == 4) {
           Navigator.of(
             context,
@@ -884,22 +881,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return;
         }
       },
-      items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-      ],
     );
   }
 }
@@ -964,6 +945,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       appBar: AppBar(
         backgroundColor: constants.kPrimaryGreen,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
           'Change Password',
           style: TextStyle(

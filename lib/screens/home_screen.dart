@@ -5,9 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart'; // Required for date formatting
 import '../auth/firebase_service.dart';
 import '/auth/landing.dart';
-import 'profile_screen.dart' as profile_screen;
-import 'alternative_screen.dart' as alternative_screen;
-import 'disposal_guidance_screen.dart' as disposal_guidance_screen;
+import 'profile_screen.dart';
+import 'alternative_screen.dart';
+import 'disposal_guidance_screen.dart';
 import '/screens/scan_screen.dart';
 import 'notification_screen.dart';
 import 'setting_screen.dart';
@@ -16,6 +16,7 @@ import 'recent_activity_screen.dart';
 import 'package:ecopilot_test/utils/color_extensions.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
+import 'package:ecopilot_test/widgets/bottom_navigation.dart';
 import 'daily_challenge_screen.dart'; // ⚠️ NEW IMPORT
 import 'leaderboard_screen.dart';
 
@@ -983,27 +984,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBottomNavBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
+    return AppBottomNavigationBar(
       currentIndex: _selectedIndex,
-      selectedItemColor: kPrimaryGreen,
-      unselectedItemColor: Colors.grey,
       onTap: (index) async {
-        // When the Profile tab is tapped, open the Profile screen.
+        // When the Home tab is tapped, open the Home screen.
         if (index == 0) {
           Navigator.of(
             context,
           ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
-          return; // don't change selected index when opening profile as a separate route
+          return;
         }
-        // When the Alternative tab is tapped, open the Alternative screen.
+        // When the Alternative tab is tapped, open the Alternative screen (or do nothing if already here).
         if (index == 1) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const alternative_screen.AlternativeScreen(),
-            ),
-          );
-          return; // don't change selected index when opening alternative as a separate route
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const AlternativeScreen()));
+          return;
         }
         // When Scan tab is tapped, open the ScanScreen and wait for result
         if (index == 2) {
@@ -1030,48 +1026,22 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           }
 
-          return; // don't change selected index when opening scan as a separate route
+          return;
         }
         if (index == 3) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              // ⬅️ CRUCIAL CHANGE HERE
-              builder: (_) => const DisposalGuidanceScreen(productId: null),
-            ),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()));
           return;
         }
         // When the Profile tab is tapped, open the Profile screen.
         if (index == 4) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const profile_screen.ProfileScreen(),
-            ),
-          );
-          return; // don't change selected index when opening profile as a separate route
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          return;
         }
-
-        setState(() {
-          _selectedIndex = index;
-        });
-        // TODO: Implement navigation logic for the other tabs
       },
-      items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-      ],
     );
   }
 }

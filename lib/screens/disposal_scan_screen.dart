@@ -18,7 +18,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
-import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/screens/result_disposal_screen.dart';
 
 // CloudinaryService and config are implemented in lib/services and lib/utils.
@@ -123,9 +122,11 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
   Future<void> _initScanner() async {
     try {
       setState(() => _busy = true);
+
       final status = await Permission.camera.status;
       if (!status.isGranted) {
         final result = await Permission.camera.request();
+        // If still not granted, surface helpful UI. If permanently denied offer settings.
         if (!result.isGranted) {
           if (mounted) {
             await showDialog<void>(
@@ -155,13 +156,23 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         }
       }
 
-      setState(() {
-        _scanningEnabled = true;
-      });
+      // Try to start the MobileScanner controller so the preview begins.
+      try {
+        await _mobileScannerController.start();
+      } catch (e) {
+        debugPrint('MobileScanner start failed: $e');
+      }
+
+      // Mark scanning enabled so UI shows live preview.
+      if (mounted) {
+        setState(() {
+          _scanningEnabled = true;
+        });
+      }
     } catch (e) {
       debugPrint('Scanner init failed: $e');
     } finally {
-      setState(() => _busy = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -575,9 +586,146 @@ Example valid response (JSON only):
     } catch (e) {
       debugPrint('Analysis error: $e');
       if (mounted) {
+        final err = e.toString();
+        final isServiceUnavailable =
+            err.contains('503') ||
+            err.toUpperCase().contains('UNAVAILABLE') ||
+            err.toLowerCase().contains('overloaded');
+
+        if (isServiceUnavailable) {
+          // Offer retry or save without analysis
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Analysis temporarily unavailable'),
+              content: const Text(
+                'The AI analysis service is currently overloaded. You can retry now, or save the photo without analysis (image will still be uploaded).',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    // Retry
+                    _runAnalysis();
+                  },
+                  child: const Text('Retry'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    _saveImageOnly();
+                  },
+                  child: const Text('Save without analysis'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Analysis failed: $e')));
+        }
+      }
+    } finally {
+      setState(() => _busy = false);
+    }
+  }
+
+  /// Upload image and save a minimal disposal record when analysis fails.
+  Future<void> _saveImageOnly() async {
+    if (_bytes == null) return;
+    setState(() => _busy = true);
+    try {
+      String? uploadedImageUrl;
+      if (isCloudinaryConfigured) {
+        try {
+          final productId = DateTime.now().millisecondsSinceEpoch.toString();
+          uploadedImageUrl = await CloudinaryService.uploadImageBytes(
+            _bytes!,
+            filename: '$productId.jpg',
+            cloudName: kCloudinaryCloudName,
+            uploadPreset: kCloudinaryUploadPreset,
+          );
+        } catch (e) {
+          debugPrint('Cloudinary upload failed: $e');
+          uploadedImageUrl = null;
+        }
+      }
+
+      // Persist a minimal record to Firestore under disposal_scans and scans
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
+      final productId = DateTime.now().millisecondsSinceEpoch.toString();
+
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('disposal_scans')
+          .doc(productId);
+
+      await docRef.set({
+        'product_name': (_picked != null && _picked!.name.isNotEmpty)
+            ? _picked!.name
+            : 'Scanned product',
+        'category': 'Unknown',
+        'material': 'Unknown',
+        'ecoScore': 'N/A',
+        'imageUrl': uploadedImageUrl ?? '',
+        'disposalSteps': <String>[],
+        'tips': <String>[],
+        'nearbyCenter': null,
+        'isDisposal': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // Also save to per-user scans collection for history
+      try {
+        final scansRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('scans')
+            .doc(productId);
+        await scansRef.set({
+          'analysis': 'Saved without analysis',
+          'product_name': (_picked != null && _picked!.name.isNotEmpty)
+              ? _picked!.name
+              : 'Scanned product',
+          'eco_score': 'N/A',
+          'carbon_footprint': 'N/A',
+          'image_url': uploadedImageUrl ?? '',
+          'category': 'Unknown',
+          'packaging': 'Unknown',
+          'disposalSteps': <String>[],
+          'tips': <String>[],
+          'nearbyCenter': null,
+          'isDisposal': true,
+          'timestamp': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } catch (e) {
+        debugPrint('Failed to also save to scans collection: $e');
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved image without analysis')),
+        );
+        Navigator.of(context).pop({
+          'productId': productId,
+          'imageUrl': uploadedImageUrl ?? '',
+          'product_name': (_picked != null && _picked!.name.isNotEmpty)
+              ? _picked!.name
+              : 'Scanned product',
+        });
+      }
+    } catch (e) {
+      debugPrint('Save image only failed: $e');
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Analysis failed: $e')));
+        ).showSnackBar(SnackBar(content: Text('Failed to save image: $e')));
       }
     } finally {
       setState(() => _busy = false);

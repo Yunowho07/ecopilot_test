@@ -2,12 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:ecopilot_test/auth/firebase_service.dart';
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
+import 'package:flutter/widgets.dart';
 
 class ResultDisposalScreen extends StatelessWidget {
   final ProductAnalysisData analysisData;
-
   const ResultDisposalScreen({Key? key, required this.analysisData})
     : super(key: key);
+
+  // Helper to map disposal steps (newline-separated) into a list for DB
+  List<String> _disposalStepsAsList() {
+    if (analysisData.disposalMethod.trim().isEmpty ||
+        analysisData.disposalMethod == 'N/A')
+      return [];
+    return analysisData.disposalMethod
+        .split(RegExp(r"\r?\n"))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
 
   Color _scoreColor(String score) {
     switch (score.toUpperCase()) {
@@ -368,6 +382,112 @@ class ResultDisposalScreen extends StatelessWidget {
             ),
           ),
         ),
+      ),
+      // Bottom Done button: saves the disposal scan and navigates back to Disposal Guidance
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: _DoneButton(
+          analysisData: analysisData,
+          disposalStepsList: _disposalStepsAsList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _DoneButton extends StatefulWidget {
+  final ProductAnalysisData analysisData;
+  final List<String> disposalStepsList;
+
+  const _DoneButton({
+    Key? key,
+    required this.analysisData,
+    required this.disposalStepsList,
+  }) : super(key: key);
+
+  @override
+  State<_DoneButton> createState() => _DoneButtonState();
+}
+
+class _DoneButtonState extends State<_DoneButton> {
+  bool _isSaving = false;
+
+  Future<void> _onDonePressed() async {
+    if (_isSaving) return;
+    setState(() => _isSaving = true);
+
+    try {
+      // Build a short analysis summary to persist (reuse disposalMethod + tips)
+      final analysisText = widget.analysisData.disposalMethod.isNotEmpty
+          ? widget.analysisData.disposalMethod
+          : widget.analysisData.tips;
+
+      await FirebaseService().saveUserScan(
+        analysis: analysisText ?? 'Disposal scan',
+        productName: widget.analysisData.productName,
+        ecoScore: widget.analysisData.ecoScore,
+        carbonFootprint: widget.analysisData.carbonFootprint,
+        imageUrl: widget.analysisData.imageUrl,
+        category: widget.analysisData.category,
+        packagingType: widget.analysisData.packagingType,
+        disposalSteps: widget.disposalStepsList.isNotEmpty
+            ? widget.disposalStepsList
+            : null,
+        tips: widget.analysisData.tips,
+        nearbyCenter: widget.analysisData.nearbyCenter,
+        isDisposal: true,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Saved to Recent Disposal')));
+
+      // Navigate back to Disposal Guidance screen smoothly
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()),
+      );
+    } catch (e) {
+      debugPrint('Failed to save disposal scan: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 56,
+      child: ElevatedButton(
+        onPressed: _isSaving ? null : _onDonePressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: kPrimaryGreen,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: _isSaving
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  color: Colors.white,
+                  strokeWidth: 2,
+                ),
+              )
+            : const Text(
+                'Done',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
       ),
     );
   }

@@ -5,9 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ecopilot_test/screens/disposal_scan_screen.dart';
 // Avoid importing kPrimaryGreen twice: hide it from the recent_disposal import
-import 'package:ecopilot_test/screens/recent_disposal.dart';
+import 'package:ecopilot_test/screens/recent_disposal_screen.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
+import 'package:ecopilot_test/widgets/bottom_navigation.dart';
 import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:ecopilot_test/screens/alternative_screen.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart';
@@ -516,11 +517,8 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
   }
 
   Widget _buildBottomNavBar() {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
+    return AppBottomNavigationBar(
       currentIndex: _selectedIndex,
-      selectedItemColor: kPrimaryGreen,
-      unselectedItemColor: Colors.grey,
       onTap: (index) async {
         if (index == 0) {
           Navigator.of(
@@ -561,12 +559,9 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           return;
         }
         if (index == 3) {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              // ⬅️ CRUCIAL CHANGE HERE
-              builder: (_) => const DisposalGuidanceScreen(productId: null),
-            ),
-          );
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()));
           return;
         }
         if (index == 4) {
@@ -579,22 +574,6 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           _selectedIndex = index;
         });
       },
-      items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.shopping_cart),
-          label: 'Alternative',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.qr_code_scanner),
-          label: 'Scan',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.delete_sweep),
-          label: 'Dispose',
-        ),
-        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-      ],
     );
   }
 
