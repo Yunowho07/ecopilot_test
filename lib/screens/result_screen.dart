@@ -358,7 +358,9 @@ class ResultScreen extends StatelessWidget {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) =>
-                                    const alternative_screen.AlternativeScreen(),
+                                    alternative_screen.AlternativeScreen(
+                                      scannedProduct: analysisData,
+                                    ),
                               ),
                             );
                           },
