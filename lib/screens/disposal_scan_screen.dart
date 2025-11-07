@@ -413,21 +413,20 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         const prompt = '''
 You are an eco-disposal assistant AI. Analyze the uploaded or scanned product image and return ONLY a single JSON object (no additional text) that contains the following keys when available. Use 'N/A' or empty lists/false for missing values.
 
-- product_name (string)
-- packaging_type (string)
-- ingredients (string)
-- eco_score (string)
-- carbon_footprint (string)
+- product name: [Product Name]
+- category: [Product Category, e.g., Food & Beverages (F&B), Personal Care, Household Products, Electronics, Clothing & Accessories, Health & Medicine, Baby & Kids, Pet Supplies, Automotive, Home & Furniture]
+- ingredients: [List of ingredients, comma-separated, e.g., Water, Zinc Oxide, etc.]
+- eco-friendliness rating: [A, B, C, D, E or etc.]
+- carbon Footprint: [Estimated CO2e per unit, e.g., 0.36 kg CO2e per unit]
+- packaging type: [Material and recyclability, e.g., Plastic Tube - Recyclable (Type 4 - LDPE)]
 - disposal_steps (array of strings)
 - nearby_center (string)
 - tips (array of strings)
-- contains_microplastics (boolean)
-- palm_oil_derivative (boolean)
-- cruelty_free (boolean)
 
 Example valid response (JSON only):
 {
   "product_name": "Plastic Bottle - Sparkling Water",
+  "category": "Food & Beverages (F&B)",
   "packaging_type": "PET Plastic",
   "ingredients": "Water, Carbon Dioxide",
   "eco_score": "C",
@@ -435,9 +434,6 @@ Example valid response (JSON only):
   "disposal_steps": ["Rinse the bottle", "Remove cap", "Place in plastic recycling bin"],
   "nearby_center": "Green Recycling Center",
   "tips": ["Refill and reuse before recycling"],
-  "contains_microplastics": false,
-  "palm_oil_derivative": false,
-  "cruelty_free": true
 }
 ''';
 

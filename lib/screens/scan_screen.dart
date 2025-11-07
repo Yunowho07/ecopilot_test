@@ -6,17 +6,15 @@ import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
-import 'profile_screen.dart';
-import 'alternative_screen.dart';
+import 'profile_screen.dart' as profile_screen;
+import 'alternative_screen.dart' as alternative_screen;
 import 'package:ecopilot_test/widgets/app_drawer.dart';
-import 'package:ecopilot_test/widgets/bottom_navigation.dart';
 import '/utils/constants.dart';
 import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'package:ecopilot_test/screens/result_screen.dart';
@@ -45,26 +43,17 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   // ⚠️ UNCOMMENT THESE VARIABLES FOR CAMERA PACKAGE INTEGRATION
   CameraController? _cameraController;
   bool _isCameraInitialized = false;
   List<CameraDescription> _cameras = [];
-  String? _cameraError; // Human readable error to show when preview fails
 
   bool _isLoading = false;
-  // Internal busy flag used during async init/permission flows.
-  bool _busy = false;
-  // Whether scanning functionality is enabled after granting permissions.
-  bool _scanningEnabled = false;
-
   late final String _geminiApiKey;
   final ImagePicker _picker = ImagePicker();
   int _selectedIndex = 2; // Default to 'Scan' tab
   bool _isFlashOn = false; // State for flashlight (controls the icon)
-  // MobileScanner controller used as a fallback preview implementation
-  final MobileScannerController _mobileScannerController =
-      MobileScannerController();
   // bool _isFrontCamera = false; // State for camera toggle (controls the icon)
 
   // NOTE: This variable is now unused, as the flip button is replaced by Capture.
@@ -77,60 +66,117 @@ class _ScanScreenState extends State<ScanScreen> {
     _geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
 
     // Start camera initialization
-    _initScanner();
+    WidgetsBinding.instance.addObserver(this);
+    _initializeCamera();
   }
 
-  Future<void> _initScanner() async {
+  Future<void> _initializeCamera() async {
+    // ⚠️ UNCOMMENT and use these methods for actual camera setup.
+
     try {
-      setState(() => _busy = true);
+      // Ensure camera permission is granted before initializing cameras.
       final status = await Permission.camera.status;
       if (!status.isGranted) {
-        final result = await Permission.camera.request();
-        if (!result.isGranted) {
-          if (mounted) {
-            await showDialog<void>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Camera permission required'),
-                content: const Text(
-                  'Please allow camera access to scan products. You can enable it in app settings.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(ctx).pop();
-                      await openAppSettings();
-                    },
-                    child: const Text('Open Settings'),
-                  ),
-                ],
-              ),
-            );
-          }
+        final res = await Permission.camera.request();
+        if (!res.isGranted) {
+          debugPrint('Camera permission not granted. Aborting camera init.');
           return;
         }
       }
+      // 1. Fetch available cameras
+      _cameras = await availableCameras();
 
+      // 2. Initialize the controller with the rear camera
+      _cameraController = CameraController(
+        _cameras.firstWhere(
+          (camera) => camera.lensDirection == CameraLensDirection.back,
+          orElse: () => _cameras.first,
+        ),
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+
+      // 3. Initialize the controller instance
+      await _cameraController!.initialize();
+
+      // 4. Update state to reflect readiness
+      if (mounted) {
+        setState(() => _isCameraInitialized = true);
+      }
+      // Set initial flash mode (don't await inside setState)
+      try {
+        await _cameraController!.setFlashMode(FlashMode.off);
+      } catch (_) {}
+    } on CameraException catch (e) {
+      debugPrint("Camera initialization error: $e");
+      // Handle error gracefully in UI, e.g., show an error message
+    }
+
+    debugPrint("Camera initialization logic executed (using simulation).");
+    if (mounted) {
+      // Simulate initialization completion for UI to render properly
       setState(() {
-        _scanningEnabled = true;
+        // _isCameraInitialized = true;
       });
-    } catch (e) {
-      debugPrint('Scanner init failed: $e');
-    } finally {
-      setState(() => _busy = false);
     }
   }
 
   @override
   void dispose() {
-    // ⚠️ UNCOMMENT for camera package integration
-    _cameraController?.dispose();
-    _mobileScannerController.dispose();
+    // Remove lifecycle observer and dispose controller safely
+    WidgetsBinding.instance.removeObserver(this);
+    try {
+      _cameraController?.dispose();
+    } catch (_) {}
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Handle camera during app lifecycle changes. Prefer pause/resume preview
+    // so the underlying texture is preserved where supported.
+    super.didChangeAppLifecycleState(state);
+    if (_cameraController == null) return;
+    try {
+      if (state == AppLifecycleState.inactive ||
+          state == AppLifecycleState.paused) {
+        // Try pausing preview first; on some devices disposing is required.
+        try {
+          _cameraController?.pausePreview();
+        } catch (_) {
+          try {
+            _cameraController?.dispose();
+            _cameraController = null;
+            if (mounted) setState(() => _isCameraInitialized = false);
+          } catch (_) {}
+        }
+      } else if (state == AppLifecycleState.resumed) {
+        // Resume preview when returning; if controller was disposed, re-init.
+        try {
+          if (_cameraController != null) {
+            // Try to resume preview without awaiting; handle errors by reinitializing
+            _cameraController!
+                .resumePreview()
+                .then((_) {
+                  if (mounted) setState(() => _isCameraInitialized = true);
+                })
+                .catchError((e) async {
+                  debugPrint('Error resuming preview: $e');
+                  // Reinitialize if resume fails
+                  _initializeCamera();
+                });
+          } else {
+            // Reinitialize controller if it was disposed while paused
+            _initializeCamera();
+          }
+        } catch (e) {
+          debugPrint('Error resuming camera on resume: $e');
+          _initializeCamera();
+        }
+      }
+    } catch (e) {
+      debugPrint('Lifecycle camera handling error: $e');
+    }
   }
 
   // --- Image/Analysis Logic ---
@@ -146,25 +192,9 @@ class _ScanScreenState extends State<ScanScreen> {
   // NOTE: This handles the bottom FAB tap
   Future<void> _scanBarcodeAndAnalyze() async {
     debugPrint("Triggering Barcode/Camera Scan (FAB Tapped)...");
-
-    // Launch a full-screen camera scanner that returns the first barcode scanned
-    final scannedCode = await Navigator.of(context).push<String?>(
-      MaterialPageRoute(builder: (_) => const BarcodeScannerPage()),
-    );
-
-    if (scannedCode == null || scannedCode.isEmpty) return;
-
-    // Lookup the barcode in Open Beauty Facts first
-    final data = await _lookupBarcode(scannedCode);
-    if (data != null) {
-      _navigateToResultScreen(data);
-      return;
-    }
-
-    // If not found, notify the user
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Product not found in Open Beauty Facts')),
-    );
+    // Using native camera capture flow: take a picture and analyze the image.
+    // This replaces the previous mobile_scanner flow which was removed.
+    await _capturePicture();
   }
 
   // Lookup product by barcode from Open Beauty Facts
@@ -259,38 +289,9 @@ class _ScanScreenState extends State<ScanScreen> {
         debugPrint("Error taking picture: $e");
       }
     } else {
-      // Fallback: open the system camera (ImagePicker) which works when
-      // the native CameraController isn't available (or when using MobileScanner preview).
-      try {
-        await _pickImage(ImageSource.camera);
-      } catch (e) {
-        debugPrint('Fallback camera capture failed: $e');
-      }
+      // Fallback to gallery/camera picker
     }
     // For simulation, we fall back to the picker immediately:
-  }
-
-  Future<void> _toggleFlash() async {
-    try {
-      if (_cameraController != null && _cameraController!.value.isInitialized) {
-        final newState = !_isFlashOn;
-        await _cameraController!.setFlashMode(
-          newState ? FlashMode.torch : FlashMode.off,
-        );
-        if (mounted) setState(() => _isFlashOn = newState);
-        return;
-      }
-
-      // Fallback: toggle MobileScanner torch
-      try {
-        await _mobileScannerController.toggleTorch();
-        if (mounted) setState(() => _isFlashOn = !_isFlashOn);
-      } catch (e) {
-        debugPrint('MobileScanner toggleTorch failed: $e');
-      }
-    } catch (e) {
-      debugPrint('Toggle flash failed: $e');
-    }
   }
 
   // ... (analyze, navigate, save, showActionSheet methods remain unchanged) ...
@@ -318,7 +319,7 @@ class _ScanScreenState extends State<ScanScreen> {
       const prompt = """
 You are an eco-expert AI. Analyze the uploaded product image and describe clearly, exactly in this format. Provide 'N/A' if information is not visible or applicable.
 Product name: [Product Name]
-Category: [Product Category, e.g., Personal Care (Sunscreen)]
+Category: [Product Category, e.g., Food & Beverages (F&B), Personal Care, Household Products, Electronics, Clothing & Accessories, Health & Medicine, Baby & Kids, Pet Supplies, Automotive, Home & Furniture]
 Ingredients: [List of ingredients, comma-separated, e.g., Water, Zinc Oxide, etc.]
 Eco-friendliness rating: [A, B, C, D, E or etc.]
 Carbon Footprint: [Estimated CO2e per unit, e.g., 0.36 kg CO2e per unit]
@@ -327,6 +328,7 @@ Disposal method: [Suggested disposal, e.g., Rinse and recycle locally]
 Contains microplastics? [Yes/No]
 Palm oil derivative? [Yes/No (No trace/Contains)]
 Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
+Better Alternative Product (Higher Eco Score): [Name of an alternative product that belongs to the same category but has a better Eco-friendliness rating — e.g., from C to A or B. Include short reason why it’s better, e.g., “Uses biodegradable surfactants and recycled paper packaging.”]
       """;
 
       final content = [
@@ -499,147 +501,23 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
   // B. Live Preview (_buildCameraView)
   Widget _buildCameraView() {
     // ⚠️ UNCOMMENT this block for actual camera initialization check
-    // If we encountered an error during initialization, show a friendly message
-    if (_cameraError != null) {
-      return Expanded(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  size: 56,
-                  color: Colors.white70,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  _cameraError!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white70, fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Please ensure the app has camera permission and you are running on a device/emulator with a camera.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white54),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     if (_cameraController == null || !_isCameraInitialized) {
-      // If the native camera controller failed or isn't ready, fall back to MobileScanner preview
-      // which uses a different camera implementation and often works when CameraPreview shows black.
-      debugPrint(
-        'CameraController not ready - falling back to MobileScanner preview',
-      );
-      return Expanded(
-        child: Container(
-          color: Colors.black,
-          child: Stack(
-            children: [
-              MobileScanner(
-                controller: _mobileScannerController,
-                fit: BoxFit.cover,
-                // Do not react to detections here; this is just a visual preview/fallback.
-                onDetect: (capture) {},
-              ),
-              // Bottom controls overlay (flash, capture, gallery)
-              Positioned(
-                bottom: 18,
-                left: 0,
-                right: 0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildCameraButton(
-                      icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
-                      onTap: () async {
-                        await _toggleFlash();
-                      },
-                    ),
-                    // Capture
-                    InkWell(
-                      onTap: _capturePicture,
-                      child: Container(
-                        width: 72,
-                        height: 72,
-                        decoration: BoxDecoration(
-                          color: kPrimaryGreen,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.25),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.camera_alt,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ),
-                    ),
-                    _buildCameraButton(
-                      icon: Icons.image,
-                      onTap: () {
-                        _pickImage(ImageSource.gallery);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+      return const Expanded(
+        child: Center(child: CircularProgressIndicator(color: kPrimaryGreen)),
       );
     }
 
-    // When initialized, compute a size that fills the screen width while
-    // preserving the camera preview aspect ratio. This prevents the preview
-    // from appearing cropped to one side.
-    final media = MediaQuery.of(context);
-    final screenWidth = media.size.width;
-    // cameraController.value.previewSize may be null on some platforms; guard it.
-    final previewSize = _cameraController!.value.previewSize;
-    double aspectRatio = 16 / 9;
-    if (previewSize != null && previewSize.height != 0) {
-      aspectRatio = previewSize.width / previewSize.height;
-    } else if (_cameraController!.value.aspectRatio != 0) {
-      aspectRatio = _cameraController!.value.aspectRatio;
-    }
-
-    final previewHeight = screenWidth / aspectRatio;
-
+    // --- FIX: Simplified Camera Preview Layout using AspectRatio ---
     return Expanded(
       child: Container(
         color: Colors.black,
         width: double.infinity,
         child: Stack(
           children: [
-            // Center a SizedBox with the exact width/height calculated so the
-            // CameraPreview paints into the correct area and fills the width.
-            Center(
-              child: SizedBox(
-                width: screenWidth,
-                height: previewHeight,
-                child: ClipRect(
-                  child: OverflowBox(
-                    alignment: Alignment.center,
-                    maxWidth: double.infinity,
-                    maxHeight: double.infinity,
-                    child: CameraPreview(_cameraController!),
-                  ),
-                ),
-              ),
-            ),
+            // Fill the available area with the CameraPreview. Using SizedBox.expand
+            // keeps the preview filling the parent while avoiding placing an
+            // Expanded inside a non-Flex ancestor (which would be invalid).
+            SizedBox.expand(child: CameraPreview(_cameraController!)),
 
             // Scanner Frame/Corner Indicators (White borders for scanning area)
             Center(
@@ -714,14 +592,6 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
                         }
                       },
                     ),
-                    // // Top-Center: Upload from Gallery
-                    // _buildCameraButton(
-                    //   icon: Icons.image,
-                    //   onTap: () {
-                    //     debugPrint('Opening photo gallery...');
-                    //     _pickImage(ImageSource.gallery);
-                    //   },
-                    // ),
                     // Top-Right: Capture Button (Replaced Flip)
                     _buildCameraButton(
                       icon: Icons.camera_alt, // Capture Icon
@@ -739,67 +609,6 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
                 ),
               ),
             ),
-
-            // Bottom controls overlay (flash, capture, gallery) for native CameraPreview path
-            Positioned(
-              bottom: 18,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  _buildCameraButton(
-                    icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
-                    onTap: () async {
-                      await _toggleFlash();
-                    },
-                  ),
-                  // Capture
-                  InkWell(
-                    onTap: _capturePicture,
-                    child: Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: kPrimaryGreen,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.camera_alt,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ),
-                  ),
-                  _buildCameraButton(
-                    icon: Icons.image,
-                    onTap: () {
-                      _pickImage(ImageSource.gallery);
-                    },
-                  ),
-                ],
-              ),
-            ),
-
-            // Bottom Center Capture Button (Scan Barcode) - Stays as the FAB
-            // Align(
-            //   alignment: Alignment.bottomCenter,
-            //   child: Padding(
-            //     padding: const EdgeInsets.only(bottom: 20.0),
-            //     child: FloatingActionButton(
-            //       onPressed: _scanBarcodeAndAnalyze, // Barcode scan/Image Action Sheet
-            //       backgroundColor: kPrimaryGreen,
-            //       child: const Icon(Icons.qr_code_scanner, color: Colors.white, size: 30),
-            //     ),
-            //   ),
-            // ),
           ],
         ),
       ),
@@ -932,8 +741,12 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
 
   // --- Bottom Navigation Bar ---
   Widget _buildBottomNavBar() {
-    return AppBottomNavigationBar(
+    return BottomNavigationBar(
+      type: BottomNavigationBarType.fixed,
       currentIndex: _selectedIndex,
+      selectedItemColor: kPrimaryGreen,
+      unselectedItemColor: Colors.grey,
+      backgroundColor: Colors.black,
       onTap: (index) async {
         if (index == 0) {
           Navigator.of(
@@ -942,9 +755,11 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
           return;
         }
         if (index == 1) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const AlternativeScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const alternative_screen.AlternativeScreen(),
+            ),
+          );
           return;
         }
         if (index == 2) {
@@ -952,17 +767,38 @@ Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
         }
         if (index == 3) {
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()),
+            MaterialPageRoute(
+              // ⬅️ CRUCIAL CHANGE HERE
+              builder: (_) => const DisposalGuidanceScreen(productId: null),
+            ),
           );
           return;
         }
         if (index == 4) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const profile_screen.ProfileScreen(),
+            ),
+          );
           return;
         }
       },
+      items: const <BottomNavigationBarItem>[
+        BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.shopping_cart),
+          label: 'Alternative',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.qr_code_scanner),
+          label: 'Scan',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.delete_sweep),
+          label: 'Dispose',
+        ),
+        BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+      ],
     );
   }
 
@@ -1051,81 +887,5 @@ class _CornerPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-// Full screen barcode scanner page using mobile_scanner. Returns the scanned
-// barcode string via Navigator.pop(context, code).
-class BarcodeScannerPage extends StatefulWidget {
-  const BarcodeScannerPage({Key? key}) : super(key: key);
-
-  @override
-  State<BarcodeScannerPage> createState() => _BarcodeScannerPageState();
-}
-
-class _BarcodeScannerPageState extends State<BarcodeScannerPage> {
-  final MobileScannerController _controller = MobileScannerController();
-  bool _scanned = false;
-  bool _torchOn = false;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(_torchOn ? Icons.flash_on : Icons.flash_off),
-            onPressed: () async {
-              try {
-                await _controller.toggleTorch();
-                setState(() {
-                  _torchOn = !_torchOn;
-                });
-              } catch (_) {}
-            },
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: (capture) {
-              if (_scanned) return;
-              final List<Barcode> barcodes = capture.barcodes;
-              if (barcodes.isEmpty) return;
-              final String? raw = barcodes.first.rawValue;
-              if (raw == null || raw.isEmpty) return;
-              _scanned = true;
-              // Stop the camera before popping to avoid camera errors on some devices
-              _controller.stop();
-              Navigator.of(context).pop(raw);
-            },
-          ),
-
-          // Center guide box
-          Center(
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.8,
-              height: MediaQuery.of(context).size.width * 0.4,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white54, width: 2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// BarcodeScannerPage removed — the Scan screen now uses the native camera
+// capture flow (see _capturePicture) instead of the mobile_scanner plugin.

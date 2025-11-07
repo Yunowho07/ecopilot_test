@@ -75,8 +75,34 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
         _product = _defaultData;
         // specific product guidance not found, continue with general tips
       } else {
-        _product = doc.data();
-        if (_product != null) {
+        // Normalize various possible field names written by different save flows
+        final raw = doc.data();
+        if (raw != null) {
+          final Map<String, dynamic> norm = Map<String, dynamic>.from(raw);
+
+          // Common legacy -> canonical mappings
+          if (norm['name'] == null && norm['product_name'] != null) {
+            norm['name'] = norm['product_name'];
+          }
+          if (norm['ecoScore'] == null && norm['eco_score'] != null) {
+            norm['ecoScore'] = norm['eco_score'];
+          }
+          if (norm['imageUrl'] == null && norm['image_url'] != null) {
+            norm['imageUrl'] = norm['image_url'];
+          }
+          if (norm['material'] == null && norm['packaging'] != null) {
+            norm['material'] = norm['packaging'];
+          }
+          if (norm['createdAt'] == null && norm['timestamp'] != null) {
+            norm['createdAt'] = norm['timestamp'];
+          }
+
+          // Normalize lists that might be stored as strings
+          norm['disposalSteps'] = _ensureList(norm['disposalSteps']);
+          norm['tips'] = _ensureList(norm['tips']);
+
+          _product = norm;
+
           _product!['name'] = _product!['name'] ?? 'Scanned Item';
           _product!['category'] = _product!['category'] ?? 'General';
           _product!['material'] = _product!['material'] ?? 'Unknown';
@@ -88,6 +114,33 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // Normalize various firestore field shapes into a List for safe UI iteration.
+  List<dynamic> _ensureList(dynamic value) {
+    if (value == null) return <dynamic>[];
+    if (value is List) return value;
+    if (value is Iterable) return value.toList();
+    if (value is String) {
+      // Try common delimiters (newline or comma) to split multi-line/string stored lists.
+      if (value.contains('\n')) {
+        return value
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+      if (value.contains(',')) {
+        return value
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      }
+      return <dynamic>[value];
+    }
+    // Fallback: wrap single scalar values
+    return <dynamic>[value];
   }
 
   Future<void> _openMapsForRecycling([
@@ -140,8 +193,11 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
         'ecoScore': product['ecoScore'] ?? 'N/A',
         'imageUrl': product['imageUrl'] ?? '',
         'material': product['material'] ?? 'Unknown',
-        'disposalSteps': product['disposalSteps'] ?? ['Rinse and recycle'],
-        'tips': product['tips'] ?? ['Reduce waste'],
+        // Ensure lists are stored as arrays in Firestore regardless of incoming shape
+        'disposalSteps': _ensureList(
+          product['disposalSteps'],
+        ).map((e) => e.toString()).toList(),
+        'tips': _ensureList(product['tips']).map((e) => e.toString()).toList(),
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
@@ -295,8 +351,8 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
     final String category = productData['category'] ?? 'N/A';
     final String material = productData['material'] ?? 'N/A';
     final String ecoScore = productData['ecoScore'] ?? 'N/A';
-    final List disposalSteps = productData['disposalSteps'] ?? [];
-    final List tips = productData['tips'] ?? [];
+    final List disposalSteps = _ensureList(productData['disposalSteps']);
+    final List tips = _ensureList(productData['tips']);
     final String imageUrl = productData['imageUrl'] ?? '';
 
     Color getScoreColor(String score) {
@@ -559,9 +615,9 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           return;
         }
         if (index == 3) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()),
+          );
           return;
         }
         if (index == 4) {
