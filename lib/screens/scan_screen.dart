@@ -18,6 +18,7 @@ import 'package:ecopilot_test/widgets/app_drawer.dart';
 import '/utils/constants.dart';
 import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'package:ecopilot_test/screens/result_screen.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 // Colors are defined in lib/utils/constants.dart
 
@@ -37,7 +38,7 @@ import 'package:ecopilot_test/screens/result_screen.dart';
 // }
 
 class ScanScreen extends StatefulWidget {
-  const ScanScreen({Key? key}) : super(key: key);
+  const ScanScreen({super.key});
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -49,10 +50,14 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   bool _isCameraInitialized = false;
   List<CameraDescription> _cameras = [];
 
+  // Barcode scanner
+  MobileScannerController? _barcodeScannerController;
+  bool _isBarcodeMode = false; // Toggle between image and barcode scanning
+
   bool _isLoading = false;
   late final String _geminiApiKey;
   final ImagePicker _picker = ImagePicker();
-  int _selectedIndex = 2; // Default to 'Scan' tab
+  final int _selectedIndex = 2; // Default to 'Scan' tab
   bool _isFlashOn = false; // State for flashlight (controls the icon)
   // bool _isFrontCamera = false; // State for camera toggle (controls the icon)
 
@@ -68,6 +73,12 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
     // Start camera initialization
     WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
+
+    // Initialize barcode scanner
+    _barcodeScannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+    );
   }
 
   Future<void> _initializeCamera() async {
@@ -127,6 +138,9 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     try {
       _cameraController?.dispose();
+    } catch (_) {}
+    try {
+      _barcodeScannerController?.dispose();
     } catch (_) {}
     super.dispose();
   }
@@ -189,12 +203,73 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
     }
   }
 
-  // NOTE: This handles the bottom FAB tap
+  // NOTE: This handles the barcode scan toggle
   Future<void> _scanBarcodeAndAnalyze() async {
-    debugPrint("Triggering Barcode/Camera Scan (FAB Tapped)...");
-    // Using native camera capture flow: take a picture and analyze the image.
-    // This replaces the previous mobile_scanner flow which was removed.
-    await _capturePicture();
+    debugPrint("Toggling to Barcode Scan Mode...");
+    setState(() {
+      _isBarcodeMode = true;
+    });
+  }
+
+  // Toggle back to image mode
+  void _switchToImageMode() {
+    setState(() {
+      _isBarcodeMode = false;
+    });
+  }
+
+  // Handle barcode detection
+  Future<void> _handleBarcodeDetection(BarcodeCapture capture) async {
+    final List<Barcode> barcodes = capture.barcodes;
+    if (barcodes.isEmpty || _isLoading) return;
+
+    final barcode = barcodes.first;
+    if (barcode.rawValue == null) return;
+
+    final barcodeValue = barcode.rawValue!;
+    debugPrint("Barcode detected: $barcodeValue");
+
+    setState(() => _isLoading = true);
+
+    try {
+      // Try to lookup from Open Food Facts or Open Beauty Facts
+      final productData = await _lookupBarcode(barcodeValue);
+
+      if (productData != null) {
+        // Navigate to result screen
+        setState(() {
+          _isLoading = false;
+          _isBarcodeMode = false;
+        });
+        _navigateToResultScreen(productData);
+      } else {
+        // Product not found
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Product not found in database (Barcode: $barcodeValue)',
+              ),
+              backgroundColor: Colors.orange,
+              action: SnackBarAction(
+                label: 'Retry',
+                textColor: Colors.white,
+                onPressed: () => setState(() => _isLoading = false),
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      debugPrint('Error looking up barcode: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   // Lookup product by barcode from Open Beauty Facts
@@ -250,6 +325,23 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
         );
       }
 
+      // Safely derive carbon footprint and disposal method from available product fields,
+      // falling back to sensible defaults when data is missing.
+      final carbonFootprint =
+          (prod['carbon_footprint'] as String?) ??
+          (prod['environment_impact'] as String?) ??
+          'N/A';
+      final disposalMethod =
+          (prod['disposal'] as String?) ??
+          (prod['recycling_instructions'] as String?) ??
+          // If packaging indicates common recyclable materials, provide a generic hint
+          ((prod['packaging_tags'] is List &&
+                  (prod['packaging_tags'] as List).any(
+                    (t) => t.toString().toLowerCase().contains('recycl'),
+                  ))
+              ? 'Check local recycling guidelines'
+              : 'N/A');
+
       final analysis = ProductAnalysisData(
         imageFile: null,
         imageUrl:
@@ -258,9 +350,9 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
         productName: name,
         category: (prod['categories'] as String?) ?? 'N/A',
         ingredients: ingredients,
-        carbonFootprint: 'N/A',
+        carbonFootprint: carbonFootprint,
         packagingType: packaging,
-        disposalMethod: 'N/A',
+        disposalMethod: disposalMethod,
         containsMicroplastics: containsMicroplastics,
         palmOilDerivative: palmOilDerivative,
         crueltyFree: crueltyFree,
@@ -416,6 +508,18 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
           ecoScore: analysisData.ecoScore,
           carbonFootprint: analysisData.carbonFootprint,
           imageUrl: imageUrl,
+          category: analysisData.category,
+          ingredients: analysisData.ingredients,
+          packagingType: analysisData.packagingType,
+          disposalSteps: analysisData.disposalMethod
+              .split('\n')
+              .where((s) => s.trim().isNotEmpty)
+              .toList(),
+          tips: analysisData.tips,
+          nearbyCenter: analysisData.nearbyCenter,
+          containsMicroplastics: analysisData.containsMicroplastics,
+          palmOilDerivative: analysisData.palmOilDerivative,
+          crueltyFree: analysisData.crueltyFree,
         );
         debugPrint("✅ Scan saved to Firestore via FirebaseService.");
       } catch (e) {
@@ -430,183 +534,585 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
     }
   }
 
-  // void _showImageSourceActionSheet(BuildContext context) {
-  //   showModalBottomSheet(
-  //     context: context,
-  //     shape: const RoundedRectangleBorder(
-  //       borderRadius: BorderRadius.vertical(top: Radius.circular(25.0)),
-  //     ),
-  //     builder: (BuildContext context) {
-  //       return Column(
-  //         mainAxisSize: MainAxisSize.min,
-  //         children: <Widget>[
-  //           const Padding(
-  //             padding: EdgeInsets.all(16.0),
-  //             child: Text(
-  //               'Select Image Source',
-  //               style: TextStyle(
-  //                 fontSize: 20,
-  //                 fontWeight: FontWeight.bold,
-  //                 color: kPrimaryGreen,
-  //               ),
-  //             ),
-  //           ),
-  //           ListTile(
-  //             leading: const Icon(Icons.photo_library, color: kPrimaryGreen),
-  //             title: const Text(
-  //               'Photo Gallery',
-  //               style: TextStyle(fontSize: 16),
-  //             ),
-  //             onTap: () {
-  //               Navigator.pop(context);
-  //               _pickImage(ImageSource.gallery);
-  //             },
-  //           ),
-  //           ListTile(
-  //             leading: const Icon(Icons.camera_alt, color: kPrimaryGreen),
-  //             title: const Text('Use Camera', style: TextStyle(fontSize: 16)),
-  //             onTap: () {
-  //               Navigator.pop(context);
-  //               _pickImage(ImageSource.camera);
-  //             },
-  //           ),
-  //           const SizedBox(height: 20),
-  //         ],
-  //       );
-  //     },
-  //   );
-  // }
-
   // --- UI Builder Widgets ---
 
-  // Small circle button for camera controls
-  Widget _buildCameraButton({
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.4),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white54, width: 1.5),
+  // Barcode Scanner View
+  Widget _buildBarcodeScanner() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.black, const Color(0xFF1a1a1a)],
         ),
-        child: Icon(icon, color: Colors.white, size: 24),
+      ),
+      child: Stack(
+        children: [
+          // Mobile Scanner
+          MobileScanner(
+            controller: _barcodeScannerController,
+            onDetect: _handleBarcodeDetection,
+          ),
+
+          // Gradient overlay
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.3),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.5),
+                ],
+                stops: const [0.0, 0.2, 0.7, 1.0],
+              ),
+            ),
+          ),
+
+          // Scanner Frame
+          Center(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.75,
+              height: 250,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: kPrimaryGreen.withOpacity(0.5),
+                  width: 3,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  // Corner accents
+                  ...List.generate(4, (index) {
+                    return Positioned(
+                      top: index < 2 ? -3 : null,
+                      bottom: index >= 2 ? -3 : null,
+                      left: index % 2 == 0 ? -3 : null,
+                      right: index % 2 == 1 ? -3 : null,
+                      child: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: index < 2
+                                ? BorderSide(color: kPrimaryGreen, width: 5)
+                                : BorderSide.none,
+                            bottom: index >= 2
+                                ? BorderSide(color: kPrimaryGreen, width: 5)
+                                : BorderSide.none,
+                            left: index % 2 == 0
+                                ? BorderSide(color: kPrimaryGreen, width: 5)
+                                : BorderSide.none,
+                            right: index % 2 == 1
+                                ? BorderSide(color: kPrimaryGreen, width: 5)
+                                : BorderSide.none,
+                          ),
+                          borderRadius: BorderRadius.only(
+                            topLeft: index == 0
+                                ? const Radius.circular(20)
+                                : Radius.zero,
+                            topRight: index == 1
+                                ? const Radius.circular(20)
+                                : Radius.zero,
+                            bottomLeft: index == 2
+                                ? const Radius.circular(20)
+                                : Radius.zero,
+                            bottomRight: index == 3
+                                ? const Radius.circular(20)
+                                : Radius.zero,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+
+                  // Center content
+                  Center(
+                    child: _isLoading
+                        ? Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.8),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: kPrimaryGreen.withOpacity(0.5),
+                                width: 2,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(
+                                  color: kPrimaryGreen,
+                                  strokeWidth: 3,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  "Looking up product...",
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.qr_code_scanner,
+                                color: kPrimaryGreen.withOpacity(0.7),
+                                size: 60,
+                              ),
+                              const SizedBox(height: 16),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.7),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: kPrimaryGreen.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  'Scan product barcode',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Top Controls
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 20,
+            right: 20,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildModernControlButton(
+                  icon: Icons.arrow_back,
+                  label: 'Image Mode',
+                  onTap: _switchToImageMode,
+                ),
+                _buildModernControlButton(
+                  icon: Icons.flash_on,
+                  label: 'Flash',
+                  onTap: () {
+                    _barcodeScannerController?.toggleTorch();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 
   // B. Live Preview (_buildCameraView)
   Widget _buildCameraView() {
+    // Show barcode scanner if in barcode mode
+    if (_isBarcodeMode) {
+      return _buildBarcodeScanner();
+    }
+
+    // Otherwise show regular camera for image recognition
     // ⚠️ UNCOMMENT this block for actual camera initialization check
     if (_cameraController == null || !_isCameraInitialized) {
-      return const Expanded(
-        child: Center(child: CircularProgressIndicator(color: kPrimaryGreen)),
+      return Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [const Color(0xFF1a1a1a), const Color(0xFF0a0a0a)],
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: kPrimaryGreen, strokeWidth: 3),
+              const SizedBox(height: 20),
+              Text(
+                'Initializing Camera...',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
-    // --- FIX: Simplified Camera Preview Layout using AspectRatio ---
-    return Expanded(
-      child: Container(
-        color: Colors.black,
-        width: double.infinity,
-        child: Stack(
-          children: [
-            // Fill the available area with the CameraPreview. Using SizedBox.expand
-            // keeps the preview filling the parent while avoiding placing an
-            // Expanded inside a non-Flex ancestor (which would be invalid).
-            SizedBox.expand(child: CameraPreview(_cameraController!)),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.black, const Color(0xFF1a1a1a)],
+        ),
+      ),
+      width: double.infinity,
+      child: Stack(
+        children: [
+          // Camera Preview with rounded corners effect
+          Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(0),
+              child: SizedBox.expand(child: CameraPreview(_cameraController!)),
+            ),
+          ),
 
-            // Scanner Frame/Corner Indicators (White borders for scanning area)
-            Center(
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.8,
-                height:
-                    MediaQuery.of(context).size.width *
-                    0.8 *
-                    0.7, // Rectangular scan area
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white10, width: 2),
+          // Gradient overlay for better contrast
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.3),
+                  Colors.transparent,
+                  Colors.transparent,
+                  Colors.black.withOpacity(0.5),
+                ],
+                stops: const [0.0, 0.2, 0.7, 1.0],
+              ),
+            ),
+          ),
+
+          // Modern Scanner Frame with animated corners
+          Center(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.85,
+              height: MediaQuery.of(context).size.width * 0.85 * 0.7,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: kPrimaryGreen.withOpacity(0.3),
+                  width: 2,
                 ),
-                child: CustomPaint(
-                  painter: _CornerPainter(
-                    color: Colors.white,
-                    cornerLength: 40,
-                    cornerThickness: 4,
+                boxShadow: [
+                  BoxShadow(
+                    color: kPrimaryGreen.withOpacity(0.2),
+                    blurRadius: 30,
+                    spreadRadius: 5,
                   ),
-                  child: Center(
+                ],
+              ),
+              child: Stack(
+                children: [
+                  // Corner accents
+                  ...List.generate(4, (index) {
+                    return Positioned(
+                      top: index < 2 ? -2 : null,
+                      bottom: index >= 2 ? -2 : null,
+                      left: index % 2 == 0 ? -2 : null,
+                      right: index % 2 == 1 ? -2 : null,
+                      child: Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          border: Border(
+                            top: index < 2
+                                ? BorderSide(color: kPrimaryGreen, width: 4)
+                                : BorderSide.none,
+                            bottom: index >= 2
+                                ? BorderSide(color: kPrimaryGreen, width: 4)
+                                : BorderSide.none,
+                            left: index % 2 == 0
+                                ? BorderSide(color: kPrimaryGreen, width: 4)
+                                : BorderSide.none,
+                            right: index % 2 == 1
+                                ? BorderSide(color: kPrimaryGreen, width: 4)
+                                : BorderSide.none,
+                          ),
+                          borderRadius: BorderRadius.only(
+                            topLeft: index == 0
+                                ? const Radius.circular(24)
+                                : Radius.zero,
+                            topRight: index == 1
+                                ? const Radius.circular(24)
+                                : Radius.zero,
+                            bottomLeft: index == 2
+                                ? const Radius.circular(24)
+                                : Radius.zero,
+                            bottomRight: index == 3
+                                ? const Radius.circular(24)
+                                : Radius.zero,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+
+                  // Center content
+                  Center(
                     child: _isLoading
-                        ? Column(
+                        ? Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.7),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: kPrimaryGreen.withOpacity(0.5),
+                                width: 2,
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircularProgressIndicator(
+                                  color: kPrimaryGreen,
+                                  strokeWidth: 3,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  "Analyzing Product...",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  "Please wait",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.white60,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const CircularProgressIndicator(
-                                color: kPrimaryGreen,
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: kPrimaryGreen.withOpacity(0.15),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: kPrimaryGreen.withOpacity(0.3),
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Icon(
+                                  Icons.qr_code_scanner,
+                                  color: kPrimaryGreen,
+                                  size: 48,
+                                ),
                               ),
                               const SizedBox(height: 16),
-                              Text(
-                                "Analyzing product...",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: Colors.white.withOpacity(0.8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.6),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: kPrimaryGreen.withOpacity(0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  'Position product here',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],
-                          )
-                        : Icon(
-                            Icons.qr_code_scanner,
-                            color: Colors.white.withOpacity(0.5),
-                            size: 80,
                           ),
                   ),
-                ),
+                ],
               ),
             ),
+          ),
 
-            // Top Control Bar (Flash and Capture/Gallery)
-            Positioned(
-              bottom: 30,
-              left: 0,
-              right: 0,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Top-Left: Flashlight Toggle
-                    _buildCameraButton(
-                      icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
-                      onTap: () {
-                        // ⚠️ UNCOMMENT the check for camera initialization
-                        if (_cameraController != null &&
-                            _cameraController!.value.isInitialized) {
-                          setState(() {
-                            _isFlashOn = !_isFlashOn;
-                            // Actual flash control command:
-                            _cameraController!.setFlashMode(
-                              _isFlashOn ? FlashMode.torch : FlashMode.off,
-                            );
-                            debugPrint('Flashlight toggled to: $_isFlashOn');
-                          });
-                        }
-                      },
-                    ),
-                    // Top-Right: Capture Button (Replaced Flip)
-                    _buildCameraButton(
-                      icon: Icons.camera_alt, // Capture Icon
-                      onTap: _capturePicture,
-                    ),
-                    // Top-Center: Upload from Gallery
-                    _buildCameraButton(
-                      icon: Icons.image,
-                      onTap: () {
-                        debugPrint('Opening photo gallery...');
-                        _pickImage(ImageSource.gallery);
-                      },
-                    ),
-                  ],
+          // Top Controls Bar - Redesigned
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 16,
+            left: 20,
+            right: 20,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildModernControlButton(
+                  icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
+                  label: _isFlashOn ? 'Flash On' : 'Flash Off',
+                  onTap: () {
+                    if (_cameraController != null &&
+                        _cameraController!.value.isInitialized) {
+                      setState(() {
+                        _isFlashOn = !_isFlashOn;
+                        _cameraController!.setFlashMode(
+                          _isFlashOn ? FlashMode.torch : FlashMode.off,
+                        );
+                      });
+                    }
+                  },
                 ),
+              ],
+            ),
+          ),
+
+          // Bottom Control Panel - Redesigned
+          Positioned(
+            bottom: 30,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                // Instruction text
+                Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 40),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(
+                      color: kPrimaryGreen.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.info_outline, color: kPrimaryGreen, size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Align product within frame',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Action Buttons Row
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 30),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      // Gallery Button
+                      _buildActionButton(
+                        icon: Icons.photo_library_outlined,
+                        label: 'Gallery',
+                        onTap: () => _pickImage(ImageSource.gallery),
+                      ),
+
+                      // Capture Button (Large Center)
+                      GestureDetector(
+                        onTap: _capturePicture,
+                        child: Container(
+                          width: 75,
+                          height: 75,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                kPrimaryGreen,
+                                kPrimaryGreen.withOpacity(0.8),
+                              ],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: kPrimaryGreen.withOpacity(0.5),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                            border: Border.all(color: Colors.white, width: 4),
+                          ),
+                          child: Icon(
+                            Icons.camera_alt,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                      ),
+
+                      // Barcode Scan Button
+                      _buildActionButton(
+                        icon: Icons.qr_code_scanner,
+                        label: 'Barcode',
+                        onTap: _scanBarcodeAndAnalyze,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Modern control button (for flash, etc.)
+  Widget _buildModernControlButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(25),
+          border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -615,125 +1121,303 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
     );
   }
 
+  // Action button for bottom controls
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.7),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [Icon(icon, color: Colors.white, size: 24)],
+        ),
+      ),
+    );
+  }
+
   // The main dark bottom section containing the logo, search, and help text
   Widget _buildScannerOverlay() {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E), // Dark grey/black for the bottom overlay
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [const Color(0xFF1a1a1a), const Color(0xFF0f0f0f)],
+        ),
       ),
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Logo and App Name
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/ecopilot_logo.png',
-                width: 50,
-                height: 50,
-                fit: BoxFit.contain,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Eco',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w300,
+          // Logo and App Name - Redesigned
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: kPrimaryGreen.withOpacity(0.2),
+                  width: 1,
                 ),
               ),
-              Text(
-                'Pilot',
-                style: TextStyle(
-                  color: kPrimaryGreen,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: kPrimaryGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: kPrimaryGreen.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Image.asset(
+                    'assets/ecopilot_logo.png',
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.contain,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Search Instruction Text
-          const Text(
-            'Scan a barcode or search for a product',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+                const SizedBox(width: 12),
+                const Text(
+                  'Eco',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: 1,
+                  ),
+                ),
+                Text(
+                  'Pilot',
+                  style: TextStyle(
+                    color: kPrimaryGreen,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 24),
 
-          // Search Bar
-          TextField(
-            onSubmitted: (query) {
-              // TODO: Implement manual product search logic
-              debugPrint("Search for product: $query");
-            },
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: 'Search for a product',
-              hintStyle: TextStyle(color: Colors.white54),
-              filled: true,
-              fillColor: Colors.black, // Darker background for the search bar
-              contentPadding: const EdgeInsets.symmetric(
-                vertical: 0,
-                horizontal: 20,
+          // Search Instruction Text - More elegant
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.touch_app, color: kPrimaryGreen, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                _isBarcodeMode
+                    ? 'Scanning barcode from database...'
+                    : 'Scan image or barcode for eco-insights',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: 0.3,
+                ),
               ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(30),
-                borderSide: BorderSide.none,
-              ),
-              prefixIcon: const Icon(Icons.search, color: kPrimaryGreen),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.qr_code_scanner, color: kPrimaryGreen),
-                onPressed: _scanBarcodeAndAnalyze,
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Search Bar - Modern redesign
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: kPrimaryGreen.withOpacity(0.1),
+                  blurRadius: 20,
+                  spreadRadius: 0,
+                ),
+              ],
+            ),
+            child: TextField(
+              onSubmitted: (query) {
+                debugPrint("Search for product: $query");
+              },
+              style: const TextStyle(color: Colors.white, fontSize: 15),
+              decoration: InputDecoration(
+                hintText: 'Search products...',
+                hintStyle: TextStyle(color: Colors.white38, fontSize: 15),
+                filled: true,
+                fillColor: const Color(0xFF262626),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 16,
+                  horizontal: 24,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide(
+                    color: kPrimaryGreen.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide(
+                    color: kPrimaryGreen.withOpacity(0.2),
+                    width: 1,
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                  borderSide: BorderSide(color: kPrimaryGreen, width: 2),
+                ),
+                prefixIcon: Icon(Icons.search, color: kPrimaryGreen, size: 22),
+                suffixIcon: Container(
+                  margin: const EdgeInsets.only(right: 4),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.qr_code_scanner,
+                      color: kPrimaryGreen,
+                      size: 24,
+                    ),
+                    onPressed: _scanBarcodeAndAnalyze,
+                    tooltip: 'Scan barcode',
+                  ),
+                ),
               ),
             ),
           ),
 
-          const SizedBox(height: 30),
+          const SizedBox(height: 24),
 
-          // 'Help us translate' section (Simulating the secondary card)
+          // Quick Action Cards - Redesigned
+          Row(
+            children: [
+              Expanded(
+                child: _buildQuickActionCard(
+                  icon: Icons.eco,
+                  title: 'Eco Score',
+                  subtitle: 'Check rating',
+                  color: kPrimaryGreen,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildQuickActionCard(
+                  icon: Icons.recycling,
+                  title: 'Disposal',
+                  subtitle: 'Learn how',
+                  color: Colors.blue,
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Help section - More compact and modern
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: const Color(0xFF333333),
-              borderRadius: BorderRadius.circular(15),
+              color: const Color(0xFF262626),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: kPrimaryGreen.withOpacity(0.15),
+                width: 1,
+              ),
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.help_outline, color: kPrimaryGreen, size: 28),
-                const SizedBox(width: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: kPrimaryGreen.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.volunteer_activism,
+                    color: kPrimaryGreen,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Help us improve our data!',
+                        'Join Our Mission',
                         style: TextStyle(
-                          color: kPrimaryGreen,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Translate the app, submit missing products, or verify ingredients.',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Help build a sustainable database',
+                        style: TextStyle(color: Colors.white60, fontSize: 12),
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.arrow_forward_ios, color: Colors.white54, size: 16),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  color: kPrimaryGreen.withOpacity(0.6),
+                  size: 16,
+                ),
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // Quick action card widget
+  Widget _buildQuickActionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF262626),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.2), width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(subtitle, style: TextStyle(color: Colors.white54, fontSize: 11)),
         ],
       ),
     );
@@ -804,18 +1488,20 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
 
   @override
   Widget build(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final navBarHeight = 56.0; // Approximate bottom nav bar height
+    final availableHeight = screenHeight - navBarHeight;
+
     return Scaffold(
       drawer: const AppDrawer(),
       // Remove AppBar so camera view can go full height
       body: Column(
         children: [
-          // 1. Camera View Area (Covers everything above the bottom overlay)
-          _buildCameraView(),
+          // 1. Camera View Area - Now takes 60% of available screen
+          SizedBox(height: availableHeight * 0.6, child: _buildCameraView()),
 
-          // 2. Scanner Overlay (Dark section with search and logo)
-          _buildScannerOverlay(),
-
-          // 3. Bottom Navigation Bar (Handled outside of Column structure by Scaffold)
+          // 2. Scanner Overlay - Takes remaining 40%
+          Expanded(child: SingleChildScrollView(child: _buildScannerOverlay())),
         ],
       ),
       bottomNavigationBar: _buildBottomNavBar(),

@@ -20,71 +20,251 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
     final String name = product['name'] ?? 'Scanned product';
     final String category = product['category'] ?? 'N/A';
     final String material = product['material'] ?? 'Unknown';
-    final String imageUrl =
-        product['imageUrl'] ??
-        'https://placehold.co/100x120/A8D8B9/212121?text=Product';
+    final String imageUrl = product['imageUrl'] ?? '';
+    final dynamic createdAt = product['createdAt'];
+    final int ecoScore = product['eco_score'] ?? product['ecoScore'] ?? 0;
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ListTile(
+    // Format date/time
+    String formattedDateTime = 'Recently';
+    if (createdAt != null) {
+      DateTime dt;
+      if (createdAt is Timestamp) {
+        dt = createdAt.toDate();
+      } else if (createdAt is int) {
+        dt = DateTime.fromMillisecondsSinceEpoch(createdAt);
+      } else {
+        dt = DateTime.now();
+      }
+      formattedDateTime =
+          '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+
+    // Convert score to grade
+    String getEcoGrade(int score) {
+      if (score >= 80) return 'A';
+      if (score >= 60) return 'B';
+      if (score >= 40) return 'C';
+      if (score >= 20) return 'D';
+      if (score > 0) return 'E';
+      return 'N/A';
+    }
+
+    // Get eco score color based on grade
+    Color getEcoScoreColor(int score) {
+      final ecoScoreColors = {
+        'A': kResultCardGreen,
+        'B': kDiscoverMoreGreen,
+        'C': kPrimaryYellow,
+        'D': kRankSustainabilityHero,
+        'E': kWarningRed,
+        'N/A': Colors.grey.shade600,
+      };
+      return ecoScoreColors[getEcoGrade(score)] ?? Colors.grey.shade600;
+    }
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
         onTap: () {
-          // Navigate to the Disposal Details Screen
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (_) => DisposalGuidanceScreen(productId: product['id']),
             ),
           );
         },
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            color: kPrimaryGreen.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          height: 120,
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              // Product Image with Hero animation
+              Hero(
+                tag: 'disposal_${product['id']}',
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: imageUrl.isNotEmpty
+                        ? Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        kPrimaryGreen.withOpacity(0.3),
+                                        kPrimaryGreen.withOpacity(0.1),
+                                      ],
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.delete_sweep,
+                                    color: kPrimaryGreen,
+                                    size: 40,
+                                  ),
+                                ),
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  kPrimaryGreen.withOpacity(0.3),
+                                  kPrimaryGreen.withOpacity(0.1),
+                                ],
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.delete_sweep,
+                              color: kPrimaryGreen,
+                              size: 40,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Product Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Product Name
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    // Category Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: kPrimaryGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: kPrimaryGreen.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        category,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1B5E20),
+                        ),
+                      ),
+                    ),
+                    // Material Info
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.category_outlined,
+                          size: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            material,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Date/Time
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 14,
+                          color: Colors.grey.shade500,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          formattedDateTime,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Eco Score Badge
+              Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: getEcoScoreColor(ecoScore),
+                  boxShadow: [
+                    BoxShadow(
+                      color: getEcoScoreColor(ecoScore).withOpacity(0.4),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      ecoScore.toString(),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const Text(
+                      'ECO',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              imageUrl,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  Icon(Icons.delete_sweep, color: kPrimaryGreen, size: 40),
-            ),
-          ),
-        ),
-        title: Text(
-          name,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Category: $category',
-              style: const TextStyle(fontSize: 14, color: Colors.black54),
-            ),
-            Text(
-              'Material: $material',
-              style: const TextStyle(fontSize: 14, color: Colors.black54),
-            ),
-          ],
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 18,
-          color: Colors.black38,
         ),
       ),
     );

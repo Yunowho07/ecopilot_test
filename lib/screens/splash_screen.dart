@@ -4,7 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math'; // For rotation
+import 'dart:math';
 
 import '../utils/constants.dart';
 
@@ -16,80 +16,135 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const Color primaryGreen = kPrimaryGreen;
 
-  late AnimationController _controller;
+  late AnimationController _mainController;
+  late AnimationController _pulseController;
+  late AnimationController _particleController;
 
-  // Animation Values
-  late Animation<double>
-  _scanAnimation; // Controls scan line position (0.0 to 1.0)
-  late Animation<double>
-  _dataFlowAnimation; // Controls data particle flow (0.0 to 1.0)
-  late Animation<double>
-  _logoScaleAnimation; // Controls logo final scale and snap
-  late Animation<double>
-  _houseRotationAnimation; // Controls rotation of the house/leaf snap
+  // Main Animation Values
+  late Animation<double> _logoScaleAnimation;
+  late Animation<double> _logoRotationAnimation;
+  late Animation<double> _textFadeAnimation;
+  late Animation<double> _textSlideAnimation;
+  late Animation<double> _taglineFadeAnimation;
+  late Animation<double> _glowAnimation;
+
+  // Pulse Animation
+  late Animation<double> _pulseAnimation;
+
+  // Particle Animation
+  late Animation<double> _particleAnimation;
 
   @override
   void initState() {
     super.initState();
-    _initializeAnimation();
+    _initializeAnimations();
     _startRoutingTimer();
   }
 
-  void _initializeAnimation() {
-    // Total duration for the smart animation: 2.5 seconds
-    _controller = AnimationController(
+  void _initializeAnimations() {
+    // Main controller for logo entrance
+    _mainController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 2000),
     );
 
-    // 1. Scan Line (Happens in first 30%)
-    _scanAnimation = Tween<double>(begin: -1.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
-      ),
+    // Pulse controller for breathing effect
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
     );
 
-    // 2. Data Flow (Happens in middle 30%)
-    _dataFlowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.3, 0.6, curve: Curves.easeInOut),
-      ),
+    // Particle controller for floating particles
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3000),
     );
 
-    // 3. Logo Snap and Scale (Happens in final 40%)
+    // Logo scale with bounce
     _logoScaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.6, 1.0, curve: Curves.elasticOut),
+        parent: _mainController,
+        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
       ),
     );
 
-    // 4. House Rotation (Snappy rotation during snap-in)
-    _houseRotationAnimation = Tween<double>(begin: 0.0, end: 2 * pi).animate(
+    // Logo rotation (subtle)
+    _logoRotationAnimation = Tween<double>(begin: -0.1, end: 0.0).animate(
       CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.6, 0.8, curve: Curves.fastOutSlowIn),
+        parent: _mainController,
+        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
       ),
     );
 
-    // Start the animation
-    _controller.forward();
+    // Text fade in
+    _textFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.5, 0.8, curve: Curves.easeIn),
+      ),
+    );
+
+    // Text slide up
+    _textSlideAnimation = Tween<double>(begin: 30.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.5, 0.8, curve: Curves.easeOut),
+      ),
+    );
+
+    // Tagline fade
+    _taglineFadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.7, 1.0, curve: Curves.easeIn),
+      ),
+    );
+
+    // Glow effect
+    _glowAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _mainController,
+        curve: const Interval(0.4, 0.8, curve: Curves.easeInOut),
+      ),
+    );
+
+    // Pulse animation (breathing effect)
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.08).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    // Particle float animation
+    _particleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _particleController, curve: Curves.linear),
+    );
+
+    // Start animations
+    _mainController.forward();
+
+    // Start pulse after main animation
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) {
+        _pulseController.repeat(reverse: true);
+      }
+    });
+
+    // Start particles
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) {
+        _particleController.repeat();
+      }
+    });
   }
 
-  // --- Routing Logic (Remains the same) ---
   void _startRoutingTimer() {
-    // Wait for 3 seconds total before checking auth and routing
     Timer(const Duration(seconds: 3), _checkAuthAndRoute);
   }
 
   Future<void> _checkAuthAndRoute() async {
     final prefs = await SharedPreferences.getInstance();
-    // Use the name of your new OnboardingScreen
     final isFirstTime = prefs.getBool('isFirstTime') ?? true;
     final user = FirebaseAuth.instance.currentUser;
 
@@ -110,162 +165,253 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
-    _controller.dispose();
+    _mainController.dispose();
+    _pulseController.dispose();
+    _particleController.dispose();
     super.dispose();
   }
 
-  // --- UI Build Method ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: primaryGreen,
-      body: Center(
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            final double scanValue = _scanAnimation.value;
-            final double dataValue = _dataFlowAnimation.value;
-            // Some curves (eg. Curves.elasticOut) can overshoot > 1.0 — clamp values
-            final double scaleValue = (_logoScaleAnimation.value).clamp(
-              0.0,
-              1.0,
-            );
-            final double dataValueClamped = (_dataFlowAnimation.value).clamp(
-              0.0,
-              1.0,
-            );
-            final double rotationValue = _houseRotationAnimation.value;
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              primaryGreen,
+              primaryGreen.withOpacity(0.8),
+              const Color(0xFF1db954),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Animated background particles
+            _buildFloatingParticles(),
 
-            return Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 1. Logo Animation Container
-                SizedBox(
-                  width: 150,
-                  height: 150,
-                  child: Stack(
-                    alignment: Alignment.center,
+            // Main content
+            Center(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([
+                  _mainController,
+                  _pulseController,
+                  _particleController,
+                ]),
+                builder: (context, child) {
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // --- Generic Product / Container (Input) ---
-                      Opacity(
-                        opacity: 1.0 - dataValue, // Fades out as data flows
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colors.white70,
-                            borderRadius: BorderRadius.circular(15),
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.shopping_bag_outlined,
-                              size: 40,
-                              color: primaryGreen,
+                      // Logo container with glow effect
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Outer glow
+                          if (_glowAnimation.value > 0)
+                            Container(
+                              width: 200 * _glowAnimation.value,
+                              height: 200 * _glowAnimation.value,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.white.withOpacity(
+                                      0.3 * _glowAnimation.value,
+                                    ),
+                                    blurRadius: 60,
+                                    spreadRadius: 20,
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
-                      ),
 
-                      // --- Scanning Line Effect ---
-                      Opacity(
-                        opacity:
-                            1.0 - dataValue, // Fades out after scan finishes
-                        child: Transform.translate(
-                          offset: Offset(
-                            0,
-                            80 * scanValue,
-                          ), // Moves up and down the box
-                          child: Container(
-                            width: 120,
-                            height: 2,
-                            color:
-                                kPrimaryYellow, // Bright yellow scanning line
-                          ),
-                        ),
-                      ),
-
-                      // --- Data Particles (Coalescing into Leaf) ---
-                      if (dataValueClamped > 0.0)
-                        ...List.generate(5, (index) {
-                          // Particles move from center outwards, then gather at the top-left
-                          double particleOffset =
-                              40.0 * (1.0 - dataValueClamped) * sin(index + 1);
-                          final double particleSize = max(
-                            2.0,
-                            4 * (1.0 - dataValueClamped) + 2,
-                          );
-
-                          return Positioned(
-                            left: 75 + particleOffset,
-                            top: 75 + particleOffset * 0.5,
-                            child: Opacity(
-                              opacity:
-                                  dataValueClamped, // Fades in during flow (clamped)
-                              child: Transform.translate(
-                                offset: Offset(
-                                  -75 * dataValueClamped,
-                                  -75 * dataValueClamped,
-                                ), // Moves towards the final logo point
-                                child: Icon(
-                                  Icons.circle,
-                                  size: particleSize,
-                                  color: primaryGreen,
+                          // Pulsing background circle
+                          Transform.scale(
+                            scale: _pulseAnimation.value,
+                            child: Container(
+                              width: 160,
+                              height: 160,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.white.withOpacity(0.1),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.2),
+                                  width: 2,
                                 ),
                               ),
                             ),
-                          );
-                        }),
+                          ),
 
-                      // --- Final EcoPilot Logo (House and Leaf) ---
-                      Transform.scale(
-                        scale: _logoScaleAnimation
-                            .value, // Keep scale overshoot visually
-                        child: Transform.rotate(
-                          angle: rotationValue, // Rotates before snapping
-                          child: Opacity(
-                            opacity:
-                                scaleValue, // use clamped value for opacity (0..1)
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(15), // Adjust the curve value
+                          // Logo with scale and rotation
+                          Transform.scale(
+                            scale: _logoScaleAnimation.value,
+                            child: Transform.rotate(
+                              angle: _logoRotationAnimation.value,
+                              child: Container(
+                                width: 140,
+                                height: 140,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 30,
+                                      offset: const Offset(0, 10),
+                                    ),
+                                  ],
+                                ),
+                                padding: const EdgeInsets.all(20),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(60),
                                   child: Image.asset(
                                     'assets/ecopilot_logo_white.png',
-                                  width: 120,   // Set your preferred size
-                                  height: 120,
-                                  fit: BoxFit.cover,
+                                    fit: BoxFit.contain,
                                   ),
-                                )
-                              ]
+                                ),
+                              ),
                             ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 40),
+
+                      // App name with fade and slide
+                      Transform.translate(
+                        offset: Offset(0, _textSlideAnimation.value),
+                        child: Opacity(
+                          opacity: _textFadeAnimation.value,
+                          child: Column(
+                            children: [
+                              const Text(
+                                'EcoPilot',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 42,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black26,
+                                      offset: Offset(0, 4),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(height: 12),
+
+                              // Tagline
+                              Opacity(
+                                opacity: _taglineFadeAnimation.value,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Your Smart Eco Companion',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 60),
+
+                      // Loading indicator
+                      Opacity(
+                        opacity: _taglineFadeAnimation.value,
+                        child: SizedBox(
+                          width: 50,
+                          height: 50,
+                          child: CircularProgressIndicator(
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                            strokeWidth: 3,
+                            backgroundColor: Colors.white.withOpacity(0.2),
                           ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                // 2. App Name Fade-in
-                Opacity(
-                  opacity: scaleValue, // Fades in with the final logo
-                  child: const Text(
-                    'EcoPilot',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
+    );
+  }
+
+  // Floating particles in the background
+  Widget _buildFloatingParticles() {
+    return AnimatedBuilder(
+      animation: _particleAnimation,
+      builder: (context, child) {
+        return Stack(
+          children: List.generate(15, (index) {
+            final random = Random(index);
+            final startX =
+                random.nextDouble() * MediaQuery.of(context).size.width;
+            final startY =
+                random.nextDouble() * MediaQuery.of(context).size.height;
+            final size = 4.0 + random.nextDouble() * 8;
+
+            // Sine wave motion for organic movement
+            final offsetX = sin(_particleAnimation.value * 2 * pi + index) * 30;
+            final offsetY =
+                -_particleAnimation.value *
+                MediaQuery.of(context).size.height *
+                0.3;
+
+            return Positioned(
+              left: startX + offsetX,
+              top: startY + offsetY,
+              child: Opacity(
+                opacity:
+                    0.3 +
+                    (sin(_particleAnimation.value * 2 * pi + index) * 0.3),
+                child: Container(
+                  width: size,
+                  height: size,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.white.withOpacity(0.5),
+                        blurRadius: 4,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
     );
   }
 }

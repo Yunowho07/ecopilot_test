@@ -8,10 +8,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-// Use MobileScanner for live barcode scanning preview
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:http/http.dart' as http;
+import 'package:camera/camera.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -20,10 +18,8 @@ import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'package:ecopilot_test/screens/result_disposal_screen.dart';
 
-// CloudinaryService and config are implemented in lib/services and lib/utils.
-
 /// A lightweight scan screen that lets the user take a photo or pick from gallery,
-/// runs a (stubbed) Gemini analysis to extract product info, uploads the image
+/// runs Gemini analysis to extract product info, uploads the image
 /// to Cloudinary (if configured), stores the result in Firestore and returns
 /// the product map to the caller via Navigator.pop(result).
 class DisposalScanScreen extends StatefulWidget {
@@ -38,37 +34,234 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
   XFile? _picked;
   Uint8List? _bytes;
   bool _busy = false;
-  Map<String, dynamic>? _analysis;
   bool _photoConfirmed = false;
 
-  // Mobile scanner controller for live barcode scanning
-  final MobileScannerController _mobileScannerController =
-      MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates);
-  bool _scanningEnabled = false;
-  bool _torchOn = false;
-  // track whether a barcode result is being processed (read but not used elsewhere)
+  // Camera related
+  CameraController? _cameraController;
+  List<CameraDescription>? _cameras;
+  bool _isCameraInitialized = false;
+  bool _showCamera = false;
+  FlashMode _flashMode = FlashMode.off;
 
   @override
   void initState() {
     super.initState();
-    // Initialize the live scanner automatically when screen opens
-    _initScanner();
+    _initializeCameras();
+    // Automatically start camera when screen opens
+    _startCameraAutomatically();
   }
 
   @override
   void dispose() {
-    try {
-      _mobileScannerController.dispose();
-    } catch (_) {}
+    _cameraController?.dispose();
     super.dispose();
+  }
+
+  /// Initialize available cameras
+  Future<void> _initializeCameras() async {
+    try {
+      _cameras = await availableCameras();
+    } catch (e) {
+      debugPrint('Error initializing cameras: $e');
+    }
+  }
+
+  /// Automatically start camera on screen load
+  Future<void> _startCameraAutomatically() async {
+    // Wait a bit for the widget to build
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (mounted) {
+      await _startCamera();
+    }
+  }
+
+  /// Start camera preview
+  Future<void> _startCamera() async {
+    if (_cameras == null || _cameras!.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No cameras available on this device')),
+        );
+      }
+      return;
+    }
+
+    // Request camera permission
+    final status = await Permission.camera.request();
+    if (!status.isGranted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Camera permission is required')),
+        );
+      }
+      return;
+    }
+
+    try {
+      // Use the first available camera (usually back camera)
+      final camera = _cameras!.first;
+
+      _cameraController = CameraController(
+        camera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+
+      await _cameraController!.initialize();
+
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _showCamera = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error starting camera: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to start camera: $e')));
+      }
+    }
+  }
+
+  /// Stop camera preview
+  Future<void> _stopCamera() async {
+    if (_cameraController != null) {
+      await _cameraController!.dispose();
+      _cameraController = null;
+      setState(() {
+        _isCameraInitialized = false;
+        _showCamera = false;
+      });
+    }
+  }
+
+  /// Capture photo from camera
+  Future<void> _capturePhoto() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    try {
+      setState(() => _busy = true);
+
+      final XFile imageFile = await _cameraController!.takePicture();
+      final bytes = await imageFile.readAsBytes();
+
+      // Stop camera after capturing
+      await _stopCamera();
+
+      setState(() {
+        _picked = imageFile;
+        _bytes = bytes;
+        _photoConfirmed = false;
+        _busy = false;
+      });
+    } catch (e) {
+      debugPrint('Error capturing photo: $e');
+      setState(() => _busy = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to capture photo: $e')));
+      }
+    }
+  }
+
+  /// Toggle between front and back cameras
+  Future<void> _switchCamera() async {
+    if (_cameras == null || _cameras!.length < 2) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No other camera available')),
+        );
+      }
+      return;
+    }
+
+    try {
+      setState(() => _busy = true);
+
+      // Find the next camera (toggle between front and back)
+      final currentLensDirection = _cameraController?.description.lensDirection;
+      CameraDescription? newCamera;
+
+      for (var camera in _cameras!) {
+        if (camera.lensDirection != currentLensDirection) {
+          newCamera = camera;
+          break;
+        }
+      }
+
+      if (newCamera == null) {
+        // Fallback to the other camera
+        newCamera = _cameras!.firstWhere(
+          (camera) => camera != _cameraController?.description,
+          orElse: () => _cameras!.first,
+        );
+      }
+
+      // Dispose current controller
+      await _cameraController?.dispose();
+
+      // Initialize new camera
+      _cameraController = CameraController(
+        newCamera,
+        ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+
+      await _cameraController!.initialize();
+
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _busy = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error switching camera: $e');
+      setState(() => _busy = false);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to switch camera: $e')));
+      }
+    }
+  }
+
+  /// Toggle flash mode
+  Future<void> _toggleFlash() async {
+    if (_cameraController == null) return;
+
+    try {
+      if (_flashMode == FlashMode.off) {
+        _flashMode = FlashMode.torch;
+      } else {
+        _flashMode = FlashMode.off;
+      }
+
+      await _cameraController!.setFlashMode(_flashMode);
+      setState(() {});
+    } catch (e) {
+      debugPrint('Error toggling flash: $e');
+    }
   }
 
   Future<void> _pick(ImageSource source) async {
     try {
       setState(() {
         _busy = true;
-        _analysis = null;
       });
+
+      // Stop camera if it's running
+      if (_showCamera) {
+        await _stopCamera();
+      }
+
       // Request gallery permission when picking from gallery
       if (source == ImageSource.gallery) {
         PermissionStatus galleryStatus;
@@ -100,10 +293,6 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         _bytes = bytes;
         _photoConfirmed = false;
       });
-      // If user picked an image from gallery, stop live scanning to save resources
-      try {
-        await _mobileScannerController.stop();
-      } catch (_) {}
     } catch (e) {
       debugPrint('Image pick failed: $e');
       if (mounted) {
@@ -116,255 +305,6 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         _busy = false;
       });
     }
-  }
-
-  // Initialize the mobile scanner (requests permission and enables scanning)
-  Future<void> _initScanner() async {
-    try {
-      setState(() => _busy = true);
-
-      final status = await Permission.camera.status;
-      if (!status.isGranted) {
-        final result = await Permission.camera.request();
-        // If still not granted, surface helpful UI. If permanently denied offer settings.
-        if (!result.isGranted) {
-          if (mounted) {
-            await showDialog<void>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Camera permission required'),
-                content: const Text(
-                  'Please allow camera access to scan products. You can enable it in app settings.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.of(ctx).pop();
-                      await openAppSettings();
-                    },
-                    child: const Text('Open Settings'),
-                  ),
-                ],
-              ),
-            );
-          }
-          return;
-        }
-      }
-
-      // Try to start the MobileScanner controller so the preview begins.
-      try {
-        await _mobileScannerController.start();
-      } catch (e) {
-        debugPrint('MobileScanner start failed: $e');
-      }
-
-      // Mark scanning enabled so UI shows live preview.
-      if (mounted) {
-        setState(() {
-          _scanningEnabled = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Scanner init failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Local simulator used when Gemini API key is not configured or fails.
-  /// Returns a map in the same shape other barcode lookups produce so the
-  /// rest of the flow can build a ProductAnalysisData from it.
-  // NOTE: Removed the previous local simulator fallback. Image analysis
-  // now requires a configured Gemini API key. If it's not present we
-  // inform the user and do not attempt to fabricate results.
-
-  Future<void> _toggleFlash() async {
-    try {
-      await _mobileScannerController.toggleTorch();
-      setState(() => _torchOn = !_torchOn);
-    } catch (e) {
-      debugPrint('Flash toggle failed: $e');
-    }
-  }
-
-  // Handle barcode lookups using OpenFoodFacts and OpenBeautyFacts
-  Future<void> _handleBarcode(String code) async {
-    if (code.isEmpty) return;
-    // mark as processing (legacy flag removed)
-    setState(() => _busy = true);
-
-    // stop scanning to avoid duplicates
-    try {
-      await _mobileScannerController.stop();
-    } catch (_) {}
-
-    Map<String, dynamic>? product;
-    String? imageUrl;
-    String apiResultText = '';
-
-    try {
-      // Try OpenFoodFacts
-      final foodUrl = Uri.parse(
-        'https://world.openfoodfacts.org/api/v0/product/$code.json',
-      );
-      final r = await http.get(foodUrl).timeout(const Duration(seconds: 6));
-      if (r.statusCode == 200) {
-        final Map<String, dynamic> j = json.decode(r.body);
-        if ((j['status'] ?? 0) == 1) {
-          final p = j['product'] ?? {};
-          final name =
-              (p['product_name'] ?? p['product_name_en']) ?? 'Unknown product';
-          imageUrl = p['image_front_url'] ?? p['image_url'];
-          product = {
-            'name': name,
-            'category': p['categories'] ?? 'Food',
-            'material': p['packaging'] ?? 'Unknown',
-            'ecoScore': 'N/A',
-            'disposalSteps': ['Check local recycling rules for packaging.'],
-            'tips': ['Reduce single-use packaging when possible.'],
-            'barcode': code,
-          };
-          apiResultText = r.body;
-        }
-      }
-
-      // If not found, try OpenBeautyFacts
-      if (product == null) {
-        final beautyUrl = Uri.parse(
-          'https://world.openbeautyfacts.org/api/v0/product/$code.json',
-        );
-        final r2 = await http
-            .get(beautyUrl)
-            .timeout(const Duration(seconds: 6));
-        if (r2.statusCode == 200) {
-          final Map<String, dynamic> j = json.decode(r2.body);
-          if ((j['status'] ?? 0) == 1) {
-            final p = j['product'] ?? {};
-            final name =
-                (p['product_name'] ?? p['product_name_en']) ??
-                'Unknown product';
-            imageUrl = p['image_front_url'] ?? p['image_url'];
-            product = {
-              'name': name,
-              'category': p['categories'] ?? 'Cosmetic',
-              'material': p['packaging'] ?? 'Unknown',
-              'ecoScore': 'N/A',
-              'disposalSteps': [
-                'Follow local guidelines for cosmetics and hazardous waste.',
-              ],
-              'tips': ['Prefer solid bars to reduce packaging.'],
-              'barcode': code,
-            };
-            apiResultText = r2.body;
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('Barcode lookup failed: $e');
-    }
-
-    if (product != null) {
-      // Build ProductAnalysisData and persist simple record
-      final analysisData = ProductAnalysisData(
-        imageFile: null,
-        imageUrl: imageUrl,
-        productName: product['name'] ?? 'Scanned product',
-        category: product['category'] ?? 'N/A',
-        ingredients: 'N/A',
-        carbonFootprint: 'N/A',
-        packagingType: product['material'] ?? 'Unknown',
-        disposalMethod: (product['disposalSteps'] is List)
-            ? (product['disposalSteps'] as List).join('\n')
-            : (product['disposalSteps'] ?? 'N/A'),
-        ecoScore: (product['ecoScore'] ?? 'N/A'),
-      );
-
-      try {
-        await FirebaseService().saveUserScan(
-          analysis: apiResultText.isNotEmpty
-              ? apiResultText
-              : json.encode(product),
-          productName: analysisData.productName,
-          ecoScore: analysisData.ecoScore,
-          carbonFootprint: analysisData.carbonFootprint,
-          imageUrl: imageUrl,
-          category: analysisData.category,
-          packagingType: analysisData.packagingType,
-          disposalSteps: product['disposalSteps'] is List
-              ? product['disposalSteps']
-              : null,
-          tips: product['tips'] is String
-              ? product['tips']
-              : (product['tips'] is List
-                    ? (product['tips'] as List).join('\n')
-                    : null),
-          nearbyCenter: product['nearbyCenter'] ?? null,
-          isDisposal: true,
-        );
-      } catch (e) {
-        debugPrint('Failed to save barcode scan: $e');
-      }
-
-      // Also create a disposal_scans document so Disposals view shows this item
-      try {
-        final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
-        final String productId = DateTime.now().millisecondsSinceEpoch
-            .toString();
-        final docRef = FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('disposal_scans')
-            .doc(productId);
-
-        await docRef.set({
-          'product_name': analysisData.productName,
-          'category': analysisData.category,
-          'material': analysisData.packagingType,
-          'ecoScore': analysisData.ecoScore,
-          'imageUrl': imageUrl ?? analysisData.imageUrl ?? '',
-          'disposalSteps': product['disposalSteps'] is List
-              ? product['disposalSteps']
-              : (product['disposalSteps'] is String
-                    ? [product['disposalSteps']]
-                    : []),
-          'tips': product['tips'] is List
-              ? product['tips']
-              : (product['tips'] is String ? [product['tips']] : []),
-          'nearbyCenter': product['nearbyCenter'] ?? null,
-          'isDisposal': true,
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      } catch (e) {
-        debugPrint('Failed to save disposal_scans record for barcode: $e');
-      }
-
-      if (mounted) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => ResultDisposalScreen(analysisData: analysisData),
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No product found for barcode $code')),
-        );
-      }
-      // allow scanning again after short delay
-      await Future.delayed(const Duration(seconds: 1));
-      try {
-        await _mobileScannerController.start();
-      } catch (_) {}
-      // processing finished
-    }
-
-    setState(() => _busy = false);
   }
 
   /// Run Gemini analysis (if configured) and navigate to the Result screen.
@@ -476,8 +416,6 @@ Example valid response (JSON only):
             imageFile: tempFile,
           );
           analysisData = parsedFromJson;
-          // keep analysis map for potential save/return
-          _analysis = parsedMap;
         } else {
           // If the model returned free-form text, parse via the existing parser which
           // extracts fields from Gemini-style responses. This still comes from Gemini
@@ -486,21 +424,6 @@ Example valid response (JSON only):
             outputText,
             imageFile: tempFile,
           );
-          _analysis = {
-            'name': analysisData.productName,
-            'category': analysisData.category,
-            'material': analysisData.packagingType,
-            'ecoScore': analysisData.ecoScore,
-            'disposalSteps': analysisData.disposalMethod
-                .split('\n')
-                .where((s) => s.trim().isNotEmpty)
-                .toList(),
-            'tips': analysisData.tips,
-            'nearbyCenter': analysisData.nearbyCenter,
-            'containsMicroplastics': analysisData.containsMicroplastics,
-            'palmOilDerivative': analysisData.palmOilDerivative,
-            'crueltyFree': analysisData.crueltyFree,
-          };
         }
       }
 
@@ -524,6 +447,7 @@ Example valid response (JSON only):
           carbonFootprint: analysisData.carbonFootprint,
           imageUrl: uploadedImageUrl,
           category: analysisData.category,
+          ingredients: analysisData.ingredients,
           packagingType: analysisData.packagingType,
           disposalSteps: analysisData.disposalMethod
               .split('\n')
@@ -532,6 +456,9 @@ Example valid response (JSON only):
           tips: analysisData.tips,
           nearbyCenter: analysisData.nearbyCenter,
           isDisposal: true,
+          containsMicroplastics: analysisData.containsMicroplastics,
+          palmOilDerivative: analysisData.palmOilDerivative,
+          crueltyFree: analysisData.crueltyFree,
         );
       } catch (e) {
         debugPrint('Failed to save scan metadata: $e');
@@ -551,17 +478,34 @@ Example valid response (JSON only):
 
         await docRef.set({
           'product_name': analysisData.productName,
+          'productName': analysisData.productName,
+          'name': analysisData.productName,
           'category': analysisData.category,
+          'product_category': analysisData.category,
           'material': analysisData.packagingType,
+          'packagingType': analysisData.packagingType,
           'ecoScore': analysisData.ecoScore,
+          'eco_score': analysisData.ecoScore,
           'imageUrl': uploadedImageUrl ?? analysisData.imageUrl ?? '',
+          'image_url': uploadedImageUrl ?? analysisData.imageUrl ?? '',
           'disposalSteps': analysisData.disposalMethod
               .split('\n')
               .where((s) => s.trim().isNotEmpty)
               .toList(),
-          'tips': analysisData.tips,
+          'disposalMethod': analysisData.disposalMethod,
+          'tips': analysisData.tips.isNotEmpty
+              ? analysisData.tips.split('\n')
+              : [],
+          'tips_text': analysisData.tips.isNotEmpty ? analysisData.tips : null,
           'nearbyCenter': analysisData.nearbyCenter,
+          'nearby_center': analysisData.nearbyCenter,
           'isDisposal': true,
+          'containsMicroplastics': analysisData.containsMicroplastics,
+          'contains_microplastics': analysisData.containsMicroplastics,
+          'palmOilDerivative': analysisData.palmOilDerivative,
+          'palm_oil_derivative': analysisData.palmOilDerivative,
+          'crueltyFree': analysisData.crueltyFree,
+          'cruelty_free': analysisData.crueltyFree,
           'createdAt': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       } catch (e) {
@@ -666,14 +610,33 @@ Example valid response (JSON only):
         'product_name': (_picked != null && _picked!.name.isNotEmpty)
             ? _picked!.name
             : 'Scanned product',
+        'productName': (_picked != null && _picked!.name.isNotEmpty)
+            ? _picked!.name
+            : 'Scanned product',
+        'name': (_picked != null && _picked!.name.isNotEmpty)
+            ? _picked!.name
+            : 'Scanned product',
         'category': 'Unknown',
+        'product_category': 'Unknown',
         'material': 'Unknown',
+        'packagingType': 'Unknown',
         'ecoScore': 'N/A',
+        'eco_score': 'N/A',
         'imageUrl': uploadedImageUrl ?? '',
+        'image_url': uploadedImageUrl ?? '',
         'disposalSteps': <String>[],
+        'disposalMethod': '',
         'tips': <String>[],
+        'tips_text': '',
         'nearbyCenter': null,
+        'nearby_center': null,
         'isDisposal': true,
+        'containsMicroplastics': false,
+        'contains_microplastics': false,
+        'palmOilDerivative': false,
+        'palm_oil_derivative': false,
+        'crueltyFree': false,
+        'cruelty_free': false,
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -698,6 +661,9 @@ Example valid response (JSON only):
           'tips': <String>[],
           'nearbyCenter': null,
           'isDisposal': true,
+          'containsMicroplastics': false,
+          'palmOilDerivative': false,
+          'crueltyFree': false,
           'timestamp': FieldValue.serverTimestamp(),
         }, SetOptions(merge: true));
       } catch (e) {
@@ -728,358 +694,525 @@ Example valid response (JSON only):
     }
   }
 
-  Future<void> _saveAndReturn() async {
-    if (_analysis == null) return;
-    setState(() => _busy = true);
-
-    final Map<String, dynamic> product = Map<String, dynamic>.from(_analysis!);
-    final String productId = DateTime.now().millisecondsSinceEpoch.toString();
-    product['productId'] = productId;
-
-    // Upload image to Cloudinary (required for image storage)
-    if (isCloudinaryConfigured) {
-      try {
-        final imageUrl = await CloudinaryService.uploadImageBytes(
-          _bytes!,
-          filename: '$productId.jpg',
-          cloudName: kCloudinaryCloudName,
-          uploadPreset: kCloudinaryUploadPreset,
-        );
-        if (imageUrl != null) product['imageUrl'] = imageUrl;
-      } catch (e) {
-        debugPrint('Cloudinary upload failed: $e');
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Cloudinary not configured. Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in .env',
-            ),
-          ),
-        );
-      }
-    }
-
-    // Save to Firestore under current user's scans
-    try {
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
-      final docRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('scans')
-          .doc(productId);
-      await docRef.set({
-        'name': product['name'] ?? 'Scanned product',
-        'category': product['category'] ?? 'General', // Saving category
-        'material': product['material'] ?? 'Unknown', // Saving material
-        'ecoScore': product['ecoScore'] ?? 'N/A',
-        'imageUrl': product['imageUrl'] ?? '',
-        'disposalSteps': product['disposalSteps'] ?? ['Rinse and recycle'],
-        'tips': product['tips'] ?? ['Reduce waste'],
-        'createdAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      debugPrint('Failed saving scan: $e');
-    }
-
-    setState(() => _busy = false);
-
-    // Return the product to the caller so it can be shown in Details
-    if (mounted) Navigator.of(context).pop(product);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         centerTitle: true,
         title: const Text(
-          'Disposal Scan',
+          'Scan Product for Disposal',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
         iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: kPrimaryGreen,
+        elevation: 0,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Center(
-                child: Container(
+      body: Column(
+        children: [
+          // Camera Preview / Image Display Area
+          Expanded(
+            child: Stack(
+              children: [
+                // Main content area
+                Container(
                   width: double.infinity,
+                  margin: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey.shade300),
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: _picked != null
-                          ? Image.memory(_bytes!, fit: BoxFit.contain)
-                          : _scanningEnabled
-                          ? Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Live barcode scanner preview
-                                MobileScanner(
-                                  controller: _mobileScannerController,
-                                  fit: BoxFit.cover,
-                                  onDetect: (capture) {
-                                    final List<Barcode> barcodes =
-                                        capture.barcodes;
-                                    if (barcodes.isNotEmpty) {
-                                      final raw = barcodes.first.rawValue ?? '';
-                                      // Delegate barcode handling to the lookup method
-                                      if (!_busy) _handleBarcode(raw);
-                                    }
-                                  },
-                                ),
-                                // Top-right flash toggle
-                                Positioned(
-                                  top: 12,
-                                  right: 12,
-                                  child: Material(
-                                    color: Colors.black45,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(24),
+                    child:
+                        _showCamera &&
+                            _isCameraInitialized &&
+                            _cameraController != null
+                        ? Stack(
+                            children: [
+                              // Live camera preview
+                              Center(child: CameraPreview(_cameraController!)),
+                              // Flash toggle button
+                              Positioned(
+                                top: 16,
+                                right: 16,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    icon: Icon(
+                                      _flashMode == FlashMode.off
+                                          ? Icons.flash_off
+                                          : Icons.flash_on,
+                                      color: _flashMode == FlashMode.off
+                                          ? Colors.white
+                                          : kPrimaryYellow,
                                     ),
-                                    child: IconButton(
-                                      icon: Icon(
-                                        _torchOn
-                                            ? Icons.flash_on
-                                            : Icons.flash_off,
-                                        color: Colors.white,
-                                      ),
-                                      onPressed: _busy ? null : _toggleFlash,
-                                    ),
+                                    onPressed: _toggleFlash,
                                   ),
                                 ),
-                                // Capture button bottom center (opens native camera capture)
-                                Positioned(
-                                  bottom: 20,
-                                  child: GestureDetector(
-                                    onTap: _busy
-                                        ? null
-                                        : () => _pick(ImageSource.camera),
-                                    child: Container(
-                                      width: 72,
-                                      height: 72,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: Colors.white.withOpacity(0.15),
-                                        border: Border.all(
-                                          color: Colors.white,
-                                          width: 3,
+                              ),
+                              // Close camera button
+                              Positioned(
+                                top: 16,
+                                left: 16,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withOpacity(0.6),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                    ),
+                                    onPressed: _stopCamera,
+                                  ),
+                                ),
+                              ),
+                              // Capture button at bottom
+                              Positioned(
+                                bottom: 20,
+                                left: 0,
+                                right: 0,
+                                child: Center(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: kPrimaryGreen.withOpacity(0.5),
+                                          blurRadius: 20,
+                                          spreadRadius: 5,
+                                        ),
+                                      ],
+                                    ),
+                                    child: Material(
+                                      color: Colors.white,
+                                      shape: const CircleBorder(),
+                                      child: InkWell(
+                                        onTap: _busy ? null : _capturePhoto,
+                                        customBorder: const CircleBorder(),
+                                        child: Container(
+                                          width: 70,
+                                          height: 70,
+                                          padding: const EdgeInsets.all(4),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: kPrimaryGreen,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: Colors.white,
+                                                width: 3,
+                                              ),
+                                            ),
+                                            child: _busy
+                                                ? const Padding(
+                                                    padding: EdgeInsets.all(12),
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 3,
+                                                          color: Colors.white,
+                                                        ),
+                                                  )
+                                                : const Icon(
+                                                    Icons.camera_alt,
+                                                    color: Colors.white,
+                                                    size: 28,
+                                                  ),
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ],
-                            )
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
+                              ),
+                              // Camera guide
+                              Center(
+                                child: Container(
+                                  width: 280,
+                                  height: 200,
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: kPrimaryGreen.withOpacity(0.7),
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : _picked != null
+                        ? Stack(
+                            children: [
+                              // Display picked image
+                              Center(
+                                child: Image.memory(
+                                  _bytes!,
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              // Confirmation overlay
+                              if (!_photoConfirmed)
+                                Positioned(
+                                  bottom: 0,
+                                  left: 0,
+                                  right: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(20),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          Colors.transparent,
+                                          Colors.black.withOpacity(0.8),
+                                        ],
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceEvenly,
+                                      children: [
+                                        // Retake button
+                                        _buildActionButton(
+                                          icon: Icons.refresh,
+                                          label: 'Retake',
+                                          onPressed: _busy
+                                              ? null
+                                              : () {
+                                                  setState(() {
+                                                    _picked = null;
+                                                    _bytes = null;
+                                                    _photoConfirmed = false;
+                                                  });
+                                                },
+                                          backgroundColor: Colors.white
+                                              .withOpacity(0.2),
+                                        ),
+                                        // Use Photo button
+                                        _buildActionButton(
+                                          icon: Icons.check_circle,
+                                          label: 'Use Photo',
+                                          onPressed: _busy
+                                              ? null
+                                              : () {
+                                                  setState(() {
+                                                    _photoConfirmed = true;
+                                                  });
+                                                },
+                                          backgroundColor: kPrimaryGreen,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Icon(
                                   Icons.camera_alt_outlined,
                                   size: 80,
-                                  color: Colors.grey.shade400,
+                                  color: Colors.grey.shade600,
                                 ),
-                                const SizedBox(height: 12),
-                                const Text(
-                                  'Initializing camera or select from gallery',
-                                  style: TextStyle(color: Colors.black54),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Take or select a product photo',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'AI will analyze the product for disposal guidance',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade500,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ],
                             ),
-                    ),
+                          ),
                   ),
                 ),
-              ),
-            ),
-
-            // Show Retake / Use Photo actions when a photo is picked/captured
-            if (_picked != null) ...[
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _busy
-                          ? null
-                          : () async {
-                              // Retake: clear picked image and resume camera
-                              setState(() {
-                                _picked = null;
-                                _bytes = null;
-                                _analysis = null;
-                                _photoConfirmed = false;
-                              });
-                              try {
-                                if (_scanningEnabled) {
-                                  await _mobileScannerController.start();
-                                } else {
-                                  await _initScanner();
-                                }
-                              } catch (_) {}
-                            },
-                      child: const Text(
-                        'Retake',
-                        style: TextStyle(color: Colors.black87),
+                // Busy indicator overlay
+                if (_busy)
+                  Positioned.fill(
+                    child: Container(
+                      margin: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.7),
+                        borderRadius: BorderRadius.circular(24),
                       ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                kPrimaryGreen,
+                              ),
+                              strokeWidth: 4,
+                            ),
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Text(
+                                'Analyzing...',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _busy
-                          ? null
-                          : () {
-                              setState(() {
-                                _photoConfirmed = true;
-                              });
-                              if (mounted)
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Photo selected. Tap Analyze to run analysis.',
-                                    ),
-                                  ),
-                                );
-                            },
-                      child: const Text(
-                        'Use Photo',
-                        style: TextStyle(color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimaryGreen,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+              ],
+            ),
+          ),
+
+          // Control Panel
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(30),
+                topRight: Radius.circular(30),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Drag handle
+                  Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Quick actions row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildControlButton(
+                          icon: Icons.cameraswitch,
+                          label: 'Switch Camera',
+                          onPressed: (_busy || !_showCamera)
+                              ? null
+                              : _switchCamera,
+                          backgroundColor: kPrimaryGreen,
                         ),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildControlButton(
+                          icon: Icons.photo_library,
+                          label: 'Gallery',
+                          onPressed: (_busy || _showCamera)
+                              ? null
+                              : () => _pick(ImageSource.gallery),
+                          backgroundColor: Colors.grey.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (_photoConfirmed) ...[
+                    const SizedBox(height: 16),
+                    // Analyze button when photo is confirmed
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton.icon(
+                        onPressed: _busy ? null : _runAnalysis,
+                        icon: _busy
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.auto_awesome,
+                                color: Colors.white,
+                              ),
+                        label: Text(
+                          _busy ? 'Analyzing...' : 'Analyze with AI',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: kPrimaryGreen,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 4,
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  // Info text
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: kPrimaryGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: kPrimaryGreen.withOpacity(0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: kPrimaryGreen,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _showCamera
+                                ? 'Position product within the frame and tap the capture button'
+                                : 'Camera will start automatically or select from gallery',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade700,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ],
-
-            if (_analysis != null) ...[
-              const Divider(height: 24),
-              const Text(
-                'Analysis Result',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Product: ${_analysis!['name'] ?? _analysis!['product_name'] ?? 'N/A'}',
-              ),
-              Text(
-                'Category: ${_analysis!['category'] ?? _analysis!['Category'] ?? 'N/A'}',
-              ),
-              Text(
-                'Material: ${_analysis!['material'] ?? _analysis!['material'] ?? 'N/A'}',
-              ),
-              Text(
-                'Eco Score: ${_analysis!['ecoScore'] ?? _analysis!['eco_score'] ?? 'N/A'}',
-              ),
-              const SizedBox(height: 8),
-            ],
-
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                // Capture button (opens native camera capture) - replaces "Open Camera"
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _busy ? null : () => _pick(ImageSource.camera),
-                    icon: const Icon(Icons.camera_alt, color: Colors.white),
-                    label: const Text(
-                      'Capture',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kPrimaryGreen,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _busy ? null : () => _pick(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library, color: Colors.white),
-                    label: const Text(
-                      'Upload from Gallery',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.grey.shade700,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
-                ),
-              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed:
-                        (_bytes == null ||
-                            _busy ||
-                            _analysis != null ||
-                            (_picked != null && !_photoConfirmed))
-                        ? null
-                        : _runAnalysis,
-                    child: _busy
-                        ? const SizedBox(
-                            height: 18,
-                            width: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Analyze with Gemini',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: kPrimaryGreen,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                  ),
+  // Helper method to build action buttons
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    required Color backgroundColor,
+  }) {
+    return Material(
+      color: backgroundColor,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: Colors.white, size: 28),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
-                const SizedBox(width: 12),
-                // Removed "Save & View Details" per request. Keep space for layout balance.
-                Expanded(child: Container()),
-              ],
-            ),
-            const SizedBox(height: 12),
-          ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Helper method to build control buttons
+  Widget _buildControlButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    required Color backgroundColor,
+  }) {
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: backgroundColor.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ElevatedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white, size: 22),
+        label: Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: backgroundColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 0,
         ),
       ),
     );

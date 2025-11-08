@@ -1,9 +1,10 @@
-﻿import 'package:ecopilot_test/screens/scan_screen.dart' hide ProfileScreen;
+﻿import 'package:ecopilot_test/screens/scan_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:ecopilot_test/screens/disposal_scan_screen.dart';
+import 'package:ecopilot_test/screens/barcode_scanner_screen.dart';
 // Avoid importing kPrimaryGreen twice: hide it from the recent_disposal import
 import 'package:ecopilot_test/screens/recent_disposal_screen.dart';
 import 'package:ecopilot_test/utils/constants.dart';
@@ -198,6 +199,10 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           product['disposalSteps'],
         ).map((e) => e.toString()).toList(),
         'tips': _ensureList(product['tips']).map((e) => e.toString()).toList(),
+        // Persist boolean warning flags when available, default to false
+        'containsMicroplastics': product['containsMicroplastics'] ?? false,
+        'palmOilDerivative': product['palmOilDerivative'] ?? false,
+        'crueltyFree': product['crueltyFree'] ?? false,
         'createdAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
@@ -209,138 +214,405 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
     }
   }
 
-  Widget _styledHubCard({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    VoidCallback? onTap,
-    Color? iconBgColor,
-  }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 14,
-        ),
-        leading: Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(
-            color: iconBgColor ?? kPrimaryGreen.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(icon, color: kPrimaryGreen, size: 30),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-        ),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(fontSize: 14, color: Colors.black54),
-        ),
-        trailing: const Icon(
-          Icons.arrow_forward_ios,
-          size: 18,
-          color: Colors.black38,
-        ),
-      ),
-    );
-  }
-
   Widget _buildDisposalHub() {
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [kPrimaryGreen.withOpacity(0.1), Colors.white],
+          colors: [Colors.grey.shade50, Colors.white],
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 0),
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 12),
-            _styledHubCard(
-              icon: Icons.camera_alt_outlined,
-              title: 'Scan Product',
-              subtitle: 'Use your camera to identify product materials',
-              onTap: () async {
-                final result = await Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const DisposalScanScreen()),
-                );
-                if (result != null) await _handleScanResult(result);
-              },
-            ),
-            _styledHubCard(
-              icon: Icons.qr_code_scanner,
-              title: 'Find Product',
-              subtitle: 'Search by barcode or product name',
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Search functionality (Barcode/Name) coming soon!',
-                  ),
-                ),
-              ),
-            ),
-            _styledHubCard(
-              icon: Icons.history,
-              title: 'Recent Disposal',
-              subtitle: 'View your recently disposed products',
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const RecentDisposalScreen()),
-              ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
+            // Hero Section with Gradient Background
+            Container(
               width: double.infinity,
-              height: 64,
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.add, size: 22, color: Colors.white),
-                label: const Text(
-                  'Scan New Product',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
+              decoration: BoxDecoration(
+                color: kPrimaryGreen,
+                // gradient: LinearGradient(
+                //   begin: Alignment.topLeft,
+                //   end: Alignment.bottomRight,
+                //   colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
+                // ),
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(32),
+                  bottomRight: Radius.circular(32),
                 ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimaryGreen,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(32),
-                  ),
-                  elevation: 4,
-                ),
-                onPressed: () async {
-                  final result = await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const DisposalScanScreen(),
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.recycling, size: 48, color: Colors.white),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Disposal Hub',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      height: 1.2,
                     ),
-                  );
-                  if (result != null) await _handleScanResult(result);
-                },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Scan products to learn proper disposal methods',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: Colors.white.withOpacity(0.95),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 32),
+
+            const SizedBox(height: 24),
+
+            // Quick Actions Grid
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Main Scan Card (Featured)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          kPrimaryGreen.withOpacity(0.1),
+                          kPrimaryGreen.withOpacity(0.05),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: kPrimaryGreen.withOpacity(0.3),
+                        width: 2,
+                      ),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () async {
+                          final result = await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const DisposalScanScreen(),
+                            ),
+                          );
+                          if (result != null) await _handleScanResult(result);
+                        },
+                        borderRadius: BorderRadius.circular(20),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  color: kPrimaryGreen,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: kPrimaryGreen.withOpacity(0.3),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt_rounded,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Scan Product',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Use camera to identify materials',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios,
+                                color: kPrimaryGreen,
+                                size: 20,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Secondary Action Cards Grid
+                  Row(
+                    children: [
+                      // Recent Disposal Card
+                      Expanded(
+                        child: Container(
+                          height: 140,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const RecentDisposalScreen(),
+                                ),
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        color: Colors.purple.shade50,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Icon(
+                                        Icons.history,
+                                        color: Colors.purple.shade400,
+                                        size: 28,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'Recent',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'View history',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+
+                      // Search Card
+                      Expanded(
+                        child: Container(
+                          height: 140,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const BarcodeScannerScreen(),
+                                ),
+                              ),
+                              borderRadius: BorderRadius.circular(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 50,
+                                      height: 50,
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.shade50,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Icon(
+                                        Icons.qr_code_scanner,
+                                        color: Colors.blue.shade400,
+                                        size: 28,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'Barcode',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Scan product',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Tips Section
+                  const Text(
+                    'Disposal Tips',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  _buildTipCard(
+                    icon: Icons.emoji_nature,
+                    iconColor: Colors.green,
+                    iconBg: Colors.green.shade50,
+                    title: 'Rinse Before Recycling',
+                    description: 'Clean containers prevent contamination',
+                  ),
+                  _buildTipCard(
+                    icon: Icons.layers,
+                    iconColor: Colors.orange,
+                    iconBg: Colors.orange.shade50,
+                    title: 'Separate Materials',
+                    description: 'Keep different materials sorted',
+                  ),
+                  _buildTipCard(
+                    icon: Icons.lightbulb_outline,
+                    iconColor: Colors.amber,
+                    iconBg: Colors.amber.shade50,
+                    title: 'Check Local Guidelines',
+                    description: 'Rules vary by location',
+                  ),
+
+                  const SizedBox(height: 32),
+                ],
+              ),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTipCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String description,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -350,225 +622,498 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
     final String name = productData['name'] ?? 'Unknown Item';
     final String category = productData['category'] ?? 'N/A';
     final String material = productData['material'] ?? 'N/A';
-    final String ecoScore = productData['ecoScore'] ?? 'N/A';
+    final String ecoScore =
+        (productData['ecoScore'] ?? productData['eco_score'] ?? 'N/A')
+            .toString()
+            .toUpperCase();
     final List disposalSteps = _ensureList(productData['disposalSteps']);
     final List tips = _ensureList(productData['tips']);
-    final String imageUrl = productData['imageUrl'] ?? '';
+    final String imageUrl =
+        productData['imageUrl'] ?? productData['image_url'] ?? '';
 
+    // Get eco score color using theme colors
     Color getScoreColor(String score) {
-      if (score.startsWith('A')) return Colors.green.shade600;
-      if (score.startsWith('B')) return Colors.lightGreen.shade600;
-      if (score.startsWith('C')) return Colors.amber.shade600;
-      return Colors.grey;
+      final ecoScoreColors = {
+        'A': kResultCardGreen,
+        'B': kDiscoverMoreGreen,
+        'C': kPrimaryYellow,
+        'D': kRankSustainabilityHero,
+        'E': kWarningRed,
+      };
+      final firstChar = score.isNotEmpty ? score[0].toUpperCase() : 'N';
+      return ecoScoreColors[firstChar] ?? Colors.grey.shade600;
     }
 
-    Color getBgColor(String score) {
-      if (score.startsWith('A')) return Colors.green.shade50;
-      if (score.startsWith('B')) return Colors.lightGreen.shade50;
-      if (score.startsWith('C')) return Colors.amber.shade50;
-      return Colors.grey.shade50;
-    }
-
-    Widget _buildRecyclingCenterCard() {
-      return Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        color: Colors.grey.shade50,
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: Colors.white,
-                  border: Border.all(color: Colors.grey.shade200),
+    return CustomScrollView(
+      slivers: [
+        // Hero Image Section with SliverAppBar
+        SliverAppBar(
+          expandedHeight: 320,
+          pinned: true,
+          backgroundColor: kPrimaryGreen,
+          iconTheme: const IconThemeData(color: Colors.white),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => const DisposalGuidanceScreen(productId: null),
                 ),
-                child: const Icon(Icons.map, color: kPrimaryGreen),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text(
-                      'Green Recycling Center',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
+              );
+            },
+          ),
+          flexibleSpace: FlexibleSpaceBar(
+            background: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Product Image
+                if (imageUrl.isNotEmpty)
+                  Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: Colors.grey.shade200,
+                      child: Icon(
+                        Icons.recycling,
+                        size: 100,
+                        color: kPrimaryGreen.withOpacity(0.3),
                       ),
                     ),
-                    Text('0.5 km', style: TextStyle(color: Colors.black54)),
-                  ],
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () =>
-                    _openMapsForRecycling('Green Recycling Center'),
-                child: const Text('Navigate'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 10,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
+                  )
+                else
+                  Container(
+                    color: Colors.grey.shade200,
+                    child: Icon(
+                      Icons.recycling,
+                      size: 100,
+                      color: kPrimaryGreen.withOpacity(0.3),
+                    ),
                   ),
-                  child: imageUrl.isNotEmpty
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(imageUrl, fit: BoxFit.cover),
-                        )
-                      : const Icon(
-                          Icons.image_outlined,
-                          size: 48,
-                          color: Colors.black26,
-                        ),
+
+                // Gradient Overlay
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withOpacity(0.3),
+                        Colors.black.withOpacity(0.7),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
+
+                // Product Name and Category Badge
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  right: 80,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         name,
                         style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          shadows: [
+                            Shadow(
+                              color: Colors.black45,
+                              offset: Offset(0, 2),
+                              blurRadius: 4,
+                            ),
+                          ],
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Chip(label: Text(category)),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kPrimaryGreen,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.category,
+                              size: 16,
+                              color: Colors.white,
                             ),
-                            decoration: BoxDecoration(
-                              color: getBgColor(ecoScore),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'Eco: $ecoScore',
-                              style: TextStyle(
-                                color: getScoreColor(ecoScore),
+                            const SizedBox(width: 6),
+                            Text(
+                              category,
+                              style: const TextStyle(
+                                fontSize: 13,
                                 fontWeight: FontWeight.w600,
+                                color: Colors.white,
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
+                  ),
+                ),
+
+                // Eco Score Badge (Circular)
+                Positioned(
+                  bottom: 16,
+                  right: 16,
+                  child: Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          ecoScore,
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: getScoreColor(ecoScore),
+                          ),
+                        ),
+                        Text(
+                          'ECO SCORE',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade600,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Material: $material',
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Disposal Steps',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+
+        // Content Section
+        SliverToBoxAdapter(
+          child: Container(
+            color: Colors.grey.shade50,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Material Composition Card (Blue)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE3F2FD),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  const SizedBox(height: 8),
-                  ...disposalSteps.map(
-                    (s) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.check_circle_outline,
-                            size: 18,
-                            color: Colors.green,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(s.toString())),
-                        ],
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFBBDEFB),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.inventory_2_outlined,
+                          color: Color(0xFF1976D2),
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Material Composition',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              material,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1565C0),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Disposal Steps Section
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.playlist_add_check_rounded,
+                      color: kPrimaryGreen,
+                      size: 26,
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Disposal Steps',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Tips',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  const SizedBox(height: 8),
-                  ...tips.map(
-                    (t) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Text('• ${t.toString()}'),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                if (disposalSteps.isEmpty)
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
                     ),
+                    child: Center(
+                      child: Text(
+                        'No disposal steps available',
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  ...disposalSteps.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final step = entry.value.toString();
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.grey.shade200,
+                          width: 1,
+                        ),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                              color: kPrimaryGreen,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                '${index + 1}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Text(
+                              step,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: Colors.black87,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+
+                const SizedBox(height: 24),
+
+                // Pro Tips Section
+                if (tips.isNotEmpty)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.lightbulb,
+                            color: Colors.amber.shade700,
+                            size: 26,
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Eco Tips',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      ...tips.map((tip) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.shade50,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: Colors.amber.shade200,
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade100,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.stars,
+                                  color: Colors.amber.shade700,
+                                  size: 20,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Text(
+                                  tip.toString(),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade800,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 24),
+                    ],
                   ),
-                ],
-              ),
+
+                // Recycling Center Card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.grey.shade200, width: 1),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: kPrimaryGreen.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Icon(
+                          Icons.location_on,
+                          size: 36,
+                          color: kPrimaryGreen,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Find Nearby Recycling Centers',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Locate the nearest facility for proper disposal',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton.icon(
+                          onPressed: () =>
+                              _openMapsForRecycling('recycling center near me'),
+                          icon: const Icon(
+                            Icons.navigation,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                          label: const Text(
+                            'Open in Maps',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kPrimaryGreen,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-          _buildRecyclingCenterCard(),
-          const SizedBox(height: 32),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -636,6 +1181,9 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
   @override
   Widget build(BuildContext context) {
     final bool showDetail = widget.productId != null && !_loading;
+    // Check if we can pop (i.e., we were pushed from another screen)
+    final bool canPop = Navigator.of(context).canPop();
+
     return Scaffold(
       drawer: const AppDrawer(),
       appBar: AppBar(
@@ -646,13 +1194,18 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () {
-                  // Return to the hub (clear productId)
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          const DisposalGuidanceScreen(productId: null),
-                    ),
-                  );
+                  // If we were pushed from another screen (like RecentDisposalScreen),
+                  // just pop back. Otherwise, navigate to hub.
+                  if (canPop) {
+                    Navigator.of(context).pop();
+                  } else {
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const DisposalGuidanceScreen(productId: null),
+                      ),
+                    );
+                  }
                 },
               )
             : Builder(

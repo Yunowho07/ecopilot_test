@@ -8,37 +8,182 @@ class ResultScreen extends StatelessWidget {
 
   const ResultScreen({Key? key, required this.analysisData}) : super(key: key);
 
-  Widget _buildInfoRow(
-    String label,
-    String value, {
-    IconData? icon,
-    Color? iconColor,
-    Color? valueColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (icon != null) ...[
-            Icon(icon, size: 18, color: iconColor ?? Colors.white70),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: Text.rich(
-              TextSpan(
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.grey.shade50,
+      body: CustomScrollView(
+        slivers: [
+          // Modern Hero Header with Product Image
+          SliverAppBar(
+            expandedHeight: 300,
+            floating: false,
+            pinned: true,
+            backgroundColor: kPrimaryGreen,
+            iconTheme: const IconThemeData(color: Colors.white),
+            flexibleSpace: FlexibleSpaceBar(
+              title: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                // decoration: BoxDecoration(
+                //   color: Colors.black.withOpacity(0.6),
+                //   borderRadius: BorderRadius.circular(20),
+                // ),
+                // child: const Text(
+                //   'Product Analysis',
+                //   style: TextStyle(
+                //     color: Colors.white,
+                //     fontWeight: FontWeight.bold,
+                //     fontSize: 16,
+                //   ),
+                // ),
+              ),
+              background: Stack(
+                fit: StackFit.expand,
                 children: [
-                  TextSpan(
-                    text: '$label: ',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                  // Product Image
+                  if (analysisData.imageUrl != null &&
+                      analysisData.imageUrl!.isNotEmpty)
+                    Image.network(
+                      analysisData.imageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (ctx, err, st) =>
+                          analysisData.imageFile != null
+                          ? Image.file(
+                              analysisData.imageFile!,
+                              fit: BoxFit.cover,
+                            )
+                          : _buildImagePlaceholder(),
+                    )
+                  else if (analysisData.imageFile != null)
+                    Image.file(analysisData.imageFile!, fit: BoxFit.cover)
+                  else
+                    _buildImagePlaceholder(),
+                  // Gradient Overlay
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.7),
+                        ],
+                      ),
                     ),
                   ),
-                  TextSpan(
-                    text: value,
-                    style: TextStyle(color: valueColor ?? Colors.white70),
+                ],
+              ),
+            ),
+          ),
+
+          // Content Section
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Product Name & Eco Score Card
+                  _buildProductHeaderCard(),
+                  const SizedBox(height: 20),
+
+                  // Product Details Card
+                  _buildModernCard(
+                    title: 'Product Details',
+                    icon: Icons.info_outline,
+                    iconColor: Colors.blue.shade600,
+                    child: Column(
+                      children: [
+                        _buildModernInfoRow(
+                          'Product Name',
+                          analysisData.productName,
+                          Icons.shopping_bag_outlined,
+                          Colors.blue.shade600,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildModernInfoRow(
+                          'Category',
+                          analysisData.category,
+                          Icons.category_outlined,
+                          Colors.purple.shade600,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildModernInfoRow(
+                          'Ingredients',
+                          analysisData.ingredients,
+                          Icons.science_outlined,
+                          Colors.orange.shade600,
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 20),
+
+                  // Eco Impact Card
+                  _buildModernCard(
+                    title: 'Environmental Impact',
+                    icon: Icons.eco_outlined,
+                    iconColor: kPrimaryGreen,
+                    child: Column(
+                      children: [
+                        _buildImpactRow(
+                          'Carbon Footprint',
+                          analysisData.carbonFootprint,
+                          Icons.cloud_outlined,
+                          Colors.lightBlue.shade400,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildImpactRow(
+                          'Packaging Type',
+                          analysisData.packagingType,
+                          Icons.recycling,
+                          Colors.green.shade400,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildImpactRow(
+                          'Disposal Method',
+                          analysisData.disposalMethod,
+                          Icons.delete_outline,
+                          Colors.orange.shade400,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Environmental Warnings Card
+                  _buildModernCard(
+                    title: 'Sustainability Check',
+                    icon: Icons.check_circle_outline,
+                    iconColor: Colors.teal.shade600,
+                    child: Column(
+                      children: [
+                        _buildWarningCheckRow(
+                          'Microplastics Free',
+                          !analysisData.containsMicroplastics,
+                        ),
+                        const SizedBox(height: 10),
+                        _buildWarningCheckRow(
+                          'Palm Oil Free',
+                          !analysisData.palmOilDerivative,
+                        ),
+                        const SizedBox(height: 10),
+                        _buildWarningCheckRow(
+                          'Cruelty-Free',
+                          analysisData.crueltyFree,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Quick Actions Card
+                  _buildQuickActionsCard(context),
+
+                  const SizedBox(height: 80),
                 ],
               ),
             ),
@@ -48,44 +193,121 @@ class ResultScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildWarningRow(String label, bool isChecked) {
-    final bool isGood = label.toLowerCase().contains('cruelty')
-        ? isChecked
-        : !isChecked;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          Icon(
-            isGood ? Icons.check_circle_outline : Icons.cancel_outlined,
-            color: isGood ? kPrimaryGreen : kWarningRed,
-            size: 20,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
+  // Image Placeholder Widget
+  Widget _buildImagePlaceholder() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            kPrimaryGreen.withOpacity(0.3),
+            kPrimaryGreen.withOpacity(0.1),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.eco_outlined,
+              size: 80,
+              color: kPrimaryGreen.withOpacity(0.5),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'No Product Image',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Product Header Card with Name and Eco Score
+  Widget _buildProductHeaderCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.85)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: kPrimaryGreen.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
           ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  analysisData.productName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Text(
+                    analysisData.category,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.95),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          // Eco Score Badge
+          _buildEcoScoreBadge(analysisData.ecoScore),
         ],
       ),
     );
   }
 
-  Widget _buildEcoScoreDisplay(String ecoScore) {
+  // Eco Score Badge Widget
+  Widget _buildEcoScoreBadge(String ecoScore) {
     Map<String, Color> ecoScoreColors = {
-      'A': kResultCardGreen,
-      'B': kDiscoverMoreGreen, // lighter green from theme
-      'C': kPrimaryYellow,
-      'D': kRankSustainabilityHero,
-      'E': kWarningRed,
+      'A': Colors.green.shade700,
+      'B': Colors.lightGreen.shade700,
+      'C': Colors.amber.shade700,
+      'D': Colors.orange.shade700,
+      'E': Colors.red.shade700,
       'N/A': Colors.grey.shade600,
     };
+
     String displayScore = ecoScore.toUpperCase().trim();
     if (displayScore.length > 1 && displayScore.contains('+')) {
       displayScore = displayScore.substring(0, 1);
@@ -95,279 +317,418 @@ class ResultScreen extends StatelessWidget {
         : 'N';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      width: 80,
+      height: 80,
       decoration: BoxDecoration(
-        color: ecoScoreColors[displayLetter] ?? Colors.grey.shade600,
-        borderRadius: BorderRadius.circular(6),
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Text(
-        'ECO-SCORE $ecoScore'.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-        ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            displayLetter,
+            style: TextStyle(
+              color: ecoScoreColors[displayLetter] ?? Colors.grey.shade600,
+              fontWeight: FontWeight.bold,
+              fontSize: 32,
+              height: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'ECO SCORE',
+            style: TextStyle(
+              color: ecoScoreColors[displayLetter] ?? Colors.grey.shade600,
+              fontWeight: FontWeight.w600,
+              fontSize: 9,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildDiscoverMoreButton({
+  // Modern Card Widget
+  Widget _buildModernCard({
+    required String title,
+    required IconData icon,
+    required Color iconColor,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Card Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Card Content
+          Padding(padding: const EdgeInsets.all(20), child: child),
+        ],
+      ),
+    );
+  }
+
+  // Modern Info Row Widget
+  Widget _buildModernInfoRow(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Impact Row Widget
+  Widget _buildImpactRow(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Warning Check Row Widget
+  Widget _buildWarningCheckRow(String label, bool isGood) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isGood ? Colors.green.shade50 : Colors.red.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isGood ? Colors.green.shade200 : Colors.red.shade200,
+          width: 1.5,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: isGood ? Colors.green.shade100 : Colors.red.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isGood ? Icons.check : Icons.close,
+              size: 18,
+              color: isGood ? Colors.green.shade700 : Colors.red.shade700,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isGood ? Colors.green.shade900 : Colors.red.shade900,
+              ),
+            ),
+          ),
+          if (isGood)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade600,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'GOOD',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // Quick Actions Card Widget
+  Widget _buildQuickActionsCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [kDiscoverMoreYellow, kDiscoverMoreYellow.withOpacity(0.9)],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: kDiscoverMoreYellow.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.explore_outlined,
+                  color: kDiscoverMoreYellow,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Discover More',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  label: 'Recipe Ideas',
+                  icon: Icons.restaurant_menu,
+                  color: kDiscoverMoreBlue,
+                  onTap: () {
+                    debugPrint('Navigating to Recipe Ideas');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text(
+                          'Recipe Ideas feature coming soon! 🍳',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        backgroundColor: kDiscoverMoreBlue,
+                        behavior: SnackBarBehavior.floating,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  label: 'Alternatives',
+                  icon: Icons.eco,
+                  color: kPrimaryGreen,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => alternative_screen.AlternativeScreen(
+                          scannedProduct: analysisData,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Action Button Widget
+  Widget _buildActionButton({
     required String label,
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
   }) {
-    return Expanded(
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        customBorder: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15.0),
-        ),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          height: 80,
+          padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.9),
-            borderRadius: BorderRadius.circular(15.0),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: Colors.white, size: 24),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+            color: color,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.4),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: const Text(
-          'Product Details',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  color: Colors.grey.shade900,
+                  color: Colors.white.withOpacity(0.3),
+                  shape: BoxShape.circle,
                 ),
-                height: 200,
-                child:
-                    analysisData.imageUrl != null &&
-                        analysisData.imageUrl!.isNotEmpty
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
-                        child: Image.network(
-                          analysisData.imageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (ctx, err, st) =>
-                              analysisData.imageFile != null
-                              ? Image.file(
-                                  analysisData.imageFile!,
-                                  fit: BoxFit.cover,
-                                )
-                              : const Center(
-                                  child: Text(
-                                    "Image Not Available",
-                                    style: TextStyle(color: Colors.white70),
-                                  ),
-                                ),
-                        ),
-                      )
-                    : analysisData.imageFile != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(15),
-                        child: Image.file(
-                          analysisData.imageFile!,
-                          fit: BoxFit.cover,
-                        ),
-                      )
-                    : const Center(
-                        child: Text(
-                          "Image Not Available",
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ),
+                child: Icon(icon, color: Colors.white, size: 28),
               ),
-              const SizedBox(height: 20),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: kPrimaryGreen, width: 3),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Product Details',
-                      style: TextStyle(
-                        color: kPrimaryGreen,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Divider(color: Colors.white30, height: 16),
-                    _buildInfoRow('Name', analysisData.productName),
-                    _buildInfoRow('Category', analysisData.category),
-                    _buildInfoRow('Ingredients', analysisData.ingredients),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: kPrimaryGreen, width: 3),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Eco Impact',
-                      style: TextStyle(
-                        color: kPrimaryGreen,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Divider(color: Colors.white30, height: 16),
-                    _buildInfoRow(
-                      'Carbon Footprint',
-                      analysisData.carbonFootprint,
-                      icon: Icons.cloud,
-                      iconColor: Colors.lightBlue.shade300,
-                    ),
-                    _buildInfoRow(
-                      'Packaging',
-                      analysisData.packagingType,
-                      icon: Icons.eco,
-                      iconColor: Colors.lightGreen.shade300,
-                    ),
-                    _buildInfoRow(
-                      'Suggested Disposal',
-                      analysisData.disposalMethod,
-                      icon: Icons.restore_from_trash,
-                      iconColor: Colors.grey.shade400,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: kPrimaryGreen, width: 3),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Environmental Warnings',
-                      style: TextStyle(
-                        color: kPrimaryGreen,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Divider(color: Colors.white30, height: 16),
-                    _buildWarningRow(
-                      'Contains microplastics?',
-                      analysisData.containsMicroplastics,
-                    ),
-                    _buildWarningRow(
-                      'Palm oil derivative?',
-                      analysisData.palmOilDerivative,
-                    ),
-                    _buildWarningRow('Cruelty-Free?', analysisData.crueltyFree),
-                    const SizedBox(height: 10),
-                    _buildEcoScoreDisplay(analysisData.ecoScore),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: kDiscoverMoreYellow, width: 3),
-                ),
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Discover More',
-                      style: TextStyle(
-                        color: kDiscoverMoreYellow,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        _buildDiscoverMoreButton(
-                          label: 'Recipe Ideas',
-                          icon: Icons.restaurant_menu,
-                          color: kDiscoverMoreBlue,
-                          onTap: () {
-                            debugPrint('Navigating to Recipe Ideas');
-                          },
-                        ),
-                        const SizedBox(width: 16),
-                        _buildDiscoverMoreButton(
-                          label: 'Better Alternative',
-                          icon: Icons.eco,
-                          color: kPrimaryGreen,
-                          onTap: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    alternative_screen.AlternativeScreen(
-                                      scannedProduct: analysisData,
-                                    ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ],
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],

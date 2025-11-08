@@ -162,9 +162,27 @@ class ProductAnalysisData {
       return 'N/A';
     }
 
-    String productName = readString(['product_name', 'name', 'Product name']);
-    String category = readString(['category', 'Category']);
-    String ingredients = readString(['ingredients', 'Ingredients']);
+    String productName = readString([
+      'product_name',
+      'name',
+      'Product name',
+      'productName',
+      'product',
+    ]);
+    String category = readString([
+      'category',
+      'Category',
+      'product_category',
+      'productCategory',
+    ]);
+    String ingredients = readString([
+      'ingredients',
+      'Ingredients',
+      'ingredient_list',
+      'ingredientList',
+      'ingredients_text',
+      'ingredientsText',
+    ]);
     String carbonFootprint = readString([
       'carbon_footprint',
       'carbonFootprint',
@@ -181,6 +199,8 @@ class ProductAnalysisData {
       'ecoScore',
       'Eco Score',
       'Eco-friendliness rating',
+      'ecoscore',
+      'ecoscore_grade',
     ]);
 
     // disposal steps may be array or string

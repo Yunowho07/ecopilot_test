@@ -554,7 +554,7 @@ class FirebaseService {
   Future<List<Map<String, dynamic>>> getLeaderboard({int limit = 50}) async {
     final snapshot = await _firestore
         .collection('users')
-        .orderBy('ecoScore', descending: true)
+        .orderBy('ecoPoints', descending: true)
         .limit(limit)
         .get();
 
@@ -562,9 +562,9 @@ class FirebaseService {
       final data = d.data();
       return {
         'uid': d.id,
-        'name': data['name'] ?? '',
+        'name': data['name'] ?? data['displayName'] ?? 'Anonymous',
         'photoUrl': data['photoUrl'] ?? '',
-        'ecoScore': data['ecoScore'] ?? 0,
+        'ecoScore': data['ecoPoints'] ?? data['ecoScore'] ?? 0,
         'title': data['title'] ?? '',
       };
     }).toList();
@@ -626,11 +626,15 @@ class FirebaseService {
     required String carbonFootprint,
     String? imageUrl,
     String? category,
+    String? ingredients,
     String? packagingType,
     List<dynamic>? disposalSteps,
     String? tips,
     String? nearbyCenter,
     bool isDisposal = false,
+    bool? containsMicroplastics,
+    bool? palmOilDerivative,
+    bool? crueltyFree,
   }) async {
     // Allow saving scans even when no FirebaseAuth user is signed in by
     // falling back to the 'anonymous' UID. Callers (UI) already sometimes
@@ -640,18 +644,92 @@ class FirebaseService {
         .collection('users')
         .doc(uid)
         .collection('scans');
+    // Normalize disposalSteps and tips into lists for storage
+    List<dynamic> disposalList = <dynamic>[];
+    if (disposalSteps != null) {
+      disposalList = List<dynamic>.from(disposalSteps);
+    }
+
+    List<String> tipsList = <String>[];
+    if (tips != null) {
+      if (tips.contains('\n')) {
+        tipsList = tips
+            .split('\n')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      } else if (tips.contains(',')) {
+        tipsList = tips
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+      } else {
+        tipsList = [tips.trim()];
+      }
+    }
+
+    // Persist both camelCase and legacy snake_case/legacy keys for compatibility.
     await scansRef.add({
+      // Raw analysis text produced by Gemini or API (kept for diagnostics)
       'analysis': analysis,
+      'analysis_text': analysis,
+
+      // Product name (both conventions)
       'product_name': productName,
+      'productName': productName,
+      'name': productName,
+
+      // Eco score / carbon footprint (both conventions)
       'eco_score': ecoScore,
+      'ecoScore': ecoScore,
       'carbon_footprint': carbonFootprint,
+      'carbonFootprint': carbonFootprint,
+
+      // Image URL (both conventions)
       'image_url': imageUrl ?? null,
+      'imageUrl': imageUrl ?? null,
+
+      // Category / packaging
       'category': category ?? null,
+      'product_category': category ?? null,
+
+      // Ingredients (both conventions)
+      'ingredients': ingredients ?? null,
+      'ingredient_list': ingredients ?? null,
+      'ingredientList': ingredients ?? null,
+
       'packaging': packagingType ?? null,
-      'disposalSteps': disposalSteps ?? null,
-      'tips': tips ?? null,
+      'packagingType': packagingType ?? null,
+
+      // Disposal steps stored as an array plus a joined string
+      'disposalSteps': disposalList.isNotEmpty ? disposalList : null,
+      'disposal_method': disposalList.isNotEmpty
+          ? disposalList.join('\n')
+          : null,
+      'disposalMethod': disposalList.isNotEmpty
+          ? disposalList.join('\n')
+          : null,
+
+      // Tips stored as list and text
+      'tips': tipsList.isNotEmpty ? tipsList : null,
+      'tips_text': tipsList.isNotEmpty ? tipsList.join('\n') : null,
+
+      // Nearby center
       'nearbyCenter': nearbyCenter ?? null,
+      'nearby_center': nearbyCenter ?? null,
+
       'isDisposal': isDisposal,
+
+      // Persist explicit boolean analysis flags (both camelCase and snake_case)
+      'containsMicroplastics': containsMicroplastics ?? false,
+      'contains_microplastics': containsMicroplastics ?? false,
+      'palmOilDerivative': palmOilDerivative ?? false,
+      'palm_oil_derivative': palmOilDerivative ?? false,
+      'crueltyFree': crueltyFree ?? false,
+      'cruelty_free': crueltyFree ?? false,
+
+      // Timestamps
       'timestamp': FieldValue.serverTimestamp(),
       'date': DateFormat('yyyy-MM-dd – kk:mm').format(DateTime.now()),
     });

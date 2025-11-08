@@ -1,24 +1,24 @@
 import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart'; // Required for date formatting
+import 'package:share_plus/share_plus.dart';
 import '../auth/firebase_service.dart';
 import '/auth/landing.dart';
 import 'profile_screen.dart';
 import 'alternative_screen.dart';
-import 'disposal_guidance_screen.dart';
 import '/screens/scan_screen.dart';
 import 'notification_screen.dart';
-import 'setting_screen.dart';
-import 'support_screen.dart';
 import 'recent_activity_screen.dart';
-import 'package:ecopilot_test/utils/color_extensions.dart';
+import 'eco_assistant_screen.dart';
 import 'package:ecopilot_test/utils/constants.dart';
+import 'package:ecopilot_test/utils/challenge_generator.dart';
+import 'package:ecopilot_test/utils/tip_generator.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'package:ecopilot_test/widgets/bottom_navigation.dart';
-import 'daily_challenge_screen.dart'; // ⚠️ NEW IMPORT
-import 'leaderboard_screen.dart';
+import 'daily_challenge_screen.dart';
 
 // Placeholder data structure for challenge and user progress
 class DailyChallenge {
@@ -52,12 +52,22 @@ class _HomeScreenState extends State<HomeScreen> {
   int _userStreak = 0;
   int _selectedIndex = 0; // For Bottom Navigation Bar
 
+  // Monthly Eco Points tracking
+  int _monthlyEcoPoints = 0;
+  int _monthlyGoal = 500; // Default monthly goal
+
+  // Tip tracking state
+  String _currentTip = '';
+  String _currentTipCategory = '';
+  bool _isTipBookmarked = false;
+  String _todayDateString = '';
+
   // Use theme colors from constants
   final primaryGreen = const Color(0xFF4CAF50);
   final yellowAccent = const Color(0xFFFFEB3B);
 
   // --- NEW: Tip Fetch Logic ---
-  Future<String> _fetchTodayTip() async {
+  Future<Map<String, String>> _fetchTodayTip() async {
     // 1. Get today's date string
     String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -68,25 +78,190 @@ class _HomeScreenState extends State<HomeScreen> {
           .doc(today)
           .get();
 
-      // 3. If it exists, return the tip field
-      if (doc.exists && doc.data() != null && doc.data()!['tip'] != null) {
-        return doc.data()!['tip'] as String;
+      // 3. If it exists, return the tip field and category
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        return {
+          'tip': data['tip'] as String? ?? 'No eco tips available today 🌍',
+          'category': data['category'] as String? ?? 'eco_habits',
+        };
       } else {
         // If not found, show a fallback message
-        return 'No eco tips available today 🌍';
+        return {
+          'tip': 'No eco tips available today 🌍',
+          'category': 'eco_habits',
+        };
       }
     } catch (e) {
-      debugPrint("Error fetching daily tip: $e");
-      return 'Failed to load tip. Please check your connection.';
+      debugPrint('Error fetching tip: $e');
+      return {'tip': 'Unable to load tip 🌍', 'category': 'eco_habits'};
     }
   }
-  // ---------------------------
 
   @override
   void initState() {
     super.initState();
+    _todayDateString = DateFormat('yyyy-MM-dd').format(DateTime.now());
     _loadUserData();
     _loadDailyChallengeData();
+    _loadMonthlyEcoPoints();
+    _ensureChallengesExist();
+    _ensureTipsExist();
+    _checkIfTipBookmarked();
+  }
+
+  // Ensure today's challenges exist in Firestore
+  Future<void> _ensureChallengesExist() async {
+    try {
+      await ChallengeGenerator.ensureTodayChallengesExist();
+    } catch (e) {
+      debugPrint('Error ensuring challenges exist: $e');
+    }
+  }
+
+  // Ensure today's tip exists in Firestore
+  Future<void> _ensureTipsExist() async {
+    try {
+      await TipGenerator.ensureTodayTipExists();
+    } catch (e) {
+      debugPrint('Error ensuring tip exists: $e');
+    }
+  }
+
+  // Check if today's tip is bookmarked
+  Future<void> _checkIfTipBookmarked() async {
+    try {
+      final user = _firebaseService.currentUser;
+      if (user == null) return;
+
+      final bookmarkDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('bookmarked_tips')
+          .doc(_todayDateString)
+          .get();
+
+      if (mounted) {
+        setState(() {
+          _isTipBookmarked = bookmarkDoc.exists;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking bookmark status: $e');
+    }
+  }
+
+  // Toggle bookmark for today's tip
+  Future<void> _toggleTipBookmark() async {
+    try {
+      final user = _firebaseService.currentUser;
+      if (user == null) {
+        _showSnackBar('Please sign in to bookmark tips');
+        return;
+      }
+
+      final bookmarkRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('bookmarked_tips')
+          .doc(_todayDateString);
+
+      if (_isTipBookmarked) {
+        // Remove bookmark
+        await bookmarkRef.delete();
+        setState(() {
+          _isTipBookmarked = false;
+        });
+        _showSnackBar('Tip removed from bookmarks');
+      } else {
+        // Add bookmark
+        await bookmarkRef.set({
+          'tip': _currentTip,
+          'category': _currentTipCategory,
+          'date': _todayDateString,
+          'bookmarkedAt': FieldValue.serverTimestamp(),
+        });
+        setState(() {
+          _isTipBookmarked = true;
+        });
+        _showSnackBar('Tip bookmarked! ⭐');
+      }
+    } catch (e) {
+      debugPrint('Error toggling bookmark: $e');
+      _showSnackBar('Failed to update bookmark');
+    }
+  }
+
+  // Share today's tip
+  void _shareTip() {
+    if (_currentTip.isEmpty) {
+      _showSnackBar('No tip to share');
+      return;
+    }
+
+    Share.share(
+      '🌱 Today\'s Eco Tip from EcoPilot:\n\n$_currentTip\n\n'
+      'Join me in making sustainable choices! Download EcoPilot app.',
+      subject: 'Daily Eco Tip',
+    );
+  }
+
+  // Helper method to show snackbar
+  void _showSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // Load monthly Eco Points for current user
+  Future<void> _loadMonthlyEcoPoints() async {
+    try {
+      final user = _firebaseService.currentUser;
+      if (user == null) return;
+
+      // Get current month string (e.g., "2025-11")
+      final now = DateTime.now();
+      final monthKey = DateFormat('yyyy-MM').format(now);
+
+      // Fetch user's monthly points document
+      final monthlyDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('monthly_points')
+          .doc(monthKey)
+          .get();
+
+      if (monthlyDoc.exists) {
+        final data = monthlyDoc.data();
+        if (mounted) {
+          setState(() {
+            _monthlyEcoPoints = data?['points'] ?? 0;
+            _monthlyGoal = data?['goal'] ?? 500;
+          });
+        }
+      } else {
+        // Initialize monthly points document
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('monthly_points')
+            .doc(monthKey)
+            .set({
+              'points': 0,
+              'goal': 500,
+              'month': monthKey,
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+      }
+    } catch (e) {
+      debugPrint('Error loading monthly eco points: $e');
+    }
   }
 
   // Fetch user data from the service
@@ -175,317 +350,548 @@ class _HomeScreenState extends State<HomeScreen> {
   // (preview completion now handled by launching the detailed DailyChallengeScreen and
   // receiving a result when the user completes the challenge there)
 
-  // --- NEW: Tip Card Content Widget ---
-  Widget _TipCardContent({required String tip, bool isError = false}) {
+  // Modern Tip Card Widget with Bookmark and Share - Redesigned with Yellow Theme
+  Widget _buildModernTipCard({
+    required String tip,
+    required String category,
+    bool isError = false,
+    bool isLoading = false,
+  }) {
+    // Update state variables when tip loads
+    if (!isError && !isLoading && _currentTip != tip) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _currentTip = tip;
+            _currentTipCategory = category;
+          });
+        }
+      });
+    }
+
+    // Get category emoji
+    String getCategoryEmoji() {
+      switch (category) {
+        case 'waste_reduction':
+          return '♻️';
+        case 'energy_saving':
+          return '💡';
+        case 'sustainable_shopping':
+          return '🛍️';
+        case 'transportation':
+          return '🚶';
+        case 'food_habits':
+          return '🥗';
+        case 'water_conservation':
+          return '💧';
+        case 'recycling':
+          return '♻️';
+        case 'eco_habits':
+          return '🌱';
+        default:
+          return '💚';
+      }
+    }
+
+    // Get category display name
+    String getCategoryName() {
+      switch (category) {
+        case 'waste_reduction':
+          return 'Waste Reduction';
+        case 'energy_saving':
+          return 'Energy Saving';
+        case 'sustainable_shopping':
+          return 'Sustainable Shopping';
+        case 'transportation':
+          return 'Transportation';
+        case 'food_habits':
+          return 'Food Habits';
+        case 'water_conservation':
+          return 'Water Conservation';
+        case 'recycling':
+          return 'Recycling';
+        case 'eco_habits':
+          return 'Eco Habits';
+        default:
+          return 'Eco Tips';
+      }
+    }
+
     return Container(
-      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: isError
-            ? Colors.red.shade100
-            : colorWithOpacity(kPrimaryYellow, 0.9),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            isError ? Icons.error_outline : Icons.lightbulb_outline,
-            color: isError ? Colors.red.shade800 : Colors.black,
-            size: 28,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isError
+              ? [Colors.red.shade50, Colors.red.shade100]
+              : isLoading
+              ? [Colors.grey.shade100, Colors.grey.shade200]
+              : [
+                  const Color(0xFFFFF9E6), // Light yellow
+                  const Color(0xFFFFF3CC), // Slightly darker yellow
+                ],
+        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: isError
+              ? Colors.red.shade300
+              : isLoading
+              ? Colors.grey.shade300
+              : const Color(0xFFFFD54F),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isError
+                ? Colors.red.withOpacity(0.2)
+                : isLoading
+                ? Colors.grey.withOpacity(0.1)
+                : const Color(0xFFFFD54F).withOpacity(0.3),
+            blurRadius: 25,
+            offset: const Offset(0, 12),
+            spreadRadius: 0,
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Today's tips :",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                Text(tip, style: const TextStyle(fontSize: 15)),
-              ],
-            ),
+          BoxShadow(
+            color: Colors.white.withOpacity(0.8),
+            blurRadius: 10,
+            offset: const Offset(-5, -5),
+            spreadRadius: 0,
           ),
         ],
       ),
-    );
-  }
-  // -----------------------------------
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: Colors.white,
-      appBar: _buildAppBar(),
-      drawer: const AppDrawer(),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Greeting Section
-            Text(
-              'Hello !',
-              style: TextStyle(fontSize: 24, color: Colors.grey.shade700),
+      child: Stack(
+        children: [
+          // Decorative circles in background
+          Positioned(
+            top: -30,
+            right: -30,
+            child: Container(
+              width: 120,
+              height: 120,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFFFD54F).withOpacity(0.15),
+              ),
             ),
-            Text(
-              _userName,
-              style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
+          ),
+          Positioned(
+            bottom: -20,
+            left: -20,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: const Color(0xFFFFC107).withOpacity(0.1),
+              ),
             ),
-            const SizedBox(height: 5),
-            Row(
-              children: [
-                const Text(
-                  'Lets get started',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          // Main content
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header section with premium design
+              Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Large emoji with glow effect
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: isError
+                                  ? [Colors.red.shade400, Colors.red.shade500]
+                                  : isLoading
+                                  ? [Colors.grey.shade400, Colors.grey.shade500]
+                                  : [
+                                      const Color(0xFFFFD54F),
+                                      const Color(0xFFFFC107),
+                                    ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: isError
+                                    ? Colors.red.withOpacity(0.3)
+                                    : isLoading
+                                    ? Colors.grey.withOpacity(0.2)
+                                    : const Color(0xFFFFC107).withOpacity(0.4),
+                                blurRadius: 20,
+                                spreadRadius: 2,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Center(
+                            child: Text(
+                              isError
+                                  ? '❌'
+                                  : isLoading
+                                  ? '⏳'
+                                  : getCategoryEmoji(),
+                              style: const TextStyle(fontSize: 40),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 20),
+                        // Title section
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // "Today" badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFFD54F),
+                                      Color(0xFFFFC107),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(
+                                        0xFFFFC107,
+                                      ).withOpacity(0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.wb_sunny,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'TODAY',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                        letterSpacing: 1.2,
+                                        shadows: [
+                                          Shadow(
+                                            color: Colors.black.withOpacity(
+                                              0.2,
+                                            ),
+                                            offset: const Offset(0, 1),
+                                            blurRadius: 2,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              // Main title
+                              Text(
+                                "Daily Eco Tip",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 24,
+                                  color: const Color(0xFF795548),
+                                  letterSpacing: 0.5,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.white.withOpacity(0.8),
+                                      offset: const Offset(1, 1),
+                                      blurRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (!isError && !isLoading) ...[
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 4,
+                                      height: 4,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFFFC107),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        getCategoryName(),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFFF57C00),
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                // 🔥 Display Streak
-                if (_userStreak > 0)
-                  Row(
-                    children: [
-                      Text(
-                        '🔥 $_userStreak days streak',
-                        style: const TextStyle(
-                          color: Colors.orange,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+              ),
+
+              // Decorative divider
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  height: 2,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        const Color(0xFFFFD54F).withOpacity(0.5),
+                        const Color(0xFFFFC107).withOpacity(0.5),
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // Tip content with enhanced styling
+              Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Tip icon and text
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFD54F).withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.lightbulb,
+                            color: Color(0xFFF57C00),
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            tip,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: const Color(0xFF5D4037),
+                              height: 1.7,
+                              fontWeight: FontWeight.w500,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if (!isError && !isLoading) ...[
+                      const SizedBox(height: 24),
+
+                      // Action buttons with modern design
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFFFD54F).withOpacity(0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            // Bookmark button
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _toggleTipBookmark,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      gradient: _isTipBookmarked
+                                          ? const LinearGradient(
+                                              colors: [
+                                                Color(0xFFFFD54F),
+                                                Color(0xFFFFC107),
+                                              ],
+                                            )
+                                          : null,
+                                      color: _isTipBookmarked
+                                          ? null
+                                          : Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: _isTipBookmarked
+                                            ? const Color(0xFFFFC107)
+                                            : Colors.grey.shade300,
+                                        width: 1.5,
+                                      ),
+                                      boxShadow: _isTipBookmarked
+                                          ? [
+                                              BoxShadow(
+                                                color: const Color(
+                                                  0xFFFFC107,
+                                                ).withOpacity(0.3),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 4),
+                                              ),
+                                            ]
+                                          : [],
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          _isTipBookmarked
+                                              ? Icons.bookmark
+                                              : Icons.bookmark_border,
+                                          color: _isTipBookmarked
+                                              ? Colors.white
+                                              : Colors.grey.shade700,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _isTipBookmarked ? 'Saved' : 'Save',
+                                          style: TextStyle(
+                                            color: _isTipBookmarked
+                                                ? Colors.white
+                                                : Colors.grey.shade700,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+
+                            // Share button
+                            Expanded(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _shareTip,
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        colors: [
+                                          Color(0xFFFFD54F),
+                                          Color(0xFFFFC107),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: const Color(0xFFFFC107),
+                                        width: 1.5,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: const Color(
+                                            0xFFFFC107,
+                                          ).withOpacity(0.4),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 6),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(
+                                          Icons.share_outlined,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Share',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                            shadows: [
+                                              Shadow(
+                                                color: Colors.black.withOpacity(
+                                                  0.2,
+                                                ),
+                                                offset: const Offset(0, 1),
+                                                blurRadius: 2,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
-              ],
-            ),
-            const SizedBox(height: 25),
-
-            // Today's Tips - NOW USING FUTUREBUILDER
-            FutureBuilder<String>(
-              future: _fetchTodayTip(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return _TipCardContent(tip: 'Loading today\'s tip...');
-                } else if (snapshot.hasError) {
-                  return _TipCardContent(
-                    tip: 'Error loading tip.',
-                    isError: true,
-                  );
-                } else {
-                  return _TipCardContent(
-                    tip: snapshot.data ?? 'No tips available.',
-                  );
-                }
-              },
-            ),
-            const SizedBox(height: 15),
-
-            // Daily Eco Challenge
-            _buildChallengeCard(),
-            const SizedBox(height: 30),
-
-            const Text(
-              'Your Weekly Eco Point',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            _buildScoreIndicator(),
-            const SizedBox(height: 5),
-            Row(
-              children: [
-                const Text(
-                  "You're doing great keep doing! ",
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const Icon(Icons.eco, color: kPrimaryGreen, size: 18),
-              ],
-            ),
-            const SizedBox(height: 30),
-            // Recent Activity
-            const Text(
-              'Recent Activity',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 15),
-            // Recent activity now comes from Firestore (users/{uid}/scans)
-            Builder(
-              builder: (context) {
-                final user = FirebaseAuth.instance.currentUser;
-                // We don't filter by 'isDisposal' server-side because older
-                // documents may not include that field and would be excluded.
-                // Instead retrieve recent scans and filter client-side so
-                // legacy documents remain visible.
-                final Stream<QuerySnapshot<Map<String, dynamic>>>? scansStream =
-                    user != null
-                    ? FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(user.uid)
-                          .collection('scans')
-                          .orderBy('timestamp', descending: true)
-                          .limit(10)
-                          .withConverter<Map<String, dynamic>>(
-                            fromFirestore: (snap, _) =>
-                                snap.data() ?? <String, dynamic>{},
-                            toFirestore: (m, _) => m,
-                          )
-                          .snapshots()
-                    : null;
-
-                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: scansStream,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                      return const Text(
-                        'No recent activity yet. Scan a product to get started.',
-                      );
-                    }
-                    final docs = snapshot.data!.docs;
-                    // Filter out disposal entries (client-side) so legacy docs
-                    // without an `isDisposal` field remain visible.
-                    final filtered = docs.where((doc) {
-                      final m = doc.data();
-                      // treat missing flag as non-disposal
-                      final v = m['isDisposal'];
-                      return v == null ? true : (v == false);
-                    }).toList();
-
-                    // Show only the 3 most recent non-disposal items on Home
-                    final previewDocs = filtered.take(3).toList();
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        ...previewDocs
-                            .map((doc) => _buildActivityTile(doc))
-                            .toList(),
-                        if (filtered.length > 3)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        const RecentActivityScreen(),
-                                  ),
-                                );
-                              },
-                              child: const Text('See all'),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 30),
-          ],
-        ),
-      ),
-      bottomNavigationBar: _buildBottomNavBar(),
-    );
-  }
-
-  AppBar _buildAppBar() {
-    return AppBar(
-      automaticallyImplyLeading: false,
-      backgroundColor: kPrimaryGreen,
-      elevation: 0,
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Menu Icon (Hamburger)
-          GestureDetector(
-            onTap: () {
-              _scaffoldKey.currentState?.openDrawer();
-            },
-            child: const Icon(Icons.menu, color: Colors.white, size: 30),
-          ),
-          const SizedBox(width: 12),
-          // Leaderboard quick access
-          // GestureDetector(
-          //   onTap: () {
-          //     Navigator.of(context).push(
-          //       MaterialPageRoute(builder: (_) => const LeaderboardScreen()),
-          //     );
-          //   },
-          //   child: CircleAvatar(
-          //     radius: 18,
-          //     backgroundColor: Colors.transparent,
-          //     child: Icon(Icons.emoji_events, color: Colors.white, size: 22),
-          //   ),
-          // ),
-          const SizedBox(width: 10),
-          // 🏆 NOTIFICATION ICON WITH RED BADGE (FIXED)
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            // Streams unread notifications for the current user.
-            stream: FirebaseAuth.instance.currentUser != null
-                ? FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(FirebaseAuth.instance.currentUser!.uid)
-                      .collection('notifications')
-                      .where('read', isEqualTo: false)
-                      .snapshots()
-                : null,
-            builder: (context, snapshot) {
-              final hasUnread =
-                  snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-              return GestureDetector(
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const NotificationScreen(),
-                    ),
-                  );
-                },
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    CircleAvatar(
-                      radius: 20,
-                      backgroundColor: kPrimaryGreen,
-                      child: const Icon(
-                        Icons.notifications_none,
-                        color: Colors.white,
-                      ),
-                    ),
-                    if (hasUnread)
-                      Positioned(
-                        right: -2,
-                        top: -2,
-                        child: Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 1.5),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
-              );
-            },
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChallengeCard() {
+  // Modern Challenge Card Widget
+  Widget _buildModernChallengeCard() {
     final challenge = _dailyChallenge;
     final isCompleted = challenge?.isCompleted ?? false;
-    final challengeText = challenge != null
-        ? challenge.title
-        : _challenge; // Fallback to old _challenge text
+    final challengeText = challenge != null ? challenge.title : _challenge;
 
     return GestureDetector(
       onTap: () async {
-        // Use a consistent navigation flow for both card tap and button press
         final result = await Navigator.of(context).push<bool>(
           MaterialPageRoute(
             builder: (_) => DailyChallengeScreen(
@@ -495,87 +901,159 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
         if (result == true) {
-          // If the challenge screen returns true (meaning a challenge was completed)
-          // reload the data to update the preview card's status and potentially the streak.
+          // Reload both challenges and monthly points when user completes a challenge
           _loadDailyChallengeData();
+          _loadMonthlyEcoPoints();
         }
       },
       child: Container(
-        padding: const EdgeInsets.all(15),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.blueGrey.shade50,
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: Colors.grey.shade200),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Icon(
-                    isCompleted ? Icons.check_circle : Icons.flag,
-                    color: isCompleted ? kPrimaryGreen : kPrimaryGreen,
-                    size: 28,
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: isCompleted
+                          ? [Colors.grey.shade400, Colors.grey.shade300]
+                          : [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Daily Eco Challenge',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                  child: Icon(
+                    isCompleted ? Icons.check_circle : Icons.flag_outlined,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Daily Eco Challenge',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: isCompleted
+                              ? Colors.grey.shade600
+                              : Colors.black87,
                         ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        challengeText,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isCompleted
+                              ? Colors.grey.shade500
+                              : Colors.grey.shade700,
+                          decoration: isCompleted
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (challenge != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kPrimaryGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: kPrimaryGreen.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.stars, size: 16, color: kPrimaryGreen),
+                        const SizedBox(width: 4),
                         Text(
-                          challengeText,
+                          '+${challenge.points} pts',
                           style: TextStyle(
-                            fontSize: 14,
-                            color: isCompleted
-                                ? Colors.grey.shade500
-                                : Colors.grey,
-                            decoration: isCompleted
-                                ? TextDecoration.lineThrough
-                                : TextDecoration.none,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: kPrimaryGreen,
                           ),
                         ),
                       ],
                     ),
+                  )
+                else
+                  const SizedBox.shrink(),
+                ElevatedButton(
+                  onPressed: isCompleted
+                      ? null
+                      : () async {
+                          final result = await Navigator.of(context).push<bool>(
+                            MaterialPageRoute(
+                              builder: (_) => DailyChallengeScreen(
+                                userName: _userName,
+                                primaryGreen: kPrimaryGreen,
+                              ),
+                            ),
+                          );
+                          if (result == true) {
+                            _loadDailyChallengeData();
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isCompleted ? Colors.grey : kPrimaryGreen,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: isCompleted ? 0 : 4,
                   ),
-                ],
-              ),
-            ),
-            ElevatedButton(
-              onPressed: isCompleted
-                  ? null
-                  : () async {
-                      // Navigate to the full Daily Challenge screen and wait for a completion result
-                      final result = await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(
-                          builder: (_) => DailyChallengeScreen(
-                            userName: _userName,
-                            primaryGreen: kPrimaryGreen,
-                          ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        isCompleted ? 'Completed ✓' : 'Start Now',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
                         ),
-                      );
-                      if (result == true) {
-                        // Mark the preview challenge as completed by reloading the data
-                        _loadDailyChallengeData();
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: isCompleted ? Colors.grey : kPrimaryGreen,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                      ),
+                      if (!isCompleted) ...[
+                        const SizedBox(width: 4),
+                        const Icon(Icons.arrow_forward, size: 16),
+                      ],
+                    ],
+                  ),
                 ),
-              ),
-              child: Text(
-                isCompleted ? 'Completed' : 'Go',
-                style: const TextStyle(color: Colors.white),
-              ),
+              ],
             ),
           ],
         ),
@@ -583,21 +1061,501 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildScoreIndicator() {
-    // Simple linear progress indicator to represent the score bar
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: LinearProgressIndicator(
-            value: 0.8, // 80% progress
-            minHeight: 15,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: AlwaysStoppedAnimation<Color>(kPrimaryGreen),
-          ),
+  // Modern Score Card Widget
+  Widget _buildModernScoreCard() {
+    final progress = _monthlyGoal > 0
+        ? (_monthlyEcoPoints / _monthlyGoal).clamp(0.0, 1.0)
+        : 0.0;
+    final progressPercent = (progress * 100).toInt();
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.85)],
         ),
-      ],
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: kPrimaryGreen.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Your Monthly Eco Points',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.eco, color: Colors.white, size: 24),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Points Display
+          Text(
+            '$_monthlyEcoPoints / $_monthlyGoal',
+            style: const TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Progress Bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 12,
+              backgroundColor: Colors.white.withOpacity(0.3),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                progressPercent >= 80
+                    ? "You're doing amazing! 🌱"
+                    : progressPercent >= 50
+                    ? "Great progress! Keep going! 💪"
+                    : "Let's reach your goal! 🚀",
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.95),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                '$progressPercent%',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.95),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Empty Activity Card
+  Widget _buildEmptyActivityCard() {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.eco_outlined, size: 64, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            'No activity yet',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Scan a product to get started on your eco journey!',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      key: _scaffoldKey,
+      backgroundColor: Colors.grey.shade50,
+      drawer: const AppDrawer(),
+      body: CustomScrollView(
+        slivers: [
+          // Hero Header with Gradient
+          SliverAppBar(
+            expandedHeight: 240,
+            floating: false,
+            pinned: true,
+            automaticallyImplyLeading: false,
+            backgroundColor: kPrimaryGreen,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.85)],
+                  ),
+                ),
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Greeting
+                        Text(
+                          'Hello!',
+                          style: TextStyle(
+                            fontSize: 20,
+                            color: Colors.white.withOpacity(0.9),
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        // User Name
+                        Text(
+                          _userName,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        // Streak and Status
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.eco,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    "Let's make a difference",
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.95),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_userStreak > 0) ...[
+                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.orange.withOpacity(0.4),
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      '🔥',
+                                      style: TextStyle(fontSize: 14),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '$_userStreak day streak',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white, size: 28),
+                onPressed: () {
+                  _scaffoldKey.currentState?.openDrawer();
+                },
+              ),
+            ),
+            actions: [
+              // Notification Icon
+              Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: FirebaseAuth.instance.currentUser != null
+                      ? FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(FirebaseAuth.instance.currentUser!.uid)
+                            .collection('notifications')
+                            .where('read', isEqualTo: false)
+                            .snapshots()
+                      : null,
+                  builder: (context, snapshot) {
+                    final hasUnread =
+                        snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+                    return Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        IconButton(
+                          icon: const Icon(
+                            Icons.notifications_outlined,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                        if (hasUnread)
+                          Positioned(
+                            right: 8,
+                            top: 8,
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          // Content Section
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Today's Tips Card - Enhanced with Bookmark & Share
+                  FutureBuilder<Map<String, String>>(
+                    future: _fetchTodayTip(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return _buildModernTipCard(
+                          tip: 'Loading today\'s tip...',
+                          category: 'eco_habits',
+                          isLoading: true,
+                        );
+                      } else if (snapshot.hasError) {
+                        return _buildModernTipCard(
+                          tip: 'Error loading tip.',
+                          category: 'eco_habits',
+                          isError: true,
+                        );
+                      } else {
+                        final data =
+                            snapshot.data ??
+                            {
+                              'tip': 'No tips available.',
+                              'category': 'eco_habits',
+                            };
+                        return _buildModernTipCard(
+                          tip: data['tip']!,
+                          category: data['category']!,
+                        );
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Daily Eco Challenge - Enhanced
+                  _buildModernChallengeCard(),
+                  const SizedBox(height: 20),
+
+                  // Weekly Eco Points - Enhanced
+                  _buildModernScoreCard(),
+                  const SizedBox(height: 30),
+
+                  // Recent Activity Section
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Recent Activity',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const RecentActivityScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.history, size: 18),
+                        label: const Text('View All'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: kPrimaryGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Recent Activity List
+                  Builder(
+                    builder: (context) {
+                      final user = FirebaseAuth.instance.currentUser;
+                      final Stream<QuerySnapshot<Map<String, dynamic>>>?
+                      scansStream = user != null
+                          ? FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .collection('scans')
+                                .orderBy('timestamp', descending: true)
+                                .limit(10)
+                                .withConverter<Map<String, dynamic>>(
+                                  fromFirestore: (snap, _) =>
+                                      snap.data() ?? <String, dynamic>{},
+                                  toFirestore: (m, _) => m,
+                                )
+                                .snapshots()
+                          : null;
+
+                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: scansStream,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32.0),
+                                child: CircularProgressIndicator(
+                                  color: kPrimaryGreen,
+                                ),
+                              ),
+                            );
+                          }
+                          if (!snapshot.hasData ||
+                              snapshot.data!.docs.isEmpty) {
+                            return _buildEmptyActivityCard();
+                          }
+                          final docs = snapshot.data!.docs;
+                          final filtered = docs.where((doc) {
+                            final m = doc.data();
+                            final v = m['isDisposal'];
+                            return v == null ? true : (v == false);
+                          }).toList();
+
+                          if (filtered.isEmpty) {
+                            return _buildEmptyActivityCard();
+                          }
+
+                          final previewDocs = filtered.take(3).toList();
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: previewDocs
+                                .map((doc) => _buildActivityTile(doc))
+                                .toList(),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 80),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
+        },
+        backgroundColor: kPrimaryGreen,
+        icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+        label: const Text(
+          'Eco Assistant',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 6,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+      bottomNavigationBar: _buildBottomNavBar(),
     );
   }
 
@@ -692,109 +1650,518 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // --- Main Card Widget ---
+    // --- Main Card Widget - Redesigned ---
     return Container(
       margin: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(
-          0.8,
-        ), // Dark background for the card area
-        borderRadius: BorderRadius.circular(15.0),
-        border: Border.all(color: kPrimaryGreen, width: 3.0),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- Product Details Section ---
-          const Text(
-            'Product Details',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const Divider(color: Colors.white54),
-          _detailText('Name', name, boldValue: true),
-          _detailText('Category', category),
-          _detailText('Ingredients', ingredients),
-
-          const SizedBox(height: 12),
-
-          // --- Eco Impact Section ---
-          const Text(
-            'Eco Impact',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const Divider(color: Colors.white54),
-          _detailText(
-            'Carbon Footprint',
-            'Estimated $co2 CO₂e per unit (Low impact for a skincare product)',
-          ),
-          _detailText('Packaging', '$packaging (Type 4 - LDPE) ♻️'),
-          _detailText('Suggested Disposal', disposal),
-
-          const SizedBox(height: 12),
-
-          // --- Environmental Warnings Section ---
-          const Text(
-            'Environmental Warnings:',
-            style: TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const Divider(color: Colors.white54),
-
-          _buildBooleanRow(
-            'Contains microplastics?',
-            !containsMicroplastics,
-          ), // Inverting logic for display: X if contains, ✔ if not.
-          _buildBooleanRow(
-            'Palm oil derivative?',
-            !palmOilDerivative,
-          ), // X if derivative, ✔ if not.
-          _buildBooleanRow(
-            'Cruelty-Free',
-            crueltyFree,
-          ), // ✔ if cruelty-free, X if not.
-
-          const SizedBox(height: 16),
-
-          // --- ECO-SCORE Section (Simplified) ---
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'ECO-SCORE',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+          // Header with gradient and eco score
+          Container(
+            padding: const EdgeInsets.all(20.0),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: _getEcoScoreColor(score),
-                  borderRadius: BorderRadius.circular(5),
-                ),
-                child: Text(
-                  score,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Product Details',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              //             // For a complete match, you'd add the A-E colored bar widget here.
-            ],
+                const SizedBox(width: 12),
+                // Eco Score Badge
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        score,
+                        style: TextStyle(
+                          color: _getEcoScoreColor(score),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 28,
+                          height: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'ECO SCORE',
+                        style: TextStyle(
+                          color: _getEcoScoreColor(score),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 8,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Product Image Section
+          Builder(
+            builder: (context) {
+              // Try to get image URL from various possible keys
+              String? imageUrl;
+              final possibleKeys = [
+                'image',
+                'image_url',
+                'imageUrl',
+                'product_image',
+                'thumbnail',
+                'photo',
+              ];
+              for (final k in possibleKeys) {
+                final v = data[k];
+                if (v is String && v.isNotEmpty) {
+                  imageUrl = v;
+                  break;
+                }
+              }
+
+              if (imageUrl != null && imageUrl.isNotEmpty) {
+                return Container(
+                  height: 200,
+                  width: double.infinity,
+                  color: Colors.grey.shade50,
+                  child: Stack(
+                    children: [
+                      // Product Image
+                      Positioned.fill(
+                        child: Image.network(
+                          imageUrl,
+                          fit: BoxFit.contain,
+                          errorBuilder: (c, e, s) => Container(
+                            color: Colors.grey.shade100,
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.image_not_supported_outlined,
+                                    size: 48,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Image not available',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade500,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: Colors.grey.shade100,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  value:
+                                      loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
+                                      : null,
+                                  color: kPrimaryGreen,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      // Gradient overlay at bottom for better text visibility
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          height: 60,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Colors.transparent,
+                                Colors.black.withOpacity(0.3),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              // No image available - show placeholder
+              return Container(
+                height: 150,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      kPrimaryGreen.withOpacity(0.1),
+                      kPrimaryGreen.withOpacity(0.05),
+                    ],
+                  ),
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.eco_outlined,
+                        size: 56,
+                        color: kPrimaryGreen.withOpacity(0.4),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'No product image',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // Content sections
+          Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Category Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: kPrimaryGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: kPrimaryGreen.withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.category_outlined,
+                        size: 16,
+                        color: kPrimaryGreen,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        category,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: kPrimaryGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Ingredients Section
+                _buildModernSection(
+                  icon: Icons.science_outlined,
+                  title: 'Ingredients',
+                  content: ingredients,
+                  iconColor: Colors.blue.shade600,
+                ),
+                const SizedBox(height: 16),
+
+                // Eco Impact Section
+                const Text(
+                  'Eco Impact',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildInfoCard(
+                  icon: Icons.cloud_outlined,
+                  label: 'Carbon Footprint',
+                  value: co2,
+                  color: Colors.lightBlue.shade400,
+                ),
+                const SizedBox(height: 10),
+                _buildInfoCard(
+                  icon: Icons.eco_outlined,
+                  label: 'Packaging',
+                  value: packaging,
+                  color: Colors.green.shade400,
+                ),
+                const SizedBox(height: 10),
+                _buildInfoCard(
+                  icon: Icons.restore_from_trash_outlined,
+                  label: 'Disposal',
+                  value: disposal,
+                  color: Colors.orange.shade400,
+                ),
+                const SizedBox(height: 20),
+
+                // Environmental Warnings
+                const Text(
+                  'Environmental Impact',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildWarningCard(
+                  label: 'Microplastics Free',
+                  isGood: !containsMicroplastics,
+                ),
+                const SizedBox(height: 8),
+                _buildWarningCard(
+                  label: 'Palm Oil Free',
+                  isGood: !palmOilDerivative,
+                ),
+                const SizedBox(height: 8),
+                _buildWarningCard(label: 'Cruelty-Free', isGood: crueltyFree),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
+  Widget _buildModernSection({
+    required IconData icon,
+    required String title,
+    required String content,
+    required Color iconColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 20, color: iconColor),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            content,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey.shade700,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWarningCard({required String label, required bool isGood}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isGood ? Colors.green.shade50 : Colors.red.shade50,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isGood ? Colors.green.shade200 : Colors.red.shade200,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: isGood ? Colors.green.shade100 : Colors.red.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isGood ? Icons.check : Icons.close,
+              size: 16,
+              color: isGood ? Colors.green.shade700 : Colors.red.shade700,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isGood ? Colors.green.shade900 : Colors.red.shade900,
+              ),
+            ),
+          ),
+          if (isGood)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.green.shade600,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'GOOD',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActivityTile(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    // ... (Activity tile logic remains the same)
     final data = doc.data();
     final product =
         (data['product_name'] ?? data['product'] ?? 'Unknown product')
@@ -803,6 +2170,9 @@ class _HomeScreenState extends State<HomeScreen> {
         (data['eco_score'] ?? data['ecoscore'] ?? data['score'] ?? 'N/A')
             .toString()
             .toUpperCase();
+
+    final category = (data['category'] ?? 'N/A').toString();
+
     final ts = data['timestamp'];
     DateTime? dt;
     if (ts is Timestamp) {
@@ -829,6 +2199,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final possibleKeys = [
       'image',
       'image_url',
+      'imageUrl',
       'product_image',
       'thumbnail',
       'photo',
@@ -860,60 +2231,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Card(
+      elevation: 3,
       margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            width: 56,
-            height: 56,
-            color: Colors.grey.shade200,
-            child: imageUrl != null
-                ? Image.network(
-                    imageUrl,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.image_not_supported,
-                      color: Colors.grey,
-                      size: 32,
-                    ),
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      );
-                    },
-                  )
-                : const Icon(Icons.image, color: Colors.grey, size: 32),
-          ),
-        ),
-        title: Text(product),
-        subtitle: Text(
-          [
-            if ((data['category'] ?? '').toString().isNotEmpty)
-              data['category'].toString(),
-            if (timeText.isNotEmpty) timeText, // includes exact time now
-          ].join(' • '),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: _getEcoScoreColor(score),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            score,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
         onTap: () {
           showModalBottomSheet(
             context: context,
@@ -931,6 +2252,197 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
+        child: Container(
+          height: 120,
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              // Product Image - Larger and more prominent
+              Hero(
+                tag: 'product_home_${doc.id}',
+                child: Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: imageUrl != null && imageUrl.isNotEmpty
+                        ? Image.network(
+                            imageUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (c, e, s) => Container(
+                              color: Colors.grey.shade100,
+                              child: Icon(
+                                Icons.image_not_supported_outlined,
+                                size: 32,
+                                color: Colors.grey.shade400,
+                              ),
+                            ),
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Container(
+                                color: Colors.grey.shade100,
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          )
+                        : Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  kPrimaryGreen.withOpacity(0.1),
+                                  kPrimaryGreen.withOpacity(0.05),
+                                ],
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.eco_outlined,
+                              color: kPrimaryGreen,
+                              size: 40,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              // Content area - Product info and metadata
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // Product name
+                    Text(
+                      product,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        height: 1.3,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    // Category badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: kPrimaryGreen.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: kPrimaryGreen.withOpacity(0.3),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        category,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: kPrimaryGreen.withOpacity(0.9),
+                          letterSpacing: 0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Date/Time
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 13,
+                          color: Colors.grey.shade500,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            timeText,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Eco Score Badge - Prominent on the right
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: _getEcoScoreColor(score),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _getEcoScoreColor(score).withOpacity(0.4),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          score,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 22,
+                            height: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'ECO',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 9,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -1029,9 +2541,9 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
         if (index == 3) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const DisposalGuidanceScreen()),
+          );
           return;
         }
         // When the Profile tab is tapped, open the Profile screen.

@@ -407,23 +407,40 @@ class _NotificationScreenState extends State<NotificationScreen> {
     ];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: categories.map((c) {
           final selected = c == _filter;
           final label = c == null ? 'All' : c.displayName;
-          final icon = c == null ? Icons.list : c.icon;
+          final icon = c == null ? Icons.view_list : c.icon;
+          final color = c == null ? kPrimaryGreen : c.color;
+
           return Padding(
             padding: const EdgeInsets.only(right: 8.0),
-            child: ChoiceChip(
-              label: Text(label),
+            child: FilterChip(
+              label: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? Colors.white : Colors.black87,
+                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                  fontSize: 13,
+                ),
+              ),
               avatar: Icon(
                 icon,
                 size: 18,
-                color: selected ? Colors.white : Colors.black54,
+                color: selected ? Colors.white : color,
               ),
               selected: selected,
-              selectedColor: kPrimaryGreen,
+              selectedColor: color,
+              backgroundColor: Colors.white,
+              checkmarkColor: Colors.white,
+              elevation: selected ? 4 : 0,
+              shadowColor: color.withOpacity(0.3),
+              side: BorderSide(
+                color: selected ? color : Colors.grey.shade300,
+                width: 1,
+              ),
               onSelected: (_) => setState(() => _filter = c),
             ),
           );
@@ -434,304 +451,423 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool canPop = Navigator.of(context).canPop();
+
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: kPrimaryGreen,
-        elevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'Notifications',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {
-            Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
-          },
-        ),
-        actions: [
-          Center(
-            child: Text(
-              'Unread: $_unreadCount',
-              style: const TextStyle(color: Colors.white),
-            ),
-          ),
-          const SizedBox(width: 12),
-          IconButton(
-            tooltip: 'Mark all read',
-            icon: const Icon(Icons.mark_email_read, color: Colors.white),
-            onPressed: () async {
-              setState(() {
-                for (var n in _notifications) n.read = true;
-              });
-              await _save();
-            },
-          ),
-          IconButton(
-            tooltip: 'Clear all',
-            icon: const Icon(Icons.delete_forever, color: Colors.white),
-            onPressed: () async {
-              final ok = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Clear all notifications?'),
-                  content: const Text(
-                    'This will permanently remove all notifications.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(false),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.of(ctx).pop(true),
-                      child: const Text('Clear'),
-                    ),
-                  ],
-                ),
-              );
-              if (ok == true) {
-                setState(() => _notifications.clear());
-                await _save();
-              }
-            },
-          ),
-        ],
-      ),
+      backgroundColor: Colors.grey.shade50,
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildFilterChips(),
-                // Scheduling controls for daily notifications
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12.0,
-                    vertical: 6.0,
+          : CustomScrollView(
+              slivers: [
+                // Hero Header with Gradient
+                SliverAppBar(
+                  expandedHeight: 180,
+                  pinned: true,
+                  backgroundColor: kPrimaryGreen,
+                  leading: IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () {
+                      if (canPop) {
+                        Navigator.of(context).pop();
+                      } else {
+                        Navigator.of(context).pushReplacement(
+                          MaterialPageRoute(builder: (_) => const HomeScreen()),
+                        );
+                      }
+                    },
                   ),
-                  child: Row(
+                  actions: [
+                    IconButton(
+                      tooltip: 'Mark all read',
+                      icon: const Icon(
+                        Icons.mark_email_read,
+                        color: Colors.white,
+                      ),
+                      onPressed: () async {
+                        setState(() {
+                          for (var n in _notifications) n.read = true;
+                        });
+                        await _save();
+                      },
+                    ),
+                    IconButton(
+                      tooltip: 'Clear all',
+                      icon: const Icon(
+                        Icons.delete_forever,
+                        color: Colors.white,
+                      ),
+                      onPressed: () async {
+                        final ok = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            title: const Text('Clear all notifications?'),
+                            content: const Text(
+                              'This will permanently remove all notifications.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                child: const Text('Clear'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (ok == true) {
+                          setState(() => _notifications.clear());
+                          await _save();
+                        }
+                      },
+                    ),
+                  ],
+                  flexibleSpace: FlexibleSpaceBar(
+                    background: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            kPrimaryGreen,
+                            kPrimaryGreen.withOpacity(0.8),
+                          ],
+                        ),
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(32),
+                          bottomRight: Radius.circular(32),
+                        ),
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(height: 40),
+                            const Icon(
+                              Icons.notifications_active,
+                              size: 60,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Notifications',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                '$_unreadCount Unread',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Filter Chips
+                SliverToBoxAdapter(
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _dailyScheduled
-                                ? Colors.green
-                                : Colors.grey.shade200,
-                          ),
-                          icon: Icon(
-                            _dailyScheduled
-                                ? Icons.check_circle
-                                : Icons.schedule,
-                            color: _dailyScheduled
-                                ? Colors.white
-                                : Colors.black54,
-                          ),
-                          label: Text(
-                            _dailyScheduled
-                                ? 'Daily Challenge: ON (8:00)'
-                                : 'Enable Daily Challenge (8:00)',
-                            style: TextStyle(
-                              color: _dailyScheduled
-                                  ? Colors.white
-                                  : Colors.black87,
+                      const SizedBox(height: 12),
+                      _buildFilterChips(),
+                      const SizedBox(height: 8),
+
+                      // Scheduling controls with modern design
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16.0,
+                          vertical: 8.0,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: _buildScheduleButton(
+                                icon: Icons.flag,
+                                label: _dailyScheduled
+                                    ? 'Challenge ON'
+                                    : 'Challenge OFF',
+                                isActive: _dailyScheduled,
+                                onPressed: _toggleDailySchedule,
+                              ),
                             ),
-                          ),
-                          onPressed: _toggleDailySchedule,
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _buildScheduleButton(
+                                icon: Icons.lightbulb,
+                                label: _ecoTipScheduled
+                                    ? 'Tips ON'
+                                    : 'Tips OFF',
+                                isActive: _ecoTipScheduled,
+                                onPressed: _toggleEcoTipSchedule,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: _ecoTipScheduled
-                                ? Colors.green
-                                : Colors.grey.shade200,
-                          ),
-                          icon: Icon(
-                            _ecoTipScheduled
-                                ? Icons.check_circle
-                                : Icons.lightbulb,
-                            color: _ecoTipScheduled
-                                ? Colors.white
-                                : Colors.black54,
-                          ),
-                          label: Text(
-                            _ecoTipScheduled
-                                ? 'Eco Tip: ON (12:00)'
-                                : 'Enable Eco Tip (12:00)',
-                            style: TextStyle(
-                              color: _ecoTipScheduled
-                                  ? Colors.white
-                                  : Colors.black87,
-                            ),
-                          ),
-                          onPressed: _toggleEcoTipSchedule,
-                        ),
-                      ),
+                      const SizedBox(height: 8),
                     ],
                   ),
                 ),
-                Expanded(
-                  child: _visible.isEmpty
-                      ? Center(
+
+                // Notification List or Empty State
+                _visible.isEmpty
+                    ? SliverFillRemaining(
+                        child: Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
-                                Icons.notifications_off,
-                                size: 64,
-                                color: Colors.grey,
+                              Icon(
+                                Icons.notifications_none,
+                                size: 80,
+                                color: Colors.grey.shade300,
                               ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'No notifications',
+                              const SizedBox(height: 16),
+                              Text(
+                                'No notifications yet',
                                 style: TextStyle(
-                                  color: Colors.grey,
                                   fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade600,
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              TextButton(
-                                onPressed: () async {
-                                  // Add a few demo notifications
-                                  await _add(
-                                    _makeSample(
-                                      NotificationCategory.dailyChallenge,
-                                    ),
-                                  );
-                                  await _add(
-                                    _makeSample(NotificationCategory.ecoTip),
-                                  );
-                                  await _add(
-                                    _makeSample(
-                                      NotificationCategory.scanInsight,
-                                    ),
-                                  );
-                                },
-                                child: const Text(
-                                  'Generate demo notifications',
+                              Text(
+                                'Check back later for updates',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
                                 ),
                               ),
                             ],
                           ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _load,
-                          child: ListView.separated(
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            itemCount: _visible.length + 1,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 1),
-                            itemBuilder: (context, index) {
-                              if (index == 0) return const SizedBox(height: 6);
-                              final n = _visible[index - 1];
-                              return Dismissible(
-                                key: ValueKey(n.id),
-                                direction: DismissDirection.endToStart,
-                                background: Container(
-                                  color: Colors.redAccent,
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 16),
-                                  child: const Icon(
-                                    Icons.delete,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                onDismissed: (_) => _remove(n.id),
-                                child: ListTile(
-                                  tileColor: n.read
-                                      ? null
-                                      : Colors.grey.shade50,
-                                  leading: CircleAvatar(
-                                    backgroundColor: n.category.color
-                                        .withOpacity(0.12),
-                                    child: Icon(
-                                      n.category.icon,
-                                      color: n.category.color,
-                                    ),
-                                  ),
-                                  title: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          n.title,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
-                                      Text(
-                                        _formatTime(n.time),
-                                        style: const TextStyle(
-                                          color: Colors.grey,
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  subtitle: Text(
-                                    n.body,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  trailing: PopupMenuButton<String>(
-                                    onSelected: (v) async {
-                                      if (v == 'mark')
-                                        await _markRead(n.id, read: !n.read);
-                                      if (v == 'delete') await _remove(n.id);
-                                    },
-                                    itemBuilder: (ctx) => [
-                                      PopupMenuItem(
-                                        value: 'mark',
-                                        child: Text(
-                                          n.read ? 'Mark Unread' : 'Mark Read',
-                                        ),
-                                      ),
-                                      const PopupMenuItem(
-                                        value: 'delete',
-                                        child: Text('Delete'),
-                                      ),
-                                    ],
-                                  ),
-                                  onTap: () => _showDetails(n),
-                                ),
-                              );
-                            },
-                          ),
                         ),
-                ),
-                // Quick-simulate bar for testing (adds one of each category)
-                Container(
-                  color: Colors.grey.shade100,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Wrap(
-                          spacing: 8,
-                          runSpacing: 4,
-                          children: NotificationCategory.values.map((c) {
-                            return ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: c.color,
-                              ),
-                              onPressed: () => _simulate(c),
-                              icon: Icon(c.icon, size: 16),
-                              label: Text(c.displayName),
-                            );
-                          }).toList(),
+                      )
+                    : SliverPadding(
+                        padding: const EdgeInsets.all(16.0),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate((
+                            context,
+                            index,
+                          ) {
+                            final n = _visible[index];
+                            return _buildNotificationCard(n);
+                          }, childCount: _visible.length),
                         ),
                       ),
-                    ],
+              ],
+            ),
+    );
+  }
+
+  Widget _buildScheduleButton({
+    required IconData icon,
+    required String label,
+    required bool isActive,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 18,
+                  color: isActive ? kPrimaryGreen : Colors.grey,
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: isActive ? kPrimaryGreen : Colors.grey,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationCard(AppNotification n) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: n.read ? Colors.transparent : kPrimaryGreen.withOpacity(0.3),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Dismissible(
+        key: Key(n.id),
+        direction: DismissDirection.endToStart,
+        background: Container(
+          alignment: Alignment.centerRight,
+          padding: const EdgeInsets.only(right: 20),
+          decoration: BoxDecoration(
+            color: Colors.red,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: const Icon(Icons.delete, color: Colors.white),
+        ),
+        onDismissed: (_) => _remove(n.id),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _showDetails(n),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: n.category.color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      n.category.icon,
+                      color: n.category.color,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                n.title,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: n.read
+                                      ? FontWeight.w600
+                                      : FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                            if (!n.read)
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: kPrimaryGreen,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          n.body,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black54,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: n.category.color.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                n.category.displayName,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: n.category.color,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              _formatTime(n.time),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black38,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

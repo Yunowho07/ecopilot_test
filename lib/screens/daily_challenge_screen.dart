@@ -224,84 +224,99 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
 
       final allCompleted = newCompleted.every((c) => c);
 
-      // 2. Execute Firestore transaction safely (create docs if missing)
-      final userChallengeDoc = FirebaseFirestore.instance
-          .collection('user_challenges')
-          .doc('$userId-$today');
-      final userDoc = FirebaseFirestore.instance
-          .collection('users')
-          .doc(userId);
+      // Get current month key for monthly points
+      final now = DateTime.now();
+      final monthKey = DateFormat('yyyy-MM').format(now);
 
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        // Ensure user_challenges doc exists or set it
-        final ucSnap = await transaction.get(userChallengeDoc);
-        if (ucSnap.exists) {
-          transaction.update(userChallengeDoc, {
-            'completed': newCompleted,
-            'pointsEarned': newPointsEarned,
-            'updatedAt': Timestamp.now(),
-          });
-        } else {
-          transaction.set(userChallengeDoc, {
-            'completed': newCompleted,
-            'pointsEarned': newPointsEarned,
-            'createdAt': Timestamp.now(),
-            'updatedAt': Timestamp.now(),
-          });
-        }
-
-        // Update or create user summary
-        final userSnapshot = await transaction.get(userDoc);
-        if (userSnapshot.exists) {
-          final currentEcoPoints = userSnapshot.data()?['ecoPoints'] ?? 0;
-          final currentStreak = userSnapshot.data()?['streak'] ?? 0;
-          int updatedStreak = currentStreak;
-          if (allCompleted) updatedStreak = currentStreak + 1;
-          transaction.update(userDoc, {
-            'ecoPoints': currentEcoPoints + challengePoints,
-            'streak': updatedStreak,
-          });
-        } else {
-          transaction.set(userDoc, {
-            'ecoPoints': challengePoints,
-            'streak': allCompleted ? 1 : 0,
-            'createdAt': Timestamp.now(),
-          });
-        }
-      });
-
-      // 3. Update local state
-      if (mounted) {
-        setState(() {
-          _progress = _progress.copyWith(
-            completed: newCompleted,
-            pointsEarned: newPointsEarned,
-            streakCount: allCompleted
-                ? _progress.streakCount + 1
-                : _progress.streakCount,
-          );
-        });
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Challenge "${_challenges[index].title}" completed! +$challengePoints Points! 😊',
-          ),
-        ),
-      );
-
-      // If this screen was opened from a preview (Home -> Go), return true to indicate completion
+      // 2. Execute Firestore updates without transaction (simpler and more reliable)
       try {
-        Navigator.of(context).pop(true);
-      } catch (_) {
-        // ignore
+        // Update user challenge progress
+        await FirebaseFirestore.instance
+            .collection('user_challenges')
+            .doc('$userId-$today')
+            .set({
+              'completed': newCompleted,
+              'pointsEarned': newPointsEarned,
+              'userId': userId,
+              'date': today,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
+        // Get current user data
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .get();
+
+        final currentEcoPoints = userDoc.data()?['ecoPoints'] ?? 0;
+        final currentStreak = userDoc.data()?['streak'] ?? 0;
+        int updatedStreak = currentStreak;
+        if (allCompleted) updatedStreak = currentStreak + 1;
+
+        // Update user document
+        await FirebaseFirestore.instance.collection('users').doc(userId).set({
+          'ecoPoints': currentEcoPoints + challengePoints,
+          'streak': updatedStreak,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        // Update monthly points
+        final monthlyDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('monthly_points')
+            .doc(monthKey)
+            .get();
+
+        final currentMonthlyPoints = monthlyDoc.data()?['points'] ?? 0;
+
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(userId)
+            .collection('monthly_points')
+            .doc(monthKey)
+            .set({
+              'points': currentMonthlyPoints + challengePoints,
+              'goal': 500,
+              'month': monthKey,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+
+        // 3. Update local state
+        if (mounted) {
+          setState(() {
+            _progress = _progress.copyWith(
+              completed: newCompleted,
+              pointsEarned: newPointsEarned,
+              streakCount: updatedStreak,
+            );
+            _userEcoPoints = currentEcoPoints + challengePoints;
+          });
+          _loadUserRank(); // Refresh rank
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Challenge completed! +$challengePoints Points!'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      } catch (firestoreError) {
+        debugPrint('Firestore operation failed: $firestoreError');
+        throw Exception('Database error: $firestoreError');
       }
     } catch (e) {
       debugPrint('completeChallenge failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to complete challenge: $e')),
+          SnackBar(
+            content: Text('Failed to complete challenge. Please try again.'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
         );
       }
     }
@@ -309,188 +324,634 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
 
   // --- UI Builder Widgets ---
 
-  Widget _buildChallengeTile(Challenge challenge, int index) {
-    final isCompleted = _progress.completed[index];
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8.0),
-      color: Colors.white,
-      elevation: 2,
-      child: ListTile(
-        leading: Icon(
-          isCompleted ? Icons.check_circle_outline : Icons.flag_circle_outlined,
-          color: isCompleted ? const Color(0xFF1db954) : widget.primaryGreen,
-          size: 30,
-        ),
-        title: Text(
-          challenge.title,
-          style: TextStyle(
-            decoration: isCompleted
-                ? TextDecoration.lineThrough
-                : TextDecoration.none,
-            color: isCompleted ? Colors.grey.shade600 : Colors.black,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Text('+${challenge.points} Eco Points'),
-        trailing: ElevatedButton(
-          onPressed: isCompleted ? null : () => _completeChallenge(index),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: isCompleted ? Colors.grey : widget.primaryGreen,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-          child: Text(
-            isCompleted ? 'Done 😊' : 'Mark as Done',
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final streak = _progress.streakCount;
+    final progressPercent = (_progress.progressPercentage * 100).toInt();
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        centerTitle: true,
-        title: const Text(
-          'Daily Eco Challenge',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: Color(0xFF1db954),
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '${DateFormat('EEEE, MMMM d').format(DateTime.now())}',
-              style: const TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-            const SizedBox(height: 5),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Hello ${widget.userName}!',
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+      backgroundColor: Colors.grey.shade50,
+      body: CustomScrollView(
+        slivers: [
+          // Modern Hero Header with Gradient
+          SliverAppBar(
+            expandedHeight: 260,
+            floating: false,
+            pinned: true,
+            backgroundColor: kPrimaryGreen,
+            iconTheme: const IconThemeData(color: Colors.white),
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF1db954),
+                      const Color(0xFF1db954).withOpacity(0.8),
+                      kPrimaryGreen,
+                    ],
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(32),
+                    bottomRight: Radius.circular(32),
                   ),
                 ),
-                // Streak Display
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: streak >= 3
-                        ? Colors.orange.shade100
-                        : Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    children: [
-                      if (streak >= 3)
-                        const Icon(
-                          Icons.local_fire_department,
-                          color: Colors.orange,
-                          size: 20,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 50, 24, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Date Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.calendar_today,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                DateFormat(
+                                  'EEEE, MMMM d',
+                                ).format(DateTime.now()),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      Text(
-                        ' Streak: $streak days',
+                        const SizedBox(height: 16),
+
+                        // Welcome Text
+                        Text(
+                          'Hello ${widget.userName}! 👋',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Complete today\'s eco-challenges',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.9),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                        const Spacer(),
+
+                        // Streak and Points Row
+                        Row(
+                          children: [
+                            // Streak Badge
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.2),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      streak >= 3
+                                          ? Icons.local_fire_department
+                                          : Icons.emoji_events_outlined,
+                                      color: streak >= 3
+                                          ? Colors.orange.shade300
+                                          : Colors.white,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '$streak Days',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Streak',
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(
+                                              0.8,
+                                            ),
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+
+                            // Points Badge
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.2),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      Icons.stars_rounded,
+                                      color: Colors.amber,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${_progress.pointsEarned}/${_progress.totalChallengePoints}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Points',
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(
+                                              0.8,
+                                            ),
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Content
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Progress Card
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: kPrimaryGreen.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Daily Progress',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '$progressPercent%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: LinearProgressIndicator(
+                            value: _progress.progressPercentage,
+                            minHeight: 12,
+                            backgroundColor: Colors.white.withOpacity(0.3),
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          progressPercent == 100
+                              ? '🎉 Amazing! All challenges completed!'
+                              : progressPercent >= 50
+                              ? '💪 You\'re halfway there! Keep going!'
+                              : '🚀 Let\'s complete these challenges!',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.95),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Section Header
+                  Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: kPrimaryGreen,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Today\'s Challenges',
                         style: TextStyle(
-                          color: streak >= 3 ? Colors.orange : Colors.black,
+                          fontSize: 22,
                           fontWeight: FontWeight.bold,
+                          color: Colors.black87,
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 16),
+
+                  // Challenge List
+                  ..._challenges.asMap().entries.map((entry) {
+                    return _buildModernChallengeTile(entry.value, entry.key);
+                  }),
+
+                  const SizedBox(height: 32),
+
+                  // Rank Card
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _rankColor.withOpacity(0.3),
+                        width: 2,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: _rankColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(
+                            Icons.emoji_events,
+                            color: _rankColor,
+                            size: 36,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Your Rank',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _userRank,
+                                style: TextStyle(
+                                  color: _rankColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '$_userEcoPoints eco points total',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.grey.shade400,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 80),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Modern Challenge Tile Widget
+  Widget _buildModernChallengeTile(Challenge challenge, int index) {
+    final isCompleted = _progress.completed[index];
+
+    // Determine challenge category icon (basic detection from title)
+    IconData getChallengeIcon() {
+      final title = challenge.title.toLowerCase();
+      if (title.contains('recycle') || title.contains('plastic'))
+        return Icons.recycling;
+      if (title.contains('transport') ||
+          title.contains('cycle') ||
+          title.contains('walk'))
+        return Icons.directions_bike;
+      if (title.contains('bottle') || title.contains('water'))
+        return Icons.water_drop;
+      if (title.contains('energy') || title.contains('light'))
+        return Icons.lightbulb_outline;
+      if (title.contains('food') || title.contains('meal'))
+        return Icons.restaurant;
+      return Icons.eco;
+    }
+
+    Color getChallengeColor() {
+      final title = challenge.title.toLowerCase();
+      if (title.contains('recycle')) return Colors.green;
+      if (title.contains('transport') || title.contains('cycle'))
+        return Colors.blue;
+      if (title.contains('bottle') || title.contains('water'))
+        return Colors.cyan;
+      if (title.contains('energy') || title.contains('light'))
+        return Colors.amber;
+      if (title.contains('food') || title.contains('meal'))
+        return Colors.orange;
+      return kPrimaryGreen;
+    }
+
+    final challengeColor = getChallengeColor();
+    final challengeIcon = getChallengeIcon();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isCompleted ? Colors.green.shade200 : Colors.grey.shade200,
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isCompleted
+                ? Colors.green.withOpacity(0.1)
+                : Colors.black.withOpacity(0.05),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: isCompleted ? null : () => _completeChallenge(index),
+          borderRadius: BorderRadius.circular(20),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Row(
+              children: [
+                // Icon Container
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: isCompleted
+                        ? Colors.green.shade50
+                        : challengeColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    isCompleted ? Icons.check_circle : challengeIcon,
+                    color: isCompleted ? Colors.green : challengeColor,
+                    size: 28,
+                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 25),
+                const SizedBox(width: 16),
 
-            // Progress Bar
-            const Text(
-              'Daily Goal Progress',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: LinearProgressIndicator(
-                value: _progress.progressPercentage,
-                minHeight: 15,
-                backgroundColor: Colors.grey.shade200,
-                valueColor: AlwaysStoppedAnimation<Color>(widget.primaryGreen),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 4.0),
-              child: Text(
-                '${(_progress.progressPercentage * 100).toInt()}% completed. You earned ${_progress.pointsEarned}/${_progress.totalChallengePoints} points.',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ),
-
-            const SizedBox(height: 30),
-
-            const Text(
-              'Today\'s Challenges',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const Divider(),
-
-            // Challenge List
-            ..._challenges.asMap().entries.map((entry) {
-              return _buildChallengeTile(entry.value, entry.key);
-            }).toList(),
-
-            const SizedBox(height: 30),
-
-            // Ranking Information (Conceptual)
-            Card(
-              color: widget.primaryGreen.withOpacity(0.1),
-              elevation: 0,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Row(
-                  children: [
-                    Icon(Icons.star, color: _rankColor, size: 30),
-                    const SizedBox(width: 15),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                // Challenge Info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        challenge.title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: isCompleted
+                              ? Colors.grey.shade600
+                              : Colors.black87,
+                          decoration: isCompleted
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
                         children: [
-                          Text(
-                            'Your Rank: $_userRank',
-                            style: TextStyle(
-                              color: _rankColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.stars,
+                                  color: Colors.amber.shade700,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '+${challenge.points} pts',
+                                  style: TextStyle(
+                                    color: Colors.amber.shade900,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          Text(
-                            'You have $_userEcoPoints eco points — keep going! 🎉',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
+                          if (isCompleted) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.check,
+                                    color: Colors.green.shade700,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Completed',
+                                    style: TextStyle(
+                                      color: Colors.green.shade900,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+
+                const SizedBox(width: 12),
+
+                // Action Button
+                if (!isCompleted)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: kPrimaryGreen,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: kPrimaryGreen.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.emoji_events,
+                      color: Colors.green.shade700,
+                      size: 20,
+                    ),
+                  ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
