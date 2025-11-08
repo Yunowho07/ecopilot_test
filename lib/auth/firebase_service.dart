@@ -552,22 +552,61 @@ class FirebaseService {
   /// Return a simple leaderboard of users ordered by ecoScore desc.
   /// Each entry will include the user's document data plus the uid.
   Future<List<Map<String, dynamic>>> getLeaderboard({int limit = 50}) async {
-    final snapshot = await _firestore
-        .collection('users')
-        .orderBy('ecoPoints', descending: true)
-        .limit(limit)
-        .get();
+    try {
+      // Try to query with orderBy first
+      final snapshot = await _firestore
+          .collection('users')
+          .orderBy('ecoPoints', descending: true)
+          .limit(limit)
+          .get();
 
-    return snapshot.docs.map((d) {
-      final data = d.data();
-      return {
-        'uid': d.id,
-        'name': data['name'] ?? data['displayName'] ?? 'Anonymous',
-        'photoUrl': data['photoUrl'] ?? '',
-        'ecoScore': data['ecoPoints'] ?? data['ecoScore'] ?? 0,
-        'title': data['title'] ?? '',
-      };
-    }).toList();
+      final results = snapshot.docs.map((d) {
+        final data = d.data();
+        return {
+          'uid': d.id,
+          'name': data['name'] ?? data['displayName'] ?? 'Anonymous',
+          'photoUrl': data['photoUrl'] ?? '',
+          'ecoScore': data['ecoPoints'] ?? data['ecoScore'] ?? 0,
+          'title': data['title'] ?? '',
+        };
+      }).toList();
+
+      // Filter out users with 0 points and sort manually
+      results.sort(
+        (a, b) => (b['ecoScore'] as int).compareTo(a['ecoScore'] as int),
+      );
+      return results.where((user) => (user['ecoScore'] as int) > 0).toList();
+    } catch (e) {
+      debugPrint('Error in getLeaderboard with orderBy, falling back: $e');
+
+      // Fallback: Get all users and sort manually
+      try {
+        final snapshot = await _firestore
+            .collection('users')
+            .limit(limit)
+            .get();
+
+        final results = snapshot.docs.map((d) {
+          final data = d.data();
+          return {
+            'uid': d.id,
+            'name': data['name'] ?? data['displayName'] ?? 'Anonymous',
+            'photoUrl': data['photoUrl'] ?? '',
+            'ecoScore': data['ecoPoints'] ?? data['ecoScore'] ?? 0,
+            'title': data['title'] ?? '',
+          };
+        }).toList();
+
+        // Sort by ecoScore manually and filter
+        results.sort(
+          (a, b) => (b['ecoScore'] as int).compareTo(a['ecoScore'] as int),
+        );
+        return results.where((user) => (user['ecoScore'] as int) > 0).toList();
+      } catch (fallbackError) {
+        debugPrint('Fallback also failed: $fallbackError');
+        return []; // Return empty list if everything fails
+      }
+    }
   }
 
   // ===============================================

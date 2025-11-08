@@ -652,16 +652,6 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           pinned: true,
           backgroundColor: kPrimaryGreen,
           iconTheme: const IconThemeData(color: Colors.white),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Colors.white),
-            onPressed: () {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => const DisposalGuidanceScreen(productId: null),
-                ),
-              );
-            },
-          ),
           flexibleSpace: FlexibleSpaceBar(
             background: Stack(
               fit: StackFit.expand,
@@ -1181,8 +1171,6 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
   @override
   Widget build(BuildContext context) {
     final bool showDetail = widget.productId != null && !_loading;
-    // Check if we can pop (i.e., we were pushed from another screen)
-    final bool canPop = Navigator.of(context).canPop();
 
     return Scaffold(
       drawer: const AppDrawer(),
@@ -1194,18 +1182,12 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () {
-                  // If we were pushed from another screen (like RecentDisposalScreen),
-                  // just pop back. Otherwise, navigate to hub.
-                  if (canPop) {
-                    Navigator.of(context).pop();
-                  } else {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const DisposalGuidanceScreen(productId: null),
-                      ),
-                    );
-                  }
+                  // Navigate back to Recent Disposal screen
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => const RecentDisposalScreen(),
+                    ),
+                  );
                 },
               )
             : Builder(

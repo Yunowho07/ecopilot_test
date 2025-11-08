@@ -22,7 +22,40 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
     final String material = product['material'] ?? 'Unknown';
     final String imageUrl = product['imageUrl'] ?? '';
     final dynamic createdAt = product['createdAt'];
-    final int ecoScore = product['eco_score'] ?? product['ecoScore'] ?? 0;
+
+    // Get eco score as string (letter grade: A, B, C, D, E)
+    final dynamic rawEcoScore = product['eco_score'] ?? product['ecoScore'];
+    String ecoScoreGrade = 'N/A';
+
+    if (rawEcoScore != null) {
+      final scoreStr = rawEcoScore.toString().trim().toUpperCase();
+      // If it's already a letter grade, use it
+      if (scoreStr.length == 1 && 'ABCDE'.contains(scoreStr)) {
+        ecoScoreGrade = scoreStr;
+      } else if (scoreStr != 'N/A' && scoreStr.isNotEmpty) {
+        // If it's a number, convert to grade
+        final scoreNum = int.tryParse(scoreStr);
+        if (scoreNum != null) {
+          if (scoreNum >= 80) {
+            ecoScoreGrade = 'A';
+          } else if (scoreNum >= 60) {
+            ecoScoreGrade = 'B';
+          } else if (scoreNum >= 40) {
+            ecoScoreGrade = 'C';
+          } else if (scoreNum >= 20) {
+            ecoScoreGrade = 'D';
+          } else if (scoreNum > 0) {
+            ecoScoreGrade = 'E';
+          }
+        } else {
+          // Use first character if it's a valid grade letter
+          final firstChar = scoreStr.isNotEmpty ? scoreStr[0] : '';
+          if ('ABCDE'.contains(firstChar)) {
+            ecoScoreGrade = firstChar;
+          }
+        }
+      }
+    }
 
     // Format date/time
     String formattedDateTime = 'Recently';
@@ -39,18 +72,8 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
           '${dt.day}/${dt.month}/${dt.year} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
     }
 
-    // Convert score to grade
-    String getEcoGrade(int score) {
-      if (score >= 80) return 'A';
-      if (score >= 60) return 'B';
-      if (score >= 40) return 'C';
-      if (score >= 20) return 'D';
-      if (score > 0) return 'E';
-      return 'N/A';
-    }
-
     // Get eco score color based on grade
-    Color getEcoScoreColor(int score) {
+    Color getEcoScoreColor(String grade) {
       final ecoScoreColors = {
         'A': kResultCardGreen,
         'B': kDiscoverMoreGreen,
@@ -59,7 +82,7 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
         'E': kWarningRed,
         'N/A': Colors.grey.shade600,
       };
-      return ecoScoreColors[getEcoGrade(score)] ?? Colors.grey.shade600;
+      return ecoScoreColors[grade] ?? Colors.grey.shade600;
     }
 
     return Card(
@@ -231,10 +254,10 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
                 height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: getEcoScoreColor(ecoScore),
+                  color: getEcoScoreColor(ecoScoreGrade),
                   boxShadow: [
                     BoxShadow(
-                      color: getEcoScoreColor(ecoScore).withOpacity(0.4),
+                      color: getEcoScoreColor(ecoScoreGrade).withOpacity(0.4),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -244,7 +267,7 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      ecoScore.toString(),
+                      ecoScoreGrade,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,

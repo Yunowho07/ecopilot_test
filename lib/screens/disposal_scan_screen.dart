@@ -351,19 +351,22 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         );
 
         const prompt = '''
-You are an eco-disposal assistant AI. Analyze the uploaded or scanned product image and return ONLY a single JSON object (no additional text) that contains the following keys when available. Use 'N/A' or empty lists/false for missing values.
+You are an eco-disposal assistant AI. Analyze the uploaded or scanned product image and return ONLY a single JSON object (no additional text) with these EXACT field names. Use 'N/A' or empty arrays/false for missing values.
 
-- product name: [Product Name]
-- category: [Product Category, e.g., Food & Beverages (F&B), Personal Care, Household Products, Electronics, Clothing & Accessories, Health & Medicine, Baby & Kids, Pet Supplies, Automotive, Home & Furniture]
-- ingredients: [List of ingredients, comma-separated, e.g., Water, Zinc Oxide, etc.]
-- eco-friendliness rating: [A, B, C, D, E or etc.]
-- carbon Footprint: [Estimated CO2e per unit, e.g., 0.36 kg CO2e per unit]
-- packaging type: [Material and recyclability, e.g., Plastic Tube - Recyclable (Type 4 - LDPE)]
-- disposal_steps (array of strings)
-- nearby_center (string)
-- tips (array of strings)
+Required JSON fields:
+- "product_name": Product name as a string
+- "category": Product category (e.g., "Food & Beverages (F&B)", "Personal Care", "Household Products", "Electronics", "Clothing & Accessories", "Health & Medicine", "Baby & Kids", "Pet Supplies", "Automotive", "Home & Furniture")
+- "ingredients": Ingredients as a comma-separated string (e.g., "Water, Zinc Oxide, etc.")
+- "eco_score": Eco-friendliness rating as a SINGLE LETTER - must be exactly one of: "A", "B", "C", "D", or "E" (A is best, E is worst)
+- "carbon_footprint": Estimated CO2e per unit as string (e.g., "0.36 kg CO2e per unit")
+- "packaging_type": Material and recyclability as string (e.g., "Plastic Tube - Recyclable (Type 4 - LDPE)")
+- "disposal_steps": Array of disposal step strings
+- "nearby_center": Nearby recycling center name as string (or "N/A")
+- "tips": Array of eco-friendly tip strings
 
-Example valid response (JSON only):
+IMPORTANT: The "eco_score" MUST be a single letter grade (A, B, C, D, or E). Do not use other formats.
+
+Example valid response (JSON only, no markdown, no backticks):
 {
   "product_name": "Plastic Bottle - Sparkling Water",
   "category": "Food & Beverages (F&B)",
@@ -371,9 +374,9 @@ Example valid response (JSON only):
   "ingredients": "Water, Carbon Dioxide",
   "eco_score": "C",
   "carbon_footprint": "0.15 kg CO2e",
-  "disposal_steps": ["Rinse the bottle", "Remove cap", "Place in plastic recycling bin"],
+  "disposal_steps": ["Rinse the bottle thoroughly", "Remove and recycle the cap separately", "Place in plastic recycling bin (PET #1)"],
   "nearby_center": "Green Recycling Center",
-  "tips": ["Refill and reuse before recycling"],
+  "tips": ["Refill and reuse before recycling", "Check local recycling guidelines"]
 }
 ''';
 
@@ -1049,7 +1052,7 @@ Example valid response (JSON only):
                         child: _buildControlButton(
                           icon: Icons.photo_library,
                           label: 'Gallery',
-                          onPressed: (_busy || _showCamera)
+                          onPressed: _busy
                               ? null
                               : () => _pick(ImageSource.gallery),
                           backgroundColor: Colors.grey.shade700,
