@@ -664,7 +664,7 @@ class ResultScreen extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _buildActionButton(
-                  label: 'Alternatives',
+                  label: 'Better Alternative',
                   icon: Icons.eco,
                   color: kPrimaryGreen,
                   onTap: () {

@@ -18,6 +18,7 @@ import 'package:ecopilot_test/utils/challenge_generator.dart';
 import 'package:ecopilot_test/utils/tip_generator.dart';
 import 'package:ecopilot_test/widgets/app_drawer.dart';
 import 'package:ecopilot_test/widgets/bottom_navigation.dart';
+import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'daily_challenge_screen.dart';
 
 // Placeholder data structure for challenge and user progress
@@ -898,6 +899,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Modern Challenge Card Widget
   Widget _buildModernChallengeCard() {
+    final theme = Theme.of(context);
     final challenge = _dailyChallenge;
     final isCompleted = challenge?.isCompleted ?? false;
     final challengeText = challenge != null ? challenge.title : _challenge;
@@ -921,11 +923,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: theme.brightness == Brightness.dark
+                  ? Colors.black.withOpacity(0.3)
+                  : Colors.black.withOpacity(0.08),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -1075,6 +1079,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Modern Score Card Widget
   Widget _buildModernScoreCard() {
+    final theme = Theme.of(context);
     final progress = _monthlyGoal > 0
         ? (_monthlyEcoPoints / _monthlyGoal).clamp(0.0, 1.0)
         : 0.0;
@@ -1175,12 +1180,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Empty Activity Card
   Widget _buildEmptyActivityCard() {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+          color: theme.brightness == Brightness.dark
+              ? Colors.grey.shade800
+              : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         children: [
@@ -1207,9 +1217,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: theme.scaffoldBackgroundColor,
       drawer: const AppDrawer(),
       body: CustomScrollView(
         slivers: [
@@ -2009,6 +2022,59 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 8),
                 _buildWarningCard(label: 'Cruelty-Free', isGood: crueltyFree),
+
+                // Better Alternative Button
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // Close the modal first
+                      Navigator.of(context).pop();
+
+                      // Navigate to Alternative Screen with product data
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AlternativeScreen(
+                            scannedProduct: ProductAnalysisData(
+                              productName: name,
+                              category: category,
+                              ingredients: ingredients,
+                              carbonFootprint: co2,
+                              packagingType: packaging,
+                              disposalMethod: disposal,
+                              containsMicroplastics: containsMicroplastics,
+                              palmOilDerivative: palmOilDerivative,
+                              crueltyFree: crueltyFree,
+                              ecoScore: score,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.eco, size: 20),
+                    label: const Text(
+                      'View Better Alternatives',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPrimaryGreen,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 2,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
           ),

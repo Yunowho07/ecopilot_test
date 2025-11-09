@@ -33,6 +33,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   void _loadLeaderboard() {
     _future = _service.getLeaderboard(limit: 100);
+    _future
+        .then((list) {
+          debugPrint('Leaderboard loaded: ${list.length} users');
+          if (list.isEmpty) {
+            debugPrint('Leaderboard is empty - no users found in database');
+          }
+        })
+        .catchError((error) {
+          debugPrint('Error loading leaderboard: $error');
+        });
     _loadCurrentUserStats();
   }
 
@@ -54,10 +64,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final currentUid = _service.currentUser?.uid;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: CustomScrollView(
         slivers: [
           // Stunning Animated Hero Header
@@ -308,10 +319,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   // Error State Widget
   Widget _buildErrorState(String error) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.red.shade200),
       ),
@@ -358,12 +370,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   // Empty State Widget
   Widget _buildEmptyState() {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(48),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+          color: theme.brightness == Brightness.dark
+              ? Colors.grey.shade800
+              : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         children: [
@@ -704,6 +721,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final points = (item['ecoScore'] ?? 0) as int;
     final isCurrent = (currentUid != null && currentUid == uid);
 
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     // Get rank color based on points
     final rankColor = getRankColor(points);
     final rankTitle = getRankTitle(points);
@@ -724,10 +744,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 ],
               )
             : null,
-        color: isCurrent ? null : Colors.white,
+        color: isCurrent ? null : theme.cardColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isCurrent ? kPrimaryGreen : Colors.grey.shade200,
+          color: isCurrent
+              ? kPrimaryGreen
+              : isDark
+              ? Colors.grey.shade800
+              : Colors.grey.shade200,
           width: isCurrent ? 2.5 : 1,
         ),
         boxShadow: [

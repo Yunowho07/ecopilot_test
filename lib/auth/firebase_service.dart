@@ -598,12 +598,17 @@ class FirebaseService {
   /// Each entry will include the user's document data plus the uid.
   Future<List<Map<String, dynamic>>> getLeaderboard({int limit = 50}) async {
     try {
+      debugPrint('Fetching leaderboard with limit: $limit');
       // Try to query with orderBy first
       final snapshot = await _firestore
           .collection('users')
           .orderBy('ecoPoints', descending: true)
           .limit(limit)
           .get();
+
+      debugPrint(
+        'Leaderboard query returned ${snapshot.docs.length} documents',
+      );
 
       final results = snapshot.docs.map((d) {
         final data = d.data();
@@ -620,11 +625,12 @@ class FirebaseService {
         };
       }).toList();
 
-      // Filter out users with 0 points and sort manually
+      // Sort manually by ecoScore
       results.sort(
         (a, b) => (b['ecoScore'] as int).compareTo(a['ecoScore'] as int),
       );
-      return results.where((user) => (user['ecoScore'] as int) > 0).toList();
+      debugPrint('Returning ${results.length} users in leaderboard');
+      return results;
     } catch (e) {
       debugPrint('Error in getLeaderboard with orderBy, falling back: $e');
 
@@ -650,11 +656,11 @@ class FirebaseService {
           };
         }).toList();
 
-        // Sort by ecoScore manually and filter
+        // Sort by ecoScore manually
         results.sort(
           (a, b) => (b['ecoScore'] as int).compareTo(a['ecoScore'] as int),
         );
-        return results.where((user) => (user['ecoScore'] as int) > 0).toList();
+        return results;
       } catch (fallbackError) {
         debugPrint('Fallback also failed: $fallbackError');
         return []; // Return empty list if everything fails

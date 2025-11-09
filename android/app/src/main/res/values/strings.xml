@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Replace with your actual Facebook App ID -->
+    <!-- Get it from https://developers.facebook.com/apps/ -->
+    <string name="app_name">EcoPilot</string>
+    <string name="facebook_app_id">1234567890</string>
+    <string name="fb_login_protocol_scheme">fb1234567890</string>
+    <string name="facebook_client_token">YOUR_CLIENT_TOKEN_HERE</string>
+</resources>

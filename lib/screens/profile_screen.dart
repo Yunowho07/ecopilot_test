@@ -295,6 +295,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final user = _service.currentUser;
     // Prioritize the newly uploaded URL, otherwise use existing network photo
     final photo = _photoUrlController.text.isNotEmpty
@@ -302,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : user?.photoURL;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: theme.scaffoldBackgroundColor,
       drawer: const AppDrawer(),
       body: CustomScrollView(
         slivers: [
@@ -1167,8 +1168,9 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: theme.scaffoldBackgroundColor,
       drawer: const AppDrawer(),
       appBar: AppBar(
         backgroundColor: Colors.transparent,

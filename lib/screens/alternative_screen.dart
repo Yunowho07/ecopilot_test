@@ -106,74 +106,6 @@ class AlternativeProduct {
   }
 }
 
-final List<AlternativeProduct> _sampleAlternatives = [
-  AlternativeProduct(
-    name: 'EcoBottle 500ml',
-    ecoScore: 'A+',
-    materialType: 'Stainless Steel',
-    benefit: 'Reusable and BPA-free, reduces plastic waste',
-    whereToBuy: 'EcoHaus, Amazon',
-    carbonSavings: 'Reduces ~120kg CO₂ per year',
-    imagePath: 'assets/images/ecobottle.png',
-    buyLink: 'https://shopee.com.my/search?keyword=stainless+steel+bottle',
-    shortDescription:
-        'Durable stainless steel bottle with recyclable packaging.',
-    category: 'Water Bottles',
-    price: 45.00,
-    brand: 'EcoBottle',
-    rating: 4.8,
-    externalSource: 'sample',
-  ),
-  AlternativeProduct(
-    name: 'Bamboo Toothbrush (4-Pack)',
-    ecoScore: 'A',
-    materialType: 'Bamboo',
-    benefit: 'Compostable handle',
-    whereToBuy: 'Local eco-store, Amazon',
-    carbonSavings: 'Reduces ~0.5kg plastic waste/year',
-    imagePath: 'assets/images/bamboo_brush.png',
-    buyLink: 'https://shopee.com.my/search?keyword=bamboo+toothbrush',
-    shortDescription: 'Handles made from sustainably harvested bamboo.',
-    category: 'Personal Care',
-    price: 25.00,
-    brand: 'EcoBrush',
-    rating: 4.6,
-    externalSource: 'sample',
-  ),
-  AlternativeProduct(
-    name: 'Recycled Glass Jar Candle',
-    ecoScore: 'B',
-    materialType: 'Recycled Glass & Soy Wax',
-    benefit: 'Upcycled glass jar',
-    whereToBuy: 'Etsy, HomeGoods',
-    carbonSavings: 'Saves ~0.2kg virgin material',
-    imagePath: 'assets/images/candle.png',
-    buyLink: 'https://shopee.com.my/search?keyword=soy+wax+candle',
-    shortDescription: 'Made from soy wax and packaged in recycled glass.',
-    category: 'Home Decor',
-    price: 35.00,
-    brand: 'GreenGlow',
-    rating: 4.5,
-    externalSource: 'sample',
-  ),
-  AlternativeProduct(
-    name: 'Solid Shampoo Bar',
-    ecoScore: 'A+',
-    materialType: 'Natural Ingredients',
-    benefit: 'Zero plastic packaging, lasts 2-3x longer',
-    whereToBuy: 'Lazada, Guardian',
-    carbonSavings: 'Prevents ~3 plastic bottles per year',
-    imagePath: '',
-    buyLink: 'https://www.lazada.com.my/catalog/?q=shampoo+bar',
-    shortDescription: 'Plastic-free solid shampoo with natural ingredients.',
-    category: 'Hair Care',
-    price: 28.00,
-    brand: 'Nature\'s Soap',
-    rating: 4.7,
-    externalSource: 'sample',
-  ),
-];
-
 class EcoScoreBadge extends StatelessWidget {
   final String score;
   const EcoScoreBadge({Key? key, required this.score}) : super(key: key);
@@ -535,6 +467,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
   bool _loading = false;
   List<AlternativeProduct> _loadedAlternatives = [];
   Set<String> _wishlist = {}; // Product IDs in wishlist
+  String _dataSource = ''; // Track which data source was used
 
   // Filter states
   double? _maxPrice;
@@ -932,15 +865,288 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
 
   List<AlternativeProduct> _computeFallbackAlternatives() {
     final scanned = widget.scannedProduct;
-    if (scanned == null || scanned.ecoScore.isEmpty) return _sampleAlternatives;
-    final int scannedRank = _ecoRank(scanned.ecoScore);
-    final better = _sampleAlternatives
-        .where((a) => _ecoRank(a.ecoScore) < scannedRank)
+
+    // If no scanned product, return empty
+    if (scanned == null) {
+      _dataSource = 'No Data Available';
+      return [];
+    }
+
+    // Generate context-aware alternatives based on scanned product
+    _dataSource = 'AI-Generated (Fallback)';
+    return _generateContextualAlternatives(scanned);
+  }
+
+  List<AlternativeProduct> _generateContextualAlternatives(
+    ProductAnalysisData scanned,
+  ) {
+    // Get better eco score suggestions
+    final currentRank = _ecoRank(scanned.ecoScore);
+    final betterScores = [
+      'A+',
+      'A',
+      'B',
+    ].where((score) => _ecoRank(score) < currentRank).toList();
+
+    if (betterScores.isEmpty) {
+      betterScores.add('A+'); // Always suggest A+ as best option
+    }
+
+    final category = scanned.category.toLowerCase();
+    final alternatives = <AlternativeProduct>[];
+
+    // Generate category-specific alternatives
+    if (category.contains('beverage') ||
+        category.contains('drink') ||
+        category.contains('water') ||
+        category.contains('bottle')) {
+      alternatives.addAll([
+        AlternativeProduct(
+          name: 'Stainless Steel Reusable Bottle',
+          ecoScore: betterScores.first,
+          materialType: 'Stainless Steel',
+          benefit: 'Durable and reusable',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Saves ~120kg CO₂/year',
+          imagePath: '',
+          buyLink:
+              'https://shopee.com.my/search?keyword=stainless+steel+bottle',
+          shortDescription:
+              'Reusable stainless steel bottle, BPA-free and dishwasher safe',
+          category: scanned.category,
+          price: 45.00,
+          brand: 'EcoLife',
+          rating: 4.7,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Glass Water Bottle with Silicone Sleeve',
+          ecoScore: betterScores.length > 1
+              ? betterScores[1]
+              : betterScores.first,
+          materialType: 'Borosilicate Glass',
+          benefit: '100% recyclable glass',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Prevents ~100kg plastic waste/year',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=glass+water+bottle',
+          shortDescription:
+              '100% recyclable glass with protective silicone sleeve',
+          category: scanned.category,
+          price: 38.00,
+          brand: 'GreenBottle',
+          rating: 4.6,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Bamboo Fiber Bottle',
+          ecoScore: betterScores.length > 2
+              ? betterScores[2]
+              : betterScores.first,
+          materialType: 'Bamboo Fiber Composite',
+          benefit: 'Biodegradable material',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Reduces plastic by ~90kg/year',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=bamboo+bottle',
+          shortDescription:
+              'Made from sustainable bamboo fiber, fully biodegradable',
+          category: scanned.category,
+          price: 35.00,
+          brand: 'BambooLife',
+          rating: 4.5,
+          externalSource: 'contextual',
+        ),
+      ]);
+    } else if (category.contains('personal care') ||
+        category.contains('shampoo') ||
+        category.contains('soap') ||
+        category.contains('cosmetic')) {
+      alternatives.addAll([
+        AlternativeProduct(
+          name: 'Solid Shampoo Bar',
+          ecoScore: betterScores.first,
+          materialType: 'Plastic-Free Packaging',
+          benefit: 'Zero plastic waste',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Eliminates 2-3 plastic bottles/year',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=solid+shampoo+bar',
+          shortDescription: 'Concentrated shampoo bar in compostable packaging',
+          category: scanned.category,
+          price: 28.00,
+          brand: 'EcoHair',
+          rating: 4.8,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Refillable Shampoo Bottle Set',
+          ecoScore: betterScores.length > 1
+              ? betterScores[1]
+              : betterScores.first,
+          materialType: 'Recycled Plastic + Refill Station',
+          benefit: 'Reusable container system',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Reduces plastic by 80%/year',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=refillable+shampoo',
+          shortDescription: 'Durable bottle with refill stations at eco-shops',
+          category: scanned.category,
+          price: 42.00,
+          brand: 'GreenWash',
+          rating: 4.6,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Organic Shampoo in Aluminum Bottle',
+          ecoScore: betterScores.length > 2
+              ? betterScores[2]
+              : betterScores.first,
+          materialType: 'Recycled Aluminum',
+          benefit: 'Infinitely recyclable',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Saves ~50kg CO₂/year',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=aluminum+shampoo',
+          shortDescription:
+              'Natural ingredients in recyclable aluminum packaging',
+          category: scanned.category,
+          price: 38.00,
+          brand: 'PureNature',
+          rating: 4.7,
+          externalSource: 'contextual',
+        ),
+      ]);
+    } else if (category.contains('food') ||
+        category.contains('snack') ||
+        category.contains('packaging')) {
+      alternatives.addAll([
+        AlternativeProduct(
+          name: 'Bulk Store Alternative (Bring Own Container)',
+          ecoScore: betterScores.first,
+          materialType: 'No Packaging',
+          benefit: 'Zero waste shopping',
+          whereToBuy: 'Bulk Stores, Zero Waste Shops',
+          carbonSavings: 'Eliminates all packaging waste',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=zero+waste+store',
+          shortDescription:
+              'Buy the same product from bulk stores with your own container',
+          category: scanned.category,
+          price: 0.00,
+          brand: 'Local Bulk Stores',
+          rating: 4.9,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Paper/Cardboard Packaged Alternative',
+          ecoScore: betterScores.length > 1
+              ? betterScores[1]
+              : betterScores.first,
+          materialType: 'Recycled Paper/Cardboard',
+          benefit: 'Compostable packaging',
+          whereToBuy: 'Shopee, Lazada, Eco Shops',
+          carbonSavings: 'Reduces plastic by 100%',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=eco+packaging+food',
+          shortDescription:
+              'Same product type in biodegradable paper packaging',
+          category: scanned.category,
+          price: 25.00,
+          brand: 'EcoPack',
+          rating: 4.6,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Glass Jar Packaged Product',
+          ecoScore: betterScores.length > 2
+              ? betterScores[2]
+              : betterScores.first,
+          materialType: 'Reusable Glass',
+          benefit: 'Reusable container',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Jar can be reused for years',
+          imagePath: '',
+          buyLink: 'https://shopee.com.my/search?keyword=glass+jar+food',
+          shortDescription: 'Product in reusable glass jar packaging',
+          category: scanned.category,
+          price: 32.00,
+          brand: 'GlassGood',
+          rating: 4.5,
+          externalSource: 'contextual',
+        ),
+      ]);
+    } else {
+      // Generic eco-friendly alternatives for any category
+      alternatives.addAll([
+        AlternativeProduct(
+          name: 'Eco-Friendly Alternative (Recycled Materials)',
+          ecoScore: betterScores.first,
+          materialType: 'Recycled Materials',
+          benefit: 'Made from recycled content',
+          whereToBuy: 'Shopee, Lazada, Eco Shops',
+          carbonSavings: 'Reduces new material production',
+          imagePath: '',
+          buyLink:
+              'https://shopee.com.my/search?keyword=eco+friendly+${Uri.encodeComponent(scanned.category)}',
+          shortDescription:
+              'Similar product made with recycled or sustainable materials',
+          category: scanned.category,
+          price: 30.00,
+          brand: 'EcoChoice',
+          rating: 4.6,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Sustainable ${scanned.category} Option',
+          ecoScore: betterScores.length > 1
+              ? betterScores[1]
+              : betterScores.first,
+          materialType: 'Biodegradable/Compostable',
+          benefit: 'Environmentally friendly disposal',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Decomposes naturally',
+          imagePath: '',
+          buyLink:
+              'https://shopee.com.my/search?keyword=sustainable+${Uri.encodeComponent(scanned.category)}',
+          shortDescription:
+              'Sustainable alternative with minimal environmental impact',
+          category: scanned.category,
+          price: 35.00,
+          brand: 'GreenLiving',
+          rating: 4.7,
+          externalSource: 'contextual',
+        ),
+        AlternativeProduct(
+          name: 'Reusable/Refillable Version',
+          ecoScore: betterScores.length > 2
+              ? betterScores[2]
+              : betterScores.first,
+          materialType: 'Durable Reusable',
+          benefit: 'Long-lasting, reduces waste',
+          whereToBuy: 'Shopee, Lazada',
+          carbonSavings: 'Prevents repeated purchases',
+          imagePath: '',
+          buyLink:
+              'https://shopee.com.my/search?keyword=reusable+${Uri.encodeComponent(scanned.category)}',
+          shortDescription: 'Reusable version that eliminates single-use waste',
+          category: scanned.category,
+          price: 40.00,
+          brand: 'ReUse',
+          rating: 4.5,
+          externalSource: 'contextual',
+        ),
+      ]);
+    }
+
+    // Filter to only show alternatives with better eco scores
+    final filteredAlternatives = alternatives
+        .where((alt) => _ecoRank(alt.ecoScore) < currentRank)
         .toList();
-    if (better.isNotEmpty) return better;
-    final sorted = List<AlternativeProduct>.from(_sampleAlternatives)
-      ..sort((a, b) => _ecoRank(a.ecoScore).compareTo(_ecoRank(b.ecoScore)));
-    return sorted.take(5).toList();
+
+    return filteredAlternatives.isNotEmpty
+        ? filteredAlternatives
+        : alternatives;
   }
 
   void _showAlternativeDetails(AlternativeProduct p) {
@@ -1245,32 +1451,55 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
 
   Future<void> _generateAlternativesThenFallback() async {
     final scanned = widget.scannedProduct;
-    if (scanned == null) return;
+    if (scanned == null) {
+      debugPrint('⚠️ No scanned product provided');
+      return;
+    }
 
+    debugPrint(
+      '🔄 Starting alternative generation for: ${scanned.productName}',
+    );
     setState(() => _loading = true);
 
     // Step 1: Try Gemini AI for intelligent alternatives
+    debugPrint('📍 Step 1: Trying Gemini AI...');
     bool geminiSuccess = await _tryGeminiAlternatives(scanned);
     if (geminiSuccess) {
+      debugPrint('✅ Success! Using Gemini AI alternatives');
       setState(() => _loading = false);
       return;
     }
 
     // Step 2: Try Firestore database
+    debugPrint('📍 Step 2: Trying Firestore database...');
     bool firestoreSuccess = await _tryFirestoreAlternatives(scanned);
     if (firestoreSuccess) {
+      debugPrint('✅ Success! Using Firestore alternatives');
       setState(() => _loading = false);
       return;
     }
 
     // Step 3: Try Cloudinary JSON files
+    debugPrint('📍 Step 3: Trying Cloudinary JSON...');
     await _loadAlternativesIfNeeded();
+
+    if (_loadedAlternatives.isNotEmpty) {
+      debugPrint('✅ Success! Using Cloudinary alternatives');
+    } else {
+      debugPrint('❌ All sources failed, no alternatives available');
+      _dataSource = 'No Data Available';
+    }
 
     setState(() => _loading = false);
   }
 
   Future<bool> _tryGeminiAlternatives(ProductAnalysisData scanned) async {
     try {
+      debugPrint('🤖 Trying Gemini AI for alternatives...');
+      debugPrint('   Product: ${scanned.productName}');
+      debugPrint('   Category: ${scanned.category}');
+      debugPrint('   Eco Score: ${scanned.ecoScore}');
+
       // Build an enhanced prompt for Gemini 2.5 Pro
       final prompt =
           '''
@@ -1285,8 +1514,8 @@ Scanned Product:
 - Ingredients/Materials: ${scanned.ingredients}
 - Current Eco Score: ${scanned.ecoScore}
 
-Generate 5-8 sustainable alternatives that are:
-1. More eco-friendly (better eco score)
+Generate at least 3 sustainable alternatives (preferably 5-8) that are:
+1. More eco-friendly (better eco score than ${scanned.ecoScore})
 2. Available on Shopee or Lazada Malaysia
 3. Specific real products with accurate information
 
@@ -1310,8 +1539,28 @@ Return ONLY a valid JSON array with this exact structure:
 Focus on plastic-free alternatives, refillable options, or products with minimal packaging.
 ''';
 
+      debugPrint('📤 Sending request to Gemini...');
       final text = await GenerativeService.generateResponse(prompt);
-      if (text.isEmpty || text.startsWith('__')) return false;
+
+      if (text.isEmpty) {
+        debugPrint('❌ Gemini returned empty response');
+        return false;
+      }
+
+      if (text.startsWith('__')) {
+        debugPrint('❌ Gemini API error: $text');
+        return false;
+      }
+
+      debugPrint('✅ Gemini response received (${text.length} chars)');
+      debugPrint(
+        '📝 Response preview: ${text.substring(0, text.length > 200 ? 200 : text.length)}...',
+      );
+
+      debugPrint('✅ Gemini response received (${text.length} chars)');
+      debugPrint(
+        '📝 Response preview: ${text.substring(0, text.length > 200 ? 200 : text.length)}...',
+      );
 
       // Extract JSON array
       String jsonText = text.trim();
@@ -1321,16 +1570,24 @@ Focus on plastic-free alternatives, refillable options, or products with minimal
         jsonText = jsonText.substring(first, last + 1);
       }
 
+      debugPrint('🔍 Parsing JSON...');
       final decoded = jsonDecode(jsonText);
-      if (decoded is! List || decoded.isEmpty) return false;
 
+      if (decoded is! List || decoded.isEmpty) {
+        debugPrint('❌ Invalid JSON format or empty array');
+        return false;
+      }
+
+      debugPrint('✅ JSON parsed successfully, found ${decoded.length} items');
       final List<AlternativeProduct> generated = [];
+
       for (final item in decoded) {
         if (item is! Map) continue;
 
         final name = (item['name'] ?? '').toString();
         if (name.isEmpty) continue;
 
+        debugPrint('   ✓ Adding alternative: $name (${item['ecoScore']})');
         generated.add(
           AlternativeProduct(
             name: name,
@@ -1359,11 +1616,20 @@ Focus on plastic-free alternatives, refillable options, or products with minimal
       }
 
       if (generated.isNotEmpty) {
-        _loadedAlternatives = generated;
+        debugPrint(
+          '✅ Successfully generated ${generated.length} alternatives from Gemini',
+        );
+        setState(() {
+          _loadedAlternatives = generated;
+          _dataSource = 'Gemini AI';
+        });
         return true;
+      } else {
+        debugPrint('❌ No valid alternatives parsed from Gemini response');
       }
     } catch (e) {
-      debugPrint('Gemini generation failed: $e');
+      debugPrint('❌ Gemini generation failed: $e');
+      debugPrint('   Stack trace: ${StackTrace.current}');
     }
     return false;
   }
@@ -1407,7 +1673,10 @@ Focus on plastic-free alternatives, refillable options, or products with minimal
             .where((a) => _ecoRank(a.ecoScore) < scannedRank)
             .toList();
 
-        _loadedAlternatives = better.isNotEmpty ? better : fetched;
+        setState(() {
+          _loadedAlternatives = better.isNotEmpty ? better : fetched;
+          _dataSource = 'Firestore Database';
+        });
         return true;
       }
     } catch (e) {
@@ -1533,9 +1802,15 @@ Focus on plastic-free alternatives, refillable options, or products with minimal
                 _ecoRank(a.ecoScore) < sRank,
           )
           .toList();
-      _loadedAlternatives = better.isNotEmpty ? better : fetched;
+      setState(() {
+        _loadedAlternatives = better.isNotEmpty ? better : fetched;
+        _dataSource = 'Cloudinary';
+      });
     } else {
-      _loadedAlternatives = fetched;
+      setState(() {
+        _loadedAlternatives = fetched;
+        _dataSource = 'Cloudinary';
+      });
     }
 
     setState(() => _loading = false);
@@ -1736,15 +2011,55 @@ Focus on plastic-free alternatives, refillable options, or products with minimal
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          !_loading && alternatives.isNotEmpty
-                              ? '${alternatives.length} alternatives found'
-                              : 'Finding alternatives...',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white.withOpacity(0.9),
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              !_loading && alternatives.isNotEmpty
+                                  ? '${alternatives.length} alternatives found'
+                                  : 'Finding alternatives...',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withOpacity(0.9),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            // Show data source
+                            if (_dataSource.isNotEmpty && !_loading)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _dataSource.contains('Gemini')
+                                          ? Icons.auto_awesome
+                                          : _dataSource.contains('Firestore')
+                                          ? Icons.cloud_done
+                                          : _dataSource.contains('Cloudinary')
+                                          ? Icons.cloud_download
+                                          : _dataSource.contains('AI-Generated')
+                                          ? Icons.lightbulb_outline
+                                          : Icons.info_outline,
+                                      size: 12,
+                                      color: Colors.white.withOpacity(0.7),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        'Source: $_dataSource',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.white.withOpacity(0.7),
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       Container(
