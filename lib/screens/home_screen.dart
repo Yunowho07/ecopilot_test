@@ -72,13 +72,16 @@ class _HomeScreenState extends State<HomeScreen> {
     String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     try {
-      // 2. Fetch the tip for that date from Firestore
+      // 2. First, ensure today's tip exists in Firestore
+      await TipGenerator.ensureTodayTipExists();
+
+      // 3. Fetch the tip for that date from Firestore
       final doc = await FirebaseFirestore.instance
           .collection('daily_tips')
           .doc(today)
           .get();
 
-      // 3. If it exists, return the tip field and category
+      // 4. If it exists, return the tip field and category
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         return {
@@ -86,15 +89,24 @@ class _HomeScreenState extends State<HomeScreen> {
           'category': data['category'] as String? ?? 'eco_habits',
         };
       } else {
-        // If not found, show a fallback message
+        // If still not found after ensuring it exists, generate one directly
+        debugPrint(
+          '⚠️ Tip document not found after ensuring exists, generating directly',
+        );
+        final tip = TipGenerator.generateDailyTip(DateTime.now());
         return {
-          'tip': 'No eco tips available today 🌍',
-          'category': 'eco_habits',
+          'tip': tip['tip'] as String? ?? 'No eco tips available today 🌍',
+          'category': tip['category'] as String? ?? 'eco_habits',
         };
       }
     } catch (e) {
       debugPrint('Error fetching tip: $e');
-      return {'tip': 'Unable to load tip 🌍', 'category': 'eco_habits'};
+      // Return a generic tip instead of error message
+      return {
+        'tip':
+            '🌱 Small changes make a big difference! Start your eco journey today.',
+        'category': 'eco_habits',
+      };
     }
   }
 

@@ -2,35 +2,210 @@ rules_version='2'
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // Each user has a profile at /users/{userId}
-      match /users/{userId} {
-      // Allow the authenticated user to read & write their own profile
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    
+    // ========================================
+    // USERS COLLECTION
+    // ========================================
+    // Main user profiles with eco points, rank, streak tracking
+    match /users/{userId} {
+      // Allow authenticated user to read & write their own profile
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      
+      // Validate user document structure
+      allow create: if request.auth != null 
+                    && request.auth.uid == userId
+                    && request.resource.data.keys().hasAll(['name', 'email'])
+                    && request.resource.data.ecoPoints is int
+                    && request.resource.data.streakCount is int;
 
-      // Scans (user-specific subcollection): /users/{userId}/scans/{scanId}
+      // Point History subcollection: /users/{userId}/point_history/{historyId}
+      match /point_history/{historyId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Monthly points subcollection: /users/{userId}/monthly_points/{monthKey}
+      match /monthly_points/{monthKey} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+      
+      // Scans subcollection: /users/{userId}/scans/{scanId}
       match /scans/{scanId} {
-      // Allow the authenticated user to create/read/update/delete only their own scans
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-
-      // Optional stricter create rule example (uncomment if you want):
-      allow create: if request.auth != null
-            && request.auth.uid == userId
-            && request.resource.data.keys().hasAll(['analysis','timestamp']);
-            }
-        }
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
       }
 
-      // Optional public collection example
-      match /public/{doc=**} {
-        allow read: if true;
-        allow write: if false;
-      }
-
-      // Default: deny anything else explicitly
-      match /{document=**} {
-        allow read, write: if false;
+      // Disposal scans subcollection: /users/{userId}/disposal_scans/{scanId}
+      match /disposal_scans/{scanId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
       }
     }
+
+    // ========================================
+    // SCANNED PRODUCTS COLLECTION
+    // ========================================
+    // Products scanned by users (main scan screen)
+    match /scanned_products/{productId} {
+      // Anyone authenticated can read
+      allow read: if request.auth != null;
+      // Only the user who scanned can write
+      allow write: if request.auth != null 
+                   && request.auth.uid == request.resource.data.userId;
+      
+      // Validate required fields
+      allow create: if request.resource.data.keys().hasAll([
+        'userId', 'productName', 'ecoScore', 'timestamp'
+      ]);
+    }
+
+    // ========================================
+    // DISPOSAL PRODUCTS COLLECTION
+    // ========================================
+    // Products scanned for disposal guidance
+    match /disposal_products/{disposalId} {
+      // Anyone authenticated can read
+      allow read: if request.auth != null;
+      // Only the user who scanned can write
+      allow write: if request.auth != null 
+                   && request.auth.uid == request.resource.data.userId;
+      
+      // Validate required fields
+      allow create: if request.resource.data.keys().hasAll([
+        'userId', 'productName', 'material', 'howToDispose', 'timestamp'
+      ]);
+    }
+
+    // ========================================
+    // ALTERNATIVE PRODUCTS COLLECTION
+    // ========================================
+    // Eco-friendly product alternatives
+    match /alternative_products/{alternativeId} {
+      // Anyone authenticated can read alternatives
+      allow read: if request.auth != null;
+      // Only admins can write (set via Cloud Functions or Admin SDK)
+      allow write: if false;
+      
+      // Validate structure
+      allow create: if request.resource.data.keys().hasAll([
+        'baseProductId', 'name', 'ecoScore', 'category', 'timestamp'
+      ]);
+    }
+
+    // ========================================
+    // ECO CHALLENGES COLLECTION
+    // ========================================
+    // Daily eco challenges available to all users
+    match /eco_challenges/{challengeId} {
+      // All authenticated users can read challenges
+      allow read: if request.auth != null;
+      // Only admins/cloud functions can create challenges
+      allow write: if false;
+      
+      // Validate challenge structure
+      allow create: if request.resource.data.keys().hasAll([
+        'title', 'description', 'pointsReward', 'dateAvailable', 'isActive'
+      ]);
+    }
+    
+    // Legacy challenges collection (keep for backward compatibility)
+    match /challenges/{date} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // ========================================
+    // USER CHALLENGES COLLECTION
+    // ========================================
+    // Tracks individual user progress on challenges
+    match /user_challenges/{challengeDoc} {
+      // Document ID format: {userId}-{date}
+      // Allow if the document ID starts with the user's UID
+      allow read: if request.auth != null 
+                  && challengeDoc.matches('^' + request.auth.uid + '-.*');
+      allow write: if request.auth != null 
+                   && challengeDoc.matches('^' + request.auth.uid + '-.*');
+      
+      // Validate structure
+      allow create: if request.resource.data.keys().hasAll([
+        'userId', 'completed', 'pointsEarned', 'date'
+      ]);
+    }
+
+    // ========================================
+    // ECO POINT HISTORY COLLECTION
+    // ========================================
+    // Global point history for all users (for leaderboard/analytics)
+    match /eco_point_history/{historyId} {
+      // Users can read their own history
+      allow read: if request.auth != null 
+                  && request.auth.uid == resource.data.userId;
+      // Only the user can create their own history
+      allow write: if request.auth != null 
+                   && request.auth.uid == request.resource.data.userId;
+      
+      // Validate structure
+      allow create: if request.resource.data.keys().hasAll([
+        'userId', 'source', 'pointsEarned', 'dateEarned'
+      ]);
+    }
+
+    // ========================================
+    // TIPS COLLECTION
+    // ========================================
+    // Daily eco tips (legacy collection)
+    match /tips/{date} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only admins/cloud functions
+    }
+    
+    // Daily eco tips (new collection)
+    match /daily_tips/{date} {
+      allow read: if request.auth != null;
+      // Allow creating tips if they don't exist (for client-side generation)
+      allow create: if request.auth != null;
+      // Only admins can update or delete tips
+      allow update, delete: if false;
+    }
+
+    // ========================================
+    // NOTIFICATIONS COLLECTION
+    // ========================================
+    match /notifications/{notificationId} {
+      allow read: if request.auth != null 
+                  && request.auth.uid == resource.data.userId;
+      allow write: if request.auth != null 
+                   && request.auth.uid == request.resource.data.userId;
+    }
+    
+    // User-specific notifications subcollection
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // User-specific bookmarked tips subcollection
+    match /users/{userId}/bookmarked_tips/{tipId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ========================================
+    // PUBLIC COLLECTIONS
+    // ========================================
+    match /public/{doc=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ========================================
+    // DEFAULT DENY
+    // ========================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
+}
 

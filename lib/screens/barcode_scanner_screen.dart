@@ -323,53 +323,7 @@ Return ONLY the JSON object, no additional text.
         crueltyFree: data['cruelty_free'] ?? data['crueltyFree'] ?? false,
       );
 
-      // Save to Firestore
-      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
-      final productId =
-          data['barcode'] ?? DateTime.now().millisecondsSinceEpoch.toString();
-
-      // Save to disposal_scans collection
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('disposal_scans')
-          .doc(productId)
-          .set({
-            'product_name': analysisData.productName,
-            'productName': analysisData.productName,
-            'name': analysisData.productName,
-            'category': analysisData.category,
-            'product_category': analysisData.category,
-            'material': analysisData.packagingType,
-            'packagingType': analysisData.packagingType,
-            'ecoScore': analysisData.ecoScore,
-            'eco_score': analysisData.ecoScore,
-            'imageUrl': analysisData.imageUrl, // Cloudinary URL
-            'image_url': analysisData.imageUrl, // Cloudinary URL
-            'disposalSteps': analysisData.disposalMethod
-                .split('\n')
-                .where((s) => s.trim().isNotEmpty)
-                .toList(),
-            'disposalMethod': analysisData.disposalMethod,
-            'tips': analysisData.tips.isNotEmpty
-                ? analysisData.tips.split('\n')
-                : [],
-            'tips_text': analysisData.tips,
-            'nearbyCenter': analysisData.nearbyCenter,
-            'nearby_center': analysisData.nearbyCenter,
-            'isDisposal': true,
-            'containsMicroplastics': analysisData.containsMicroplastics,
-            'contains_microplastics': analysisData.containsMicroplastics,
-            'palmOilDerivative': analysisData.palmOilDerivative,
-            'palm_oil_derivative': analysisData.palmOilDerivative,
-            'crueltyFree': analysisData.crueltyFree,
-            'cruelty_free': analysisData.crueltyFree,
-            'barcode': data['barcode'],
-            'source': data['source'] ?? 'Barcode Scanner',
-            'createdAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
-
-      // Also save to scans collection
+      // Save to Firestore using FirebaseService (handles all collections)
       await FirebaseService().saveUserScan(
         analysis: aiOutput ?? 'Scanned from ${data['source'] ?? 'barcode'}',
         productName: analysisData.productName,
@@ -391,6 +345,8 @@ Return ONLY the JSON object, no additional text.
         crueltyFree: analysisData.crueltyFree,
       );
 
+      debugPrint('Product saved successfully to Firestore');
+
       if (mounted) {
         // Navigate to result screen
         Navigator.of(context).pushReplacement(
@@ -402,9 +358,35 @@ Return ONLY the JSON object, no additional text.
     } catch (e) {
       debugPrint('Error saving product: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving product: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Failed to save product data. Please check your internet connection and try again.',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () {
+                _saveAndNavigate(data, aiOutput);
+              },
+            ),
+          ),
+        );
       }
     }
   }

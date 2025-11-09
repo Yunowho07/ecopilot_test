@@ -24,6 +24,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     _loadLeaderboard();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload leaderboard when coming back to this screen
+    _loadLeaderboard();
+  }
+
   void _loadLeaderboard() {
     _future = _service.getLeaderboard(limit: 100);
     _loadCurrentUserStats();
@@ -36,7 +43,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         final userSummary = await _service.getUserSummary(currentUser.uid);
         if (mounted) {
           setState(() {
-            _currentUserPoints = userSummary['totalPoints'] ?? 0;
+            _currentUserPoints = userSummary['ecoPoints'] ?? 0;
           });
         }
       }

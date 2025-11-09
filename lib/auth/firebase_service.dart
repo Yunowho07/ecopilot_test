@@ -489,12 +489,17 @@ class FirebaseService {
 
     // Only create profile if it doesn't exist yet
     if (!existingUser.exists) {
+      // Generate a username from name (or use email prefix)
+      String username = _generateUsername(name, email);
+
       // Default to the lowest rank title when creating a new profile
       await userRef.set({
+        'userId': uid, // Store UID for reference
+        'username': username, // Human-readable username
         'name': name,
         'email': email,
         'photoUrl': photoUrl,
-        'ecoScore': 0,
+        'ecoPoints': 0, // Changed from ecoScore to ecoPoints
         'title': 'Green Beginner',
         'streakDays': 0,
         'createdAt': Timestamp.now(),
@@ -502,23 +507,63 @@ class FirebaseService {
     }
   }
 
+  /// Generate a username from display name or email
+  String _generateUsername(String name, String email) {
+    // Remove spaces and special characters from name
+    String username = name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    // If name is empty or too short, use email prefix
+    if (username.isEmpty || username.length < 3) {
+      username = email
+          .split('@')[0]
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]'), '');
+    }
+
+    // Limit to 20 characters
+    if (username.length > 20) {
+      username = username.substring(0, 20);
+    }
+
+    return username.isEmpty
+        ? 'user${DateTime.now().millisecondsSinceEpoch}'
+        : username;
+  }
+
   Future<DocumentSnapshot<Map<String, dynamic>>> getUserProfile() async {
     final uid = _auth.currentUser!.uid;
     return _firestore.collection('users').doc(uid).get();
   }
 
-  /// Return a small summary for the user used by UI (streak, ecoScore, etc.).
+  /// Return a small summary for the user used by UI (streak, ecoPoints, etc.).
   /// If the document doesn't exist, returns defaults.
   Future<Map<String, dynamic>> getUserSummary(String uid) async {
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
       final data = doc.data() ?? {};
       final streak = data['streak'] ?? data['streakDays'] ?? 0;
-      final ecoScore = data['ecoScore'] ?? data['ecoPoints'] ?? 0;
-      return {'streak': streak, 'ecoScore': ecoScore, 'profile': data};
+      final ecoPoints = data['ecoPoints'] ?? 0;
+      final totalPoints =
+          data['totalPoints'] ?? ecoPoints; // For backward compatibility
+      final username = data['username'] ?? data['name'] ?? 'User';
+      return {
+        'streak': streak,
+        'ecoPoints': ecoPoints,
+        'totalPoints': totalPoints,
+        'ecoScore': ecoPoints, // Keep for backward compatibility
+        'username': username,
+        'profile': data,
+      };
     } catch (e) {
       debugPrint('getUserSummary failed: $e');
-      return {'streak': 0, 'ecoScore': 0, 'profile': {}};
+      return {
+        'streak': 0,
+        'ecoPoints': 0,
+        'totalPoints': 0,
+        'ecoScore': 0,
+        'username': 'User',
+        'profile': {},
+      };
     }
   }
 
@@ -539,17 +584,17 @@ class FirebaseService {
     final userDoc = await userRef.get();
 
     if (userDoc.exists) {
-      final currentScore = (userDoc.data()?['ecoScore'] ?? 0) as int;
+      final currentScore = (userDoc.data()?['ecoPoints'] ?? 0) as int;
       final newScore = currentScore + points;
 
       // Compute a new title based on the new score
       final rank = rankForPoints(newScore);
 
-      await userRef.update({'ecoScore': newScore, 'title': rank.title});
+      await userRef.update({'ecoPoints': newScore, 'title': rank.title});
     }
   }
 
-  /// Return a simple leaderboard of users ordered by ecoScore desc.
+  /// Return a simple leaderboard of users ordered by ecoPoints desc.
   /// Each entry will include the user's document data plus the uid.
   Future<List<Map<String, dynamic>>> getLeaderboard({int limit = 50}) async {
     try {
@@ -562,11 +607,15 @@ class FirebaseService {
 
       final results = snapshot.docs.map((d) {
         final data = d.data();
+        final points = data['ecoPoints'] ?? 0;
+        final username = data['username'] ?? data['name'] ?? 'Anonymous';
         return {
           'uid': d.id,
+          'username': username,
           'name': data['name'] ?? data['displayName'] ?? 'Anonymous',
           'photoUrl': data['photoUrl'] ?? '',
-          'ecoScore': data['ecoPoints'] ?? data['ecoScore'] ?? 0,
+          'ecoScore': points, // For backward compatibility
+          'ecoPoints': points,
           'title': data['title'] ?? '',
         };
       }).toList();
@@ -588,11 +637,15 @@ class FirebaseService {
 
         final results = snapshot.docs.map((d) {
           final data = d.data();
+          final points = data['ecoPoints'] ?? 0;
+          final username = data['username'] ?? data['name'] ?? 'Anonymous';
           return {
             'uid': d.id,
+            'username': username,
             'name': data['name'] ?? data['displayName'] ?? 'Anonymous',
             'photoUrl': data['photoUrl'] ?? '',
-            'ecoScore': data['ecoPoints'] ?? data['ecoScore'] ?? 0,
+            'ecoScore': points, // For backward compatibility
+            'ecoPoints': points,
             'title': data['title'] ?? '',
           };
         }).toList();
@@ -773,14 +826,13 @@ class FirebaseService {
       'date': DateFormat('yyyy-MM-dd – kk:mm').format(DateTime.now()),
     });
 
-    // Reward a small number of Eco Points for scanning a product when a user is signed in.
-    // This encourages engagement. If the caller passed an ecoScore string representing a
-    // numeric reward, that flow should be handled by the caller; here we award a default.
+    // Reward 2 Eco Points for scanning a product (part of the reward system)
+    // This encourages engagement and discovery of eco-friendly products.
     if (_auth.currentUser != null) {
       try {
-        await updateEcoScore(5); // Default: +5 points per scan
+        await addEcoPoints(points: 2, reason: 'Product scan');
       } catch (e) {
-        debugPrint('Failed to update eco score after saveUserScan: $e');
+        debugPrint('Failed to award points after scan: $e');
       }
     }
   }
@@ -864,51 +916,238 @@ class FirebaseService {
   ///
   /// This will create/update a document under `user_challenges/{uid}-{yyyy-MM-dd}`
   /// recording which challenges were completed and increment the user's eco score.
-  Future<void> completeChallenge(int challengeIndex, int points) async {
+  /// Also updates monthly points and streak if all challenges are completed.
+  Future<Map<String, dynamic>> completeChallenge({
+    required int challengeIndex,
+    required int points,
+    required int totalChallenges,
+    required List<bool> currentCompleted,
+  }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('No user signed in');
 
     final uid = user.uid;
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final docRef = _firestore.collection('user_challenges').doc('$uid-$today');
-    final userRef = _firestore.collection('users').doc(uid);
+    final monthKey = DateFormat('yyyy-MM').format(DateTime.now());
 
-    await _firestore.runTransaction((tx) async {
-      final docSnap = await tx.get(docRef);
-      List<dynamic> completed = [];
+    try {
+      // 1. Get current user challenge progress
+      final challengeDoc = await _firestore
+          .collection('user_challenges')
+          .doc('$uid-$today')
+          .get();
+
+      List<bool> completed = List.from(currentCompleted);
       int currentPoints = 0;
 
-      if (docSnap.exists) {
-        final data = docSnap.data()!;
-        completed = List.from(data['completed'] ?? []);
-        currentPoints = data['pointsEarned'] ?? 0;
-      } else {
-        // Default to two challenge slots if not present — callers may have different counts.
-        completed = [false, false];
+      if (challengeDoc.exists) {
+        final data = challengeDoc.data();
+        if (data != null) {
+          completed =
+              (data['completed'] as List<dynamic>?)
+                  ?.map((e) => e == true)
+                  .toList() ??
+              completed;
+          currentPoints = data['pointsEarned'] ?? 0;
+        }
       }
 
-      // Expand list if needed
-      while (completed.length <= challengeIndex) completed.add(false);
-
       // Already completed -> nothing to do
-      if (completed[challengeIndex] == true) return;
+      if (completed[challengeIndex] == true) {
+        return {'success': false, 'message': 'Challenge already completed'};
+      }
 
+      // Mark as completed
       completed[challengeIndex] = true;
+      final newPointsEarned = currentPoints + points;
 
-      // Update the user_challenges doc (merge to avoid clobbering)
-      tx.set(docRef, {
+      // Check if all challenges are now completed
+      final allCompleted = completed.every((c) => c);
+
+      // Award bonus points if all challenges completed (10 point bonus for both)
+      int bonusPoints = 0;
+      if (allCompleted && totalChallenges == 2) {
+        bonusPoints = 10; // Bonus for completing both daily challenges
+        debugPrint(
+          'All daily challenges completed! Awarding $bonusPoints bonus points',
+        );
+      }
+
+      // 2. Update user challenge progress
+      await _firestore.collection('user_challenges').doc('$uid-$today').set({
         'completed': completed,
-        'pointsEarned': currentPoints + points,
-        'updatedAt': Timestamp.now(),
+        'pointsEarned': newPointsEarned,
+        'userId': uid,
+        'date': today,
+        'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // Update user's eco score
-      final userSnap = await tx.get(userRef);
-      final existingEco = userSnap.exists
-          ? (userSnap.data()?['ecoScore'] ?? 0) as int
-          : 0;
-      tx.update(userRef, {'ecoScore': existingEco + points});
-    });
+      // 3. Get current user data
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      final userData = userDoc.data() ?? {};
+      final currentEcoPoints = userData['ecoPoints'] ?? 0;
+      final currentStreak = userData['streak'] ?? 0;
+      int updatedStreak = currentStreak;
+
+      // Increment streak only if all challenges are completed
+      if (allCompleted) {
+        updatedStreak = currentStreak + 1;
+
+        // Award streak milestone bonuses
+        if (updatedStreak == 10 ||
+            updatedStreak == 30 ||
+            updatedStreak == 100 ||
+            updatedStreak == 200) {
+          await checkStreakBonus(updatedStreak);
+        }
+      }
+
+      // 4. Update user's eco points and streak
+      await _firestore.collection('users').doc(uid).set({
+        'ecoPoints': currentEcoPoints + points + bonusPoints,
+        'streak': updatedStreak,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // 5. Update monthly points
+      final monthlyDoc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('monthly_points')
+          .doc(monthKey)
+          .get();
+
+      final currentMonthlyPoints = monthlyDoc.data()?['points'] ?? 0;
+
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('monthly_points')
+          .doc(monthKey)
+          .set({
+            'points': currentMonthlyPoints + points + bonusPoints,
+            'goal': 500,
+            'month': monthKey,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+      debugPrint(
+        'Challenge completed successfully: +$points points' +
+            (bonusPoints > 0 ? ' (+$bonusPoints bonus)' : ''),
+      );
+
+      return {
+        'success': true,
+        'pointsEarned': newPointsEarned,
+        'totalEcoPoints': currentEcoPoints + points + bonusPoints,
+        'streak': updatedStreak,
+        'allCompleted': allCompleted,
+        'completed': completed,
+        'bonusPoints': bonusPoints,
+      };
+    } catch (e) {
+      debugPrint('Error completing challenge: $e');
+      rethrow;
+    }
+  }
+
+  // ===============================================
+  // 🎯 ECO POINTS REWARD SYSTEM 🎯
+  // ===============================================
+
+  /// Award eco points to the current user for various actions.
+  ///
+  /// Point values:
+  /// - Product scan: 2 points
+  /// - Daily challenge (per task): 5 points
+  /// - Both daily challenges: 10 points
+  /// - Disposal guidance: 3 points
+  /// - Exploring alternatives: 5 points
+  /// - Reading tips/quizzes: 2-5 points
+  /// - Weekly engagement: 10 points
+  /// - Streak bonuses: 5 (10 days), 15 (30 days), 30 (100 days), 50 (200 days)
+  /// - Monthly leaderboard: up to 20 points
+  Future<void> addEcoPoints({
+    required int points,
+    required String reason,
+    bool updateMonthly = true,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      debugPrint('Cannot add points: No user signed in');
+      return;
+    }
+
+    final uid = user.uid;
+    final monthKey = DateFormat('yyyy-MM').format(DateTime.now());
+
+    try {
+      // 1. Get current user points
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      final currentPoints = userDoc.data()?['ecoPoints'] ?? 0;
+
+      // 2. Update user's eco points
+      await _firestore.collection('users').doc(uid).set({
+        'ecoPoints': currentPoints + points,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // 3. Update monthly points if requested
+      if (updateMonthly) {
+        final monthlyDoc = await _firestore
+            .collection('users')
+            .doc(uid)
+            .collection('monthly_points')
+            .doc(monthKey)
+            .get();
+
+        final currentMonthlyPoints = monthlyDoc.data()?['points'] ?? 0;
+
+        await _firestore
+            .collection('users')
+            .doc(uid)
+            .collection('monthly_points')
+            .doc(monthKey)
+            .set({
+              'points': currentMonthlyPoints + points,
+              'goal': 500,
+              'month': monthKey,
+              'updatedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+      }
+
+      // 4. Log the point award
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('point_history')
+          .add({
+            'points': points,
+            'reason': reason,
+            'timestamp': FieldValue.serverTimestamp(),
+            'newTotal': currentPoints + points,
+          });
+
+      debugPrint(
+        'Awarded $points points for: $reason (New total: ${currentPoints + points})',
+      );
+    } catch (e) {
+      debugPrint('Error adding eco points: $e');
+    }
+  }
+
+  /// Check and award streak bonuses based on consecutive days
+  Future<void> checkStreakBonus(int currentStreak) async {
+    // Award bonus points at milestone streaks
+    if (currentStreak == 10) {
+      await addEcoPoints(points: 5, reason: '10-day streak bonus!');
+    } else if (currentStreak == 30) {
+      await addEcoPoints(points: 15, reason: '30-day streak bonus!');
+    } else if (currentStreak == 100) {
+      await addEcoPoints(points: 30, reason: '100-day streak bonus!');
+    } else if (currentStreak == 200) {
+      await addEcoPoints(points: 50, reason: '200-day streak bonus!');
+    }
   }
 
   // ===============================================

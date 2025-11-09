@@ -204,7 +204,6 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       // Prevent double completion
       if (_progress.completed[index]) return;
 
-      // 1. Prepare data updates
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         if (!mounted) return;
@@ -215,107 +214,103 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
         );
         return;
       }
-      final userId = user.uid;
 
       final challengePoints = _challenges[index].points;
-      final newCompleted = List<bool>.from(_progress.completed);
-      newCompleted[index] = true;
-      final newPointsEarned = _progress.pointsEarned + challengePoints;
 
-      final allCompleted = newCompleted.every((c) => c);
+      // Use FirebaseService to complete the challenge (handles all Firestore operations)
+      final result = await _firebaseService.completeChallenge(
+        challengeIndex: index,
+        points: challengePoints,
+        totalChallenges: _challenges.length,
+        currentCompleted: _progress.completed,
+      );
 
-      // Get current month key for monthly points
-      final now = DateTime.now();
-      final monthKey = DateFormat('yyyy-MM').format(now);
-
-      // 2. Execute Firestore updates without transaction (simpler and more reliable)
-      try {
-        // Update user challenge progress
-        await FirebaseFirestore.instance
-            .collection('user_challenges')
-            .doc('$userId-$today')
-            .set({
-              'completed': newCompleted,
-              'pointsEarned': newPointsEarned,
-              'userId': userId,
-              'date': today,
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-
-        // Get current user data
-        final userDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .get();
-
-        final currentEcoPoints = userDoc.data()?['ecoPoints'] ?? 0;
-        final currentStreak = userDoc.data()?['streak'] ?? 0;
-        int updatedStreak = currentStreak;
-        if (allCompleted) updatedStreak = currentStreak + 1;
-
-        // Update user document
-        await FirebaseFirestore.instance.collection('users').doc(userId).set({
-          'ecoPoints': currentEcoPoints + challengePoints,
-          'streak': updatedStreak,
-          'updatedAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-
-        // Update monthly points
-        final monthlyDoc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('monthly_points')
-            .doc(monthKey)
-            .get();
-
-        final currentMonthlyPoints = monthlyDoc.data()?['points'] ?? 0;
-
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .collection('monthly_points')
-            .doc(monthKey)
-            .set({
-              'points': currentMonthlyPoints + challengePoints,
-              'goal': 500,
-              'month': monthKey,
-              'updatedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-
-        // 3. Update local state
-        if (mounted) {
-          setState(() {
-            _progress = _progress.copyWith(
-              completed: newCompleted,
-              pointsEarned: newPointsEarned,
-              streakCount: updatedStreak,
-            );
-            _userEcoPoints = currentEcoPoints + challengePoints;
-          });
-          _loadUserRank(); // Refresh rank
-        }
-
+      if (!result['success']) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Challenge completed! +$challengePoints Points!'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 3),
+              content: Text(result['message'] ?? 'Challenge already completed'),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
             ),
           );
         }
-      } catch (firestoreError) {
-        debugPrint('Firestore operation failed: $firestoreError');
-        throw Exception('Database error: $firestoreError');
+        return;
+      }
+
+      // Update local state with the result
+      if (mounted) {
+        setState(() {
+          _progress = _progress.copyWith(
+            completed: List<bool>.from(result['completed']),
+            pointsEarned: result['pointsEarned'],
+            streakCount: result['streak'],
+          );
+          _userEcoPoints = result['totalEcoPoints'];
+        });
+        _loadUserRank(); // Refresh rank based on new points
+      }
+
+      if (mounted) {
+        final bonusPoints = result['bonusPoints'] ?? 0;
+        final totalAwarded = challengePoints + bonusPoints;
+
+        String message = '✅ Challenge completed! +$challengePoints Points!';
+        if (bonusPoints > 0) {
+          message =
+              '🎉 All challenges completed! +$totalAwarded Points! ($challengePoints + $bonusPoints bonus)';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  bonusPoints > 0 ? Icons.emoji_events : Icons.check_circle,
+                  color: Colors.white,
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Text(message)),
+              ],
+            ),
+            backgroundColor: bonusPoints > 0
+                ? Colors.amber.shade700
+                : Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            duration: Duration(seconds: bonusPoints > 0 ? 5 : 3),
+          ),
+        );
       }
     } catch (e) {
       debugPrint('completeChallenge failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to complete challenge. Please try again.'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Failed to complete challenge. Please check your internet connection and try again.',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _completeChallenge(index),
+            ),
+            duration: const Duration(seconds: 5),
           ),
         );
       }
@@ -655,76 +650,201 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
 
                   const SizedBox(height: 32),
 
-                  // Rank Card
+                  // Enhanced Rank Card with Progress
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.white, _rankColor.withOpacity(0.05)],
+                      ),
+                      borderRadius: BorderRadius.circular(24),
                       border: Border.all(
                         color: _rankColor.withOpacity(0.3),
                         width: 2,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
+                          color: _rankColor.withOpacity(0.2),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            // Rank Icon with Emoji
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  colors: [
+                                    _rankColor,
+                                    _rankColor.withOpacity(0.7),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: _rankColor.withOpacity(0.4),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Text(
+                                rankForPoints(_userEcoPoints).emoji,
+                                style: const TextStyle(fontSize: 32),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Your Rank',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _userRank,
+                                    style: TextStyle(
+                                      color: _rankColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 22,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.stars,
+                                        size: 16,
+                                        color: Colors.amber.shade600,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '$_userEcoPoints points',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Rank Description
                         Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: _rankColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Icon(
-                            Icons.emoji_events,
-                            color: _rankColor,
-                            size: 36,
+                          child: Text(
+                            getRankDescription(_userEcoPoints),
+                            style: TextStyle(
+                              color: Colors.grey.shade700,
+                              fontSize: 12,
+                              height: 1.4,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
+                        // Progress to Next Rank
+                        if (pointsToNextRank(_userEcoPoints) > 0) ...[
+                          const SizedBox(height: 16),
+                          Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Your Rank',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Next Rank',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${pointsToNextRank(_userEcoPoints)} points to go',
+                                    style: TextStyle(
+                                      color: _rankColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _userRank,
-                                style: TextStyle(
-                                  color: _rankColor,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 20,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '$_userEcoPoints eco points total',
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
+                              const SizedBox(height: 8),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: LinearProgressIndicator(
+                                  value:
+                                      _userEcoPoints /
+                                      (rankForPoints(
+                                            _userEcoPoints,
+                                          ).maxPoints ??
+                                          _userEcoPoints + 1),
+                                  minHeight: 8,
+                                  backgroundColor: Colors.grey.shade200,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    _rankColor,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.grey.shade400,
-                          size: 20,
-                        ),
+                        ] else ...[
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.amber.shade100,
+                                  Colors.amber.shade50,
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.emoji_events,
+                                  color: Colors.amber.shade700,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '🏆 Maximum Rank Achieved!',
+                                    style: TextStyle(
+                                      color: Colors.amber.shade900,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -844,7 +964,10 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
+                      // Wrap in Flexible to prevent overflow
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -875,8 +998,7 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                               ],
                             ),
                           ),
-                          if (isCompleted) ...[
-                            const SizedBox(width: 8),
+                          if (isCompleted)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
@@ -906,14 +1028,13 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                                 ],
                               ),
                             ),
-                          ],
                         ],
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
 
                 // Action Button
                 if (!isCompleted)

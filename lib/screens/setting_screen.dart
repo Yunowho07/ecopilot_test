@@ -7,7 +7,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:provider/provider.dart';
 import '../../utils/constants.dart';
+import '../../utils/theme_provider.dart';
 import 'profile_screen.dart';
 import 'notification_screen.dart';
 import 'support_screen.dart';
@@ -43,6 +45,18 @@ class _SettingScreenState extends State<SettingScreen> {
     super.initState();
     _loadPrefs();
     _calculateCacheSize();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Sync dark mode state with theme provider
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    if (_darkMode != themeProvider.isDarkMode) {
+      setState(() {
+        _darkMode = themeProvider.isDarkMode;
+      });
+    }
   }
 
   Future<void> _loadPrefs() async {
@@ -272,6 +286,7 @@ class _SettingScreenState extends State<SettingScreen> {
       }
 
       // Fetch user data from Firestore
+      // ignore: unused_local_variable
       final userData = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -588,18 +603,20 @@ class _SettingScreenState extends State<SettingScreen> {
   @override
   Widget build(BuildContext context) {
     final bool canPop = Navigator.of(context).canPop();
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade50,
+      backgroundColor: theme.scaffoldBackgroundColor,
       body: CustomScrollView(
         slivers: [
           // Hero Header with Gradient
           SliverAppBar(
             expandedHeight: 200,
             pinned: true,
-            backgroundColor: kPrimaryGreen,
+            backgroundColor: isDark ? theme.cardColor : kPrimaryGreen,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              icon: Icon(Icons.arrow_back, color: theme.colorScheme.onPrimary),
               onPressed: () {
                 if (canPop) {
                   Navigator.of(context).pop();
@@ -616,36 +633,41 @@ class _SettingScreenState extends State<SettingScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
+                    colors: isDark
+                        ? [theme.cardColor, theme.cardColor.withOpacity(0.8)]
+                        : [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
                   ),
                   borderRadius: const BorderRadius.only(
                     bottomLeft: Radius.circular(32),
                     bottomRight: Radius.circular(32),
                   ),
                 ),
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      SizedBox(height: 40),
+                      const SizedBox(height: 40),
                       Icon(
                         Icons.settings_rounded,
                         size: 80,
-                        color: Colors.white,
+                        color: theme.colorScheme.onPrimary,
                       ),
-                      SizedBox(height: 12),
+                      const SizedBox(height: 12),
                       Text(
                         'Settings',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: theme.colorScheme.onPrimary,
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Text(
                         'Customize your EcoPilot experience',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                        style: TextStyle(
+                          color: theme.colorScheme.onPrimary.withOpacity(0.7),
+                          fontSize: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -691,13 +713,6 @@ class _SettingScreenState extends State<SettingScreen> {
                           );
                         },
                       ),
-                    ],
-                  ),
-
-                  _buildSettingsSection(
-                    title: 'App Preferences',
-                    icon: Icons.tune,
-                    items: [
                       _buildSettingsSwitch(
                         'Dark Mode',
                         Icons.dark_mode_outlined,
@@ -705,13 +720,29 @@ class _SettingScreenState extends State<SettingScreen> {
                         color: Colors.indigo,
                         onChanged: (v) async {
                           setState(() => _darkMode = v);
+
+                          // Update theme provider for instant theme switch
+                          final themeProvider = Provider.of<ThemeProvider>(
+                            context,
+                            listen: false,
+                          );
+                          await themeProvider.setThemeMode(
+                            v ? ThemeMode.dark : ThemeMode.light,
+                          );
+
+                          // Also save to shared preferences for backward compatibility
                           await _setBoolPref('dark_mode', v);
+
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
-                                'Dark mode preference saved. Restart app to apply.',
+                                v
+                                    ? '🌙 Dark mode enabled'
+                                    : '☀️ Light mode enabled',
                               ),
+                              duration: const Duration(seconds: 2),
+                              backgroundColor: kPrimaryGreen,
                             ),
                           );
                         },
@@ -1006,12 +1037,23 @@ class _SettingScreenState extends State<SettingScreen> {
                         'About EcoPilot',
                         subtitle: 'Version 1.0.0',
                         color: Colors.blueGrey,
-                        onTap: () => _openInfo('About EcoPilot', _aboutText),
+                        onTap: () {
+                          showAboutDialog(
+                            context: context,
+                            applicationName: 'EcoPilot',
+                            applicationVersion: '1.0.0',
+                            applicationIcon: const Icon(
+                              Icons.eco,
+                              size: 48,
+                              color: kPrimaryGreen,
+                            ),
+                            applicationLegalese:
+                                '© 2025 EcoPilot. All rights reserved.',
+                          );
+                        },
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 16),
                 ],
               ),
             ),
@@ -1026,6 +1068,9 @@ class _SettingScreenState extends State<SettingScreen> {
     required IconData icon,
     required List<Widget> items,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1037,10 +1082,10 @@ class _SettingScreenState extends State<SettingScreen> {
               const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: theme.textTheme.bodyLarge?.color,
                 ),
               ),
             ],
@@ -1049,11 +1094,13 @@ class _SettingScreenState extends State<SettingScreen> {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.cardColor,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
+                color: isDark
+                    ? Colors.black.withOpacity(0.3)
+                    : Colors.black.withOpacity(0.05),
                 blurRadius: 10,
                 offset: const Offset(0, 2),
               ),
@@ -1075,6 +1122,8 @@ class _SettingScreenState extends State<SettingScreen> {
     VoidCallback? onTap,
     Widget? trailing,
   }) {
+    final theme = Theme.of(context);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1099,19 +1148,19 @@ class _SettingScreenState extends State<SettingScreen> {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: Colors.black87,
+                        color: theme.textTheme.bodyLarge?.color,
                       ),
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: 4),
                       Text(
                         subtitle,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: Colors.black54,
+                          color: theme.textTheme.bodyMedium?.color,
                         ),
                       ),
                     ],
@@ -1119,10 +1168,10 @@ class _SettingScreenState extends State<SettingScreen> {
                 ),
               ),
               trailing ??
-                  const Icon(
+                  Icon(
                     Icons.arrow_forward_ios,
                     size: 16,
-                    color: Colors.black26,
+                    color: theme.textTheme.bodySmall?.color?.withOpacity(0.5),
                   ),
             ],
           ),
@@ -1139,6 +1188,8 @@ class _SettingScreenState extends State<SettingScreen> {
     required Color color,
     required ValueChanged<bool> onChanged,
   }) {
+    final theme = Theme.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -1155,10 +1206,10 @@ class _SettingScreenState extends State<SettingScreen> {
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                color: theme.textTheme.bodyLarge?.color,
               ),
             ),
           ),
@@ -1249,8 +1300,6 @@ class _SettingScreenState extends State<SettingScreen> {
       'This is the privacy policy placeholder. Replace with real content.';
   static const String _termsText =
       'These are the terms of service placeholder. Replace with real content.';
-  static const String _aboutText =
-      'EcoPilot\nVersion 1.0.0\n\nEcoPilot helps you scan and choose greener products.';
 }
 
 class _InfoScreen extends StatelessWidget {
@@ -1261,19 +1310,31 @@ class _InfoScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      appBar: AppBar(title: Text(title), backgroundColor: kPrimaryGreen),
+      appBar: AppBar(
+        title: Text(title),
+        backgroundColor: theme.brightness == Brightness.dark
+            ? theme.cardColor
+            : kPrimaryGreen,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(
-          child: Text(content, style: const TextStyle(fontSize: 16)),
+          child: Text(
+            content,
+            style: TextStyle(
+              fontSize: 16,
+              color: theme.textTheme.bodyLarge?.color,
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-// Data Collection Settings Screen
 class _DataCollectionScreen extends StatefulWidget {
   const _DataCollectionScreen({Key? key}) : super(key: key);
 
@@ -1289,26 +1350,29 @@ class _DataCollectionScreenState extends State<_DataCollectionScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Data Collection'),
-        backgroundColor: kPrimaryGreen,
+        backgroundColor: isDark ? theme.cardColor : kPrimaryGreen,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text(
+          Text(
             'Choose what data you share with us',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: theme.textTheme.bodyLarge?.color,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'We respect your privacy. Control what information you share to help us improve EcoPilot.',
-            style: TextStyle(color: Colors.black54),
+            style: TextStyle(color: theme.textTheme.bodyMedium?.color),
           ),
           const SizedBox(height: 24),
           _buildDataSwitch(

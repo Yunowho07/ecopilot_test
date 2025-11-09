@@ -59,12 +59,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload user rank whenever dependencies change (e.g., when navigating back)
+    _loadUserRank();
+  }
+
   Future<void> _loadUserRank() async {
     try {
       final user = _service.currentUser;
       if (user == null) return;
       final summary = await _service.getUserSummary(user.uid);
-      final points = (summary['ecoScore'] ?? summary['ecoPoints'] ?? 0) as int;
+      final points = (summary['ecoPoints'] ?? 0) as int;
       final rankInfo = rankForPoints(points);
       if (!mounted) return;
       setState(() {
