@@ -1572,7 +1572,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
         },
         backgroundColor: kPrimaryGreen,
-        icon: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+        icon: Image.asset('assets/chatbot.png',width: 40,height: 40,color: Colors.white,),
         label: const Text(
           'Eco Assistant',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),

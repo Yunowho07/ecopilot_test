@@ -192,9 +192,9 @@ class AppDrawer extends StatelessWidget {
                       );
                     },
                   ),
-                  _buildModernDrawerItem(
+                  _buildModernDrawerItemWithImage(
                     context,
-                    icon: Icons.chat_bubble_outline,
+                    imagePath: 'assets/chatbot.png',
                     label: 'Eco Assistant',
                     color: Colors.teal.shade600,
                     onTap: () {
@@ -514,6 +514,62 @@ class AppDrawer extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: color, size: 22),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios,
+                  size: 14,
+                  color: Colors.grey.shade400,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Modern Drawer Item Widget with Image
+  Widget _buildModernDrawerItemWithImage(
+    BuildContext context, {
+    required String imagePath,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200, width: 1),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Image.asset(imagePath, width: 30, height: 30),
                 ),
                 const SizedBox(width: 16),
                 Expanded(

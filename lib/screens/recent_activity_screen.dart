@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '/utils/constants.dart';
 import 'package:intl/intl.dart';
+import 'package:ecopilot_test/models/product_analysis_data.dart';
+import 'package:ecopilot_test/screens/alternative_screen.dart';
 
 class RecentActivityScreen extends StatelessWidget {
   const RecentActivityScreen({Key? key}) : super(key: key);
@@ -21,7 +23,10 @@ class RecentActivityScreen extends StatelessWidget {
   }
 
   // Build the product detail card widget
-  Widget _buildProductDetailCard(Map<String, dynamic> data) {
+  Widget _buildProductDetailCard(
+    Map<String, dynamic> data,
+    BuildContext context,
+  ) {
     final name = (data['product_name'] ?? data['name'] ?? 'Unknown Product')
         .toString();
     final category = (data['category'] ?? 'N/A').toString();
@@ -422,6 +427,61 @@ class RecentActivityScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 _buildWarningCard(label: 'Cruelty-Free', isGood: crueltyFree),
+                const SizedBox(height: 24),
+
+                // Better Alternative Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // Create ProductAnalysisData from the scanned product data
+                      final productAnalysis = ProductAnalysisData(
+                        productName: name,
+                        category: category,
+                        ingredients: ingredients,
+                        ecoScore: score,
+                        packagingType: packaging,
+                        carbonFootprint: co2,
+                        disposalMethod: disposal,
+                        containsMicroplastics: containsMicroplastics,
+                        palmOilDerivative: palmOilDerivative,
+                        crueltyFree: crueltyFree,
+                        imageUrl:
+                            data['image_url'] ??
+                            data['imageUrl'] ??
+                            data['image'],
+                      );
+
+                      // Navigate to Alternative Screen
+                      Navigator.of(context).pop(); // Close the modal first
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AlternativeScreen(
+                            scannedProduct: productAnalysis,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.eco, color: Colors.white, size: 24),
+                    label: const Text(
+                      'View Better Alternatives',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kPrimaryGreen,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 2,
+                      shadowColor: kPrimaryGreen.withOpacity(0.4),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -643,7 +703,54 @@ class RecentActivityScreen extends StatelessWidget {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                    return const Center(child: Text('No scans yet.'));
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(32),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  kPrimaryGreen.withOpacity(0.1),
+                                  kPrimaryGreen.withOpacity(0.05),
+                                ],
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.eco_outlined,
+                              size: 80,
+                              color: kPrimaryGreen,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          const Text(
+                            'No Scans Yet',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 48),
+                            child: Text(
+                              'Start scanning products to see your eco-friendly journey!',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Colors.grey.shade600,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
                   }
 
                   final docs = snapshot.data!.docs;
@@ -755,250 +862,320 @@ class RecentActivityScreen extends StatelessWidget {
                       }
 
                       // Card UI - Redesigned for cleaner, smarter layout
-                      return Card(
-                        elevation: 3,
+                      return Container(
                         margin: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [Colors.white, Colors.grey.shade50],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: kPrimaryGreen.withOpacity(0.1),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: kPrimaryGreen.withOpacity(0.08),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                              spreadRadius: 0,
+                            ),
+                          ],
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          onTap: () {
-                            // Show product details in a modal bottom sheet instead of navigating to ResultScreen
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => DraggableScrollableSheet(
-                                initialChildSize: 0.9,
-                                minChildSize: 0.5,
-                                maxChildSize: 0.95,
-                                builder: (_, controller) => Container(
-                                  decoration: const BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(25),
-                                      topRight: Radius.circular(25),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              // Show product details in a modal bottom sheet instead of navigating to ResultScreen
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (context) => DraggableScrollableSheet(
+                                  initialChildSize: 0.9,
+                                  minChildSize: 0.5,
+                                  maxChildSize: 0.95,
+                                  builder: (_, controller) => Container(
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: Radius.circular(25),
+                                        topRight: Radius.circular(25),
+                                      ),
                                     ),
-                                  ),
-                                  child: ListView(
-                                    controller: controller,
-                                    children: [
-                                      // Drag handle
-                                      Center(
-                                        child: Container(
-                                          margin: const EdgeInsets.symmetric(
-                                            vertical: 12,
-                                          ),
-                                          width: 40,
-                                          height: 4,
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.shade300,
-                                            borderRadius: BorderRadius.circular(
-                                              2,
+                                    child: ListView(
+                                      controller: controller,
+                                      children: [
+                                        // Drag handle
+                                        Center(
+                                          child: Container(
+                                            margin: const EdgeInsets.symmetric(
+                                              vertical: 12,
+                                            ),
+                                            width: 40,
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade300,
+                                              borderRadius:
+                                                  BorderRadius.circular(2),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                      _buildProductDetailCard(data),
-                                    ],
+                                        _buildProductDetailCard(data, context),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            height: 120,
-                            padding: const EdgeInsets.all(12.0),
-                            child: Row(
-                              children: [
-                                // Product Image - Larger and more prominent
-                                Hero(
-                                  tag: 'product_${doc.id}',
-                                  child: Container(
-                                    width: 96,
-                                    height: 96,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.1),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Row(
+                                children: [
+                                  // Product Image - Larger with elegant shadow
+                                  Hero(
+                                    tag: 'product_${doc.id}',
+                                    child: Container(
+                                      width: 100,
+                                      height: 100,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(16),
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            kPrimaryGreen.withOpacity(0.05),
+                                            kPrimaryGreen.withOpacity(0.02),
+                                          ],
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.08,
+                                            ),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: imageUrl.isNotEmpty
+                                            ? Image.network(
+                                                imageUrl,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (c, e, s) =>
+                                                    Container(
+                                                      decoration: BoxDecoration(
+                                                        gradient: LinearGradient(
+                                                          begin:
+                                                              Alignment.topLeft,
+                                                          end: Alignment
+                                                              .bottomRight,
+                                                          colors: [
+                                                            kPrimaryGreen
+                                                                .withOpacity(
+                                                                  0.2,
+                                                                ),
+                                                            kPrimaryGreen
+                                                                .withOpacity(
+                                                                  0.1,
+                                                                ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      child: Icon(
+                                                        Icons.eco_outlined,
+                                                        size: 40,
+                                                        color: kPrimaryGreen
+                                                            .withOpacity(0.6),
+                                                      ),
+                                                    ),
+                                              )
+                                            : Container(
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
+                                                    colors: [
+                                                      kPrimaryGreen.withOpacity(
+                                                        0.2,
+                                                      ),
+                                                      kPrimaryGreen.withOpacity(
+                                                        0.1,
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                child: Icon(
+                                                  Icons.eco_outlined,
+                                                  color: kPrimaryGreen
+                                                      .withOpacity(0.6),
+                                                  size: 40,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  // Content area - Product info and metadata
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        // Product name with better typography
+                                        Text(
+                                          product,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            height: 1.3,
+                                            color: Colors.black87,
+                                            letterSpacing: -0.3,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Category badge with modern design
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: [
+                                                kPrimaryGreen.withOpacity(0.15),
+                                                kPrimaryGreen.withOpacity(0.08),
+                                              ],
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: kPrimaryGreen.withOpacity(
+                                                0.2,
+                                              ),
+                                              width: 1,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.category_outlined,
+                                                size: 12,
+                                                color: kPrimaryGreen,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  category,
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: kPrimaryGreen,
+                                                    letterSpacing: 0.3,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Date/Time with icon
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.schedule_outlined,
+                                              size: 14,
+                                              color: Colors.grey.shade500,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                formattedDate,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade600,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ],
                                     ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: imageUrl.isNotEmpty
-                                          ? Image.network(
-                                              imageUrl,
-                                              fit: BoxFit.cover,
-                                              errorBuilder: (c, e, s) => Container(
-                                                color: Colors.grey.shade100,
-                                                child: Icon(
-                                                  Icons
-                                                      .image_not_supported_outlined,
-                                                  size: 32,
-                                                  color: Colors.grey.shade400,
-                                                ),
-                                              ),
-                                            )
-                                          : Container(
-                                              decoration: BoxDecoration(
-                                                gradient: LinearGradient(
-                                                  begin: Alignment.topLeft,
-                                                  end: Alignment.bottomRight,
-                                                  colors: [
-                                                    kPrimaryGreen.withOpacity(
-                                                      0.1,
-                                                    ),
-                                                    kPrimaryGreen.withOpacity(
-                                                      0.05,
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              child: Icon(
-                                                Icons.eco_outlined,
-                                                color: kPrimaryGreen,
-                                                size: 40,
-                                              ),
-                                            ),
-                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 16),
-                                // Content area - Product info and metadata
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      // Product name
-                                      Text(
-                                        product,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                          height: 1.3,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      // Category badge
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: kPrimaryGreen.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                          border: Border.all(
-                                            color: kPrimaryGreen.withOpacity(
-                                              0.3,
-                                            ),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          category,
-                                          style: TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: kPrimaryGreen.withOpacity(
-                                              0.9,
-                                            ),
-                                            letterSpacing: 0.3,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      // Date/Time
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.access_time,
-                                            size: 13,
-                                            color: Colors.grey.shade500,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              formattedDate,
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: Colors.grey.shade600,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
+                                  const SizedBox(width: 12),
+                                  // Eco Score Badge - Elegant and prominent
+                                  Container(
+                                    width: 64,
+                                    height: 64,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          scoreColor(score),
+                                          scoreColor(score).withOpacity(0.8),
                                         ],
                                       ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                // Eco Score Badge - Prominent on the right
-                                Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: BoxDecoration(
-                                        color: scoreColor(score),
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: scoreColor(
-                                              score,
-                                            ).withOpacity(0.4),
-                                            blurRadius: 8,
-                                            offset: const Offset(0, 3),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Text(
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: scoreColor(
                                             score,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 22,
-                                              height: 1,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            'ECO',
-                                            style: TextStyle(
-                                              color: Colors.white.withOpacity(
-                                                0.9,
-                                              ),
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 9,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                          ).withOpacity(0.4),
+                                          blurRadius: 12,
+                                          offset: const Offset(0, 4),
+                                          spreadRadius: 0,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                              ],
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          score,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 24,
+                                            height: 1,
+                                            letterSpacing: -0.5,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          'ECO',
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(
+                                              0.95,
+                                            ),
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 9,
+                                            letterSpacing: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),

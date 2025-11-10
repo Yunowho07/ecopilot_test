@@ -5,8 +5,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:ecopilot_test/utils/cloudinary_config.dart';
 import 'package:ecopilot_test/services/cloudinary_service.dart';
@@ -171,8 +169,16 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     final geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
 
     if (geminiApiKey.isEmpty) {
-      // No Gemini API, create basic analysis from product data
-      await _saveAndNavigate(productData, null);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Gemini API key not configured. Please check your .env file.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
@@ -182,64 +188,190 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         apiKey: geminiApiKey,
       );
 
+      // Escape special characters in ingredients and packaging
+      final ingredientsText = (productData['ingredients'] ?? '')
+          .toString()
+          .replaceAll('"', '\\"')
+          .replaceAll('\n', ' ');
+      final packagingText = (productData['packaging'] ?? '')
+          .toString()
+          .replaceAll('"', '\\"')
+          .replaceAll('\n', ' ');
+
       final prompt =
           '''
-Analyze this product for eco-friendly disposal guidance:
+You are an expert environmental analyst. Analyze this product and provide COMPLETE eco-friendly disposal guidance.
 
-Product Name: ${productData['name']}
-Brand: ${productData['brand']}
-Category: ${productData['category']}
-Ingredients: ${productData['ingredients']}
-Packaging: ${productData['packaging']}
-Barcode: $barcode
+PRODUCT INFORMATION:
+- Product Name: ${productData['name']}
+- Brand: ${productData['brand']}
+- Category: ${productData['category']}
+- Ingredients: $ingredientsText
+- Packaging: $packagingText
+- Barcode: $barcode
 
-Provide a detailed disposal analysis in JSON format with these fields:
+CRITICAL REQUIREMENTS:
+1. You MUST analyze the actual product information provided above
+2. Evaluate the packaging materials to determine recyclability
+3. Consider the ingredients for environmental impact
+4. Provide specific, actionable disposal steps (minimum 5 steps)
+5. Generate relevant eco-tips based on THIS specific product (minimum 4 tips)
+6. Calculate an accurate eco-score (A=excellent, B=good, C=average, D=poor, E=very poor)
+7. Estimate carbon footprint based on product type and packaging
+
+Return ONLY a valid JSON object (no markdown, no code blocks, no backticks) with this EXACT structure:
 {
-  "product_name": "Full product name",
-  "category": "Category (Food & Beverages, Personal Care, etc.)",
-  "packaging_type": "Detailed packaging materials",
-  "ingredients": "List of ingredients",
-  "eco_score": "A-E rating based on recyclability and environmental impact",
-  "carbon_footprint": "Estimated CO2e",
-  "disposal_steps": ["Step 1", "Step 2", "Step 3"],
-  "nearby_center": "Type of recycling center needed",
-  "tips": ["Eco tip 1", "Eco tip 2"],
-  "contains_microplastics": true/false,
-  "palm_oil_derivative": true/false,
-  "cruelty_free": true/false (if applicable)
+  "product_name": "exact product name from data",
+  "category": "product category",
+  "packaging_type": "detailed description of packaging materials (e.g., 'Plastic wrapper, cardboard box')",
+  "ingredients": "list of key ingredients or 'N/A' if not applicable",
+  "eco_score": "single letter A, B, C, D, or E based on environmental impact",
+  "carbon_footprint": "estimated value with unit (e.g., '0.8 kg CO2e', '120g CO2e')",
+  "disposal_steps": [
+    "Detailed step 1",
+    "Detailed step 2",
+    "Detailed step 3",
+    "Detailed step 4",
+    "Detailed step 5"
+  ],
+  "nearby_center": "type of facility (e.g., 'Local recycling center', 'Specialized e-waste facility')",
+  "tips": [
+    "Specific eco tip 1 for this product",
+    "Specific eco tip 2 for this product",
+    "Specific eco tip 3 for this product",
+    "Specific eco tip 4 for this product"
+  ],
+  "contains_microplastics": true or false,
+  "palm_oil_derivative": true or false,
+  "cruelty_free": true or false
 }
 
-Return ONLY the JSON object, no additional text.
+VALIDATION RULES:
+- eco_score must be exactly ONE letter: A, B, C, D, or E
+- disposal_steps must contain at least 5 clear, actionable steps
+- tips must contain at least 4 practical eco-tips specific to this product
+- carbon_footprint must include a number and unit
+- All boolean fields must be true or false (not strings)
+
+Return ONLY the JSON object. No explanatory text before or after.
 ''';
 
       final content = [Content.text(prompt)];
+
+      // Show analyzing dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: Card(
+              child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Analyzing product with AI...'),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
       final response = await model.generateContent(content);
       final outputText = response.text ?? '';
 
-      // Parse JSON response
+      // Close analyzing dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      debugPrint('Gemini raw response: $outputText');
+
+      // Parse JSON response with multiple strategies
       Map<String, dynamic>? analysisData;
+
+      // Strategy 1: Direct decode
       try {
         final decoded = json.decode(outputText);
         if (decoded is Map<String, dynamic>) {
           analysisData = decoded;
+          debugPrint('Strategy 1 successful: Direct JSON decode');
         }
-      } catch (_) {
-        // Try to extract JSON from text
-        final jsonStart = outputText.indexOf('{');
-        final jsonEnd = outputText.lastIndexOf('}');
-        if (jsonStart >= 0 && jsonEnd > jsonStart) {
-          final jsonStr = outputText.substring(jsonStart, jsonEnd + 1);
-          try {
+      } catch (e) {
+        debugPrint('Strategy 1 failed: $e');
+      }
+
+      // Strategy 2: Remove markdown code blocks
+      if (analysisData == null) {
+        try {
+          String cleanedText = outputText
+              .replaceAll('```json', '')
+              .replaceAll('```', '')
+              .trim();
+          final decoded = json.decode(cleanedText);
+          if (decoded is Map<String, dynamic>) {
+            analysisData = decoded;
+            debugPrint('Strategy 2 successful: Removed markdown');
+          }
+        } catch (e) {
+          debugPrint('Strategy 2 failed: $e');
+        }
+      }
+
+      // Strategy 3: Extract JSON between { and }
+      if (analysisData == null) {
+        try {
+          final jsonStart = outputText.indexOf('{');
+          final jsonEnd = outputText.lastIndexOf('}');
+          if (jsonStart >= 0 && jsonEnd > jsonStart) {
+            final jsonStr = outputText.substring(jsonStart, jsonEnd + 1);
             final decoded = json.decode(jsonStr);
             if (decoded is Map<String, dynamic>) {
               analysisData = decoded;
+              debugPrint('Strategy 3 successful: Extracted JSON');
             }
-          } catch (_) {}
+          }
+        } catch (e) {
+          debugPrint('Strategy 3 failed: $e');
+        }
+      }
+
+      // Validate the analysis data
+      if (analysisData != null) {
+        // Check required fields
+        final hasDisposalSteps =
+            analysisData['disposal_steps'] != null &&
+            analysisData['disposal_steps'] is List &&
+            (analysisData['disposal_steps'] as List).isNotEmpty;
+
+        final hasValidEcoScore =
+            analysisData['eco_score'] != null &&
+            RegExp(r'^[A-E]$').hasMatch(analysisData['eco_score'].toString());
+
+        if (!hasDisposalSteps) {
+          debugPrint('Validation failed: Missing or empty disposal_steps');
+          analysisData = null;
+        } else if (!hasValidEcoScore) {
+          debugPrint('Validation failed: Invalid eco_score (must be A-E)');
+          // Fix the eco_score if possible
+          if (analysisData['eco_score'] != null) {
+            final scoreStr = analysisData['eco_score'].toString().toUpperCase();
+            if (scoreStr.isNotEmpty && 'ABCDE'.contains(scoreStr[0])) {
+              analysisData['eco_score'] = scoreStr[0];
+            } else {
+              analysisData['eco_score'] = 'C'; // Default to average
+            }
+          }
         }
       }
 
       if (analysisData != null) {
-        // Merge product data with Gemini analysis
+        debugPrint('✅ Gemini analysis successful with complete data');
+        // Merge product data with Gemini analysis (Gemini data takes priority)
         final mergedData = {
           ...productData,
           ...analysisData,
@@ -247,13 +379,33 @@ Return ONLY the JSON object, no additional text.
         };
         await _saveAndNavigate(mergedData, outputText);
       } else {
-        // Fallback: use product data without AI analysis
-        await _saveAndNavigate(productData, outputText);
+        debugPrint('❌ Failed to get valid analysis from Gemini');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'AI analysis failed. Please try again or scan a different product.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 4),
+            ),
+          );
+          Navigator.of(context).pop(); // Return to previous screen
+        }
       }
     } catch (e) {
       debugPrint('Gemini analysis error: $e');
-      // Fallback to basic product data
-      await _saveAndNavigate(productData, null);
+      if (mounted) {
+        Navigator.of(context).pop(); // Close analyzing dialog if open
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error analyzing product: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        Navigator.of(context).pop(); // Return to previous screen
+      }
     }
   }
 

@@ -87,206 +87,279 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => DisposalGuidanceScreen(productId: product['id']),
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Colors.white, Colors.grey.shade50],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: kPrimaryGreen.withOpacity(0.15),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: kPrimaryGreen.withOpacity(0.1),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+              spreadRadius: 0,
             ),
-          );
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          height: 120,
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // Product Image with Hero animation
-              Hero(
-                tag: 'disposal_${product['id']}',
-                child: Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      DisposalGuidanceScreen(productId: product['id']),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  // Product Image with Hero animation
+                  Hero(
+                    tag: 'disposal_${product['id']}',
+                    child: Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            kPrimaryGreen.withOpacity(0.05),
+                            kPrimaryGreen.withOpacity(0.02),
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: imageUrl.isNotEmpty
-                        ? Image.network(
-                            imageUrl,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        kPrimaryGreen.withOpacity(0.3),
-                                        kPrimaryGreen.withOpacity(0.1),
-                                      ],
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: imageUrl.isNotEmpty
+                            ? Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                          colors: [
+                                            kPrimaryGreen.withOpacity(0.2),
+                                            kPrimaryGreen.withOpacity(0.1),
+                                          ],
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        Icons.delete_sweep_outlined,
+                                        color: kPrimaryGreen.withOpacity(0.6),
+                                        size: 40,
+                                      ),
                                     ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.delete_sweep,
-                                    color: kPrimaryGreen,
-                                    size: 40,
+                              )
+                            : Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      kPrimaryGreen.withOpacity(0.2),
+                                      kPrimaryGreen.withOpacity(0.1),
+                                    ],
                                   ),
                                 ),
-                          )
-                        : Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  kPrimaryGreen.withOpacity(0.3),
-                                  kPrimaryGreen.withOpacity(0.1),
-                                ],
+                                child: Icon(
+                                  Icons.delete_sweep_outlined,
+                                  color: kPrimaryGreen.withOpacity(0.6),
+                                  size: 40,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  // Product Details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Product Name with better typography
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                            letterSpacing: -0.3,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        // Category Badge with modern design
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                kPrimaryGreen.withOpacity(0.15),
+                                kPrimaryGreen.withOpacity(0.08),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: kPrimaryGreen.withOpacity(0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.category_outlined,
+                                size: 12,
+                                color: kPrimaryGreen,
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  category,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: kPrimaryGreen,
+                                    letterSpacing: 0.3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Material Info
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.inventory_2_outlined,
+                              size: 14,
+                              color: Colors.grey.shade500,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                material,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            child: const Icon(
-                              Icons.delete_sweep,
-                              color: kPrimaryGreen,
-                              size: 40,
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Date/Time with icon
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.schedule_outlined,
+                              size: 14,
+                              color: Colors.grey.shade500,
                             ),
-                          ),
+                            const SizedBox(width: 4),
+                            Text(
+                              formattedDateTime,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Product Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Product Name
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
+                  const SizedBox(width: 12),
+                  // Eco Score Badge - Elegant design
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          getEcoScoreColor(ecoScoreGrade),
+                          getEcoScoreColor(ecoScoreGrade).withOpacity(0.8),
+                        ],
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    // Category Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: kPrimaryGreen.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: kPrimaryGreen.withOpacity(0.3),
-                          width: 1,
-                        ),
-                      ),
-                      child: Text(
-                        category,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1B5E20),
-                        ),
-                      ),
-                    ),
-                    // Material Info
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.category_outlined,
-                          size: 14,
-                          color: Colors.grey.shade600,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            material,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: getEcoScoreColor(
+                            ecoScoreGrade,
+                          ).withOpacity(0.4),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                          spreadRadius: 0,
                         ),
                       ],
                     ),
-                    // Date/Time
-                    Row(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.access_time,
-                          size: 14,
-                          color: Colors.grey.shade500,
-                        ),
-                        const SizedBox(width: 4),
                         Text(
-                          formattedDateTime,
+                          ecoScoreGrade,
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'ECO',
                           style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade500,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white.withOpacity(0.95),
+                            letterSpacing: 1,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              // Eco Score Badge
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: getEcoScoreColor(ecoScoreGrade),
-                  boxShadow: [
-                    BoxShadow(
-                      color: getEcoScoreColor(ecoScoreGrade).withOpacity(0.4),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      ecoScoreGrade,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const Text(
-                      'ECO',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -336,10 +409,52 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
             }
 
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-              return const Center(
-                child: Text(
-                  'No recent scans yet. Go scan a product!',
-                  style: TextStyle(color: Colors.black54),
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            kPrimaryGreen.withOpacity(0.1),
+                            kPrimaryGreen.withOpacity(0.05),
+                          ],
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.delete_sweep_outlined,
+                        size: 80,
+                        color: kPrimaryGreen,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      'No Disposal History',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 48),
+                      child: Text(
+                        'Start scanning products to get disposal guidance and track your eco-friendly actions!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey.shade600,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               );
             }

@@ -13,6 +13,7 @@ import 'package:ecopilot_test/widgets/bottom_navigation.dart';
 import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:ecopilot_test/screens/alternative_screen.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart';
+import 'package:ecopilot_test/screens/eco_assistant_screen.dart';
 
 /// Clean Disposal Guidance screen (hub + details).
 class DisposalGuidanceScreen extends StatefulWidget {
@@ -1210,6 +1211,26 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           : showDetail
           ? _buildGuidanceDetail(context)
           : _buildDisposalHub(),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
+        },
+        backgroundColor: kPrimaryGreen,
+        icon: Image.asset(
+          'assets/chatbot.png',
+          width: 40,
+          height: 40,
+          color: Colors.white,
+        ),
+        label: const Text(
+          'Eco Assistant',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 6,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNavBar(),
     );
   }

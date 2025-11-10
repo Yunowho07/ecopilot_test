@@ -79,7 +79,10 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
   int _userEcoPoints = 0;
   String _userRank = 'Green Beginner';
   Color _rankColor = kRankGreenBeginner;
-  final String today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+  bool _isLoading = true;
+
+  // Dynamic date - recalculated each time to ensure it's always current
+  String get today => DateFormat('yyyy-MM-dd').format(DateTime.now());
 
   @override
   void initState() {
@@ -109,51 +112,153 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
 
   // Rank logic moved to lib/utils/rank_utils.dart
 
-  void _loadChallengeData() {
-    // ⚠️ CONCEPTUAL: Replace this with Firestore streams/futures
-    // Simulate fetching daily challenge structure
-    _challenges = [
-      Challenge('c1', 'Recycle all plastic waste generated today', 15),
-      Challenge('c2', 'Use public transport or cycle for one trip', 10),
-    ];
+  void _loadChallengeData() async {
+    setState(() {
+      _isLoading = true;
+    });
 
-    // Simulate fetching user progress
-    _progress = UserChallengeProgress(
-      completed: [false, false],
-      pointsEarned: 0,
-      streakCount: 3, // Simulate a streak
-      totalChallengePoints: 25,
-    );
+    try {
+      // Fetch from Firestore first
+      final challenges = await _fetchChallengesFromFirestore();
+      final progress = await _fetchUserProgress(challenges.length);
 
-    // In a real app, you'd merge the two Firestore documents here:
+      final totalPoints = challenges.fold<int>(
+        0,
+        (int sum, Challenge c) => sum + c.points,
+      );
 
-    _fetchChallengesFromFirestore().then((challenges) {
-      _fetchUserProgress().then((progress) {
-        final totalPoints = challenges.fold<int>(
-          0,
-          (int sum, Challenge c) => sum + c.points,
-        );
+      if (mounted) {
         setState(() {
           _challenges = challenges;
           _progress = progress.copyWith(totalChallengePoints: totalPoints);
+          _isLoading = false;
         });
-      });
-    });
+      }
+    } catch (e) {
+      debugPrint('Error loading challenge data: $e');
+      // Use date-based fallback challenges
+      final fallbackChallenges = _generateDateBasedChallenges();
+      if (mounted) {
+        setState(() {
+          _challenges = fallbackChallenges;
+          _progress = UserChallengeProgress(
+            completed: List<bool>.filled(fallbackChallenges.length, false),
+            pointsEarned: 0,
+            streakCount: 0,
+            totalChallengePoints: fallbackChallenges.fold<int>(
+              0,
+              (sum, c) => sum + c.points,
+            ),
+          );
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Generate different challenges based on current date (fallback when Firestore fails)
+  List<Challenge> _generateDateBasedChallenges() {
+    final now = DateTime.now();
+    final seed = now.year * 10000 + (now.month) * 100 + now.day;
+
+    // Challenge pool organized by category
+    final allChallenges = [
+      // Recycling
+      Challenge('recycling_0', 'Recycle all plastic waste generated today', 5),
+      Challenge('recycling_1', 'Separate and recycle paper, plastic, and glass', 5),
+      Challenge('recycling_2', 'Clean and recycle 5 items before disposal', 5),
+      Challenge('recycling_3', 'Find a recycling center for electronic waste',5),
+      Challenge('recycling_4', 'Compost your organic kitchen waste', 5),
+
+      // Transportation
+      Challenge('transport_0', 'Use public transport or cycle for one trip',5,),
+      Challenge('transport_1', 'Walk or bike to your destination today', 5),
+      Challenge('transport_2', 'Carpool with friends or colleagues', 5),
+      Challenge('transport_3', 'Avoid using a car for the entire day', 5),
+      Challenge('transport_4', 'Take stairs instead of elevator 3 times', 5),
+
+      // Consumption
+      Challenge('consumption_0', 'Use a reusable water bottle instead of plastic', 5),
+      Challenge('consumption_1', 'Bring your own shopping bag', 5),
+      Challenge('consumption_2', 'Choose products with minimal packaging', 5),
+      Challenge('consumption_3', 'Buy local or organic produce', 5),
+      Challenge('consumption_4', 'Avoid single-use plastics for the day', 5),
+      Challenge('consumption_5', 'Use a reusable coffee cup or mug', 5),
+
+      // Energy
+      Challenge('energy_0', 'Turn off lights in unused rooms', 5),
+      Challenge('energy_1', 'Unplug devices when not in use', 5),
+      Challenge('energy_2', 'Take a 5-minute shower to save water', 5),
+      Challenge('energy_3', 'Air-dry clothes instead of using dryer', 5),
+      Challenge('energy_4', 'Use natural light instead of artificial lighting', 5),
+
+      // Food
+      Challenge('food_0', 'Have one plant-based meal today', 5),
+      Challenge('food_1', 'Avoid food waste - finish all meals', 5),
+      Challenge('food_2', 'Cook at home instead of ordering takeout', 5),
+      Challenge('food_3', 'Buy imperfect produce to reduce waste', 5),
+      Challenge('food_4', 'Meal prep to reduce packaging waste', 5),
+
+      // Awareness
+      Challenge('awareness_0', 'Learn about one endangered species', 5),
+      Challenge('awareness_1', 'Share an eco-tip with 3 friends', 5),
+      Challenge('awareness_2', 'Watch a documentary about sustainability', 5),
+      Challenge('awareness_3', 'Research eco-friendly alternatives for daily products', 5),
+      Challenge('awareness_4', 'Join an online environmental community', 5),
+    ];
+
+    // Seeded shuffle based on date
+    final random = (seed) {
+      final x = (seed * 9301 + 49297) % 233280;
+      return x / 233280;
+    };
+
+    final shuffled = List<Challenge>.from(allChallenges);
+    for (var i = shuffled.length - 1; i > 0; i--) {
+      final j = (random(seed + i) * (i + 1)).floor();
+      final temp = shuffled[i];
+      shuffled[i] = shuffled[j];
+      shuffled[j] = temp;
+    }
+
+    // Return 2 challenges for the day
+    return shuffled.take(2).toList();
   }
 
   /// Fetch challenge definitions for today from Firestore.
-  /// Falls back to the in-memory `_challenges` if nothing found.
+  /// Falls back to date-based generated challenges if nothing found.
   Future<List<Challenge>> _fetchChallengesFromFirestore() async {
     try {
+      debugPrint('📅 Fetching challenges for date: $today');
       final doc = await FirebaseFirestore.instance
           .collection('challenges')
           .doc(today)
           .get();
-      if (!doc.exists) return _challenges;
+
+      if (!doc.exists) {
+        debugPrint(
+          '⚠️ No challenges document found for $today, using date-based fallback',
+        );
+        return _generateDateBasedChallenges();
+      }
+
       final data = doc.data();
-      if (data == null) return _challenges;
+      if (data == null) {
+        debugPrint(
+          '⚠️ Empty challenges data for $today, using date-based fallback',
+        );
+        return _generateDateBasedChallenges();
+      }
+
       final list = List.from(data['challenges'] ?? []);
-      return list
+      if (list.isEmpty) {
+        debugPrint(
+          '⚠️ No challenges in document for $today, using date-based fallback',
+        );
+        return _generateDateBasedChallenges();
+      }
+
+      final challenges = list
           .map(
             (e) => Challenge(
               e['id'] ?? e['title'],
@@ -162,40 +267,82 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
             ),
           )
           .toList();
+
+      debugPrint(
+        '✅ Loaded ${challenges.length} challenges from Firestore for $today',
+      );
+      return challenges;
     } catch (e) {
-      // On error, return the simulated list
-      return _challenges;
+      debugPrint('❌ Error fetching challenges: $e, using date-based fallback');
+      return _generateDateBasedChallenges();
     }
   }
 
   /// Fetch the user's progress for today's challenges from Firestore.
   /// If no progress document exists, return a default [UserChallengeProgress].
-  Future<UserChallengeProgress> _fetchUserProgress() async {
+  Future<UserChallengeProgress> _fetchUserProgress(int challengeCount) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid == null) return _progress;
+      if (uid == null) {
+        return UserChallengeProgress(
+          completed: List<bool>.filled(challengeCount, false),
+          pointsEarned: 0,
+          streakCount: 0,
+          totalChallengePoints: 0,
+        );
+      }
+
       final doc = await FirebaseFirestore.instance
           .collection('user_challenges')
           .doc('$uid-$today')
           .get();
-      if (!doc.exists) return _progress;
+
+      if (!doc.exists) {
+        debugPrint(
+          '📝 No progress found for user $uid on $today, creating new progress',
+        );
+        return UserChallengeProgress(
+          completed: List<bool>.filled(challengeCount, false),
+          pointsEarned: 0,
+          streakCount: 0,
+          totalChallengePoints: 0,
+        );
+      }
+
       final data = doc.data() ?? {};
       final completed =
           (data['completed'] as List<dynamic>?)
               ?.map((e) => e == true)
               .toList() ??
-          List<bool>.filled(_challenges.length, false);
+          List<bool>.filled(challengeCount, false);
+
+      // Ensure completed list matches challenge count
+      final adjustedCompleted = List<bool>.filled(challengeCount, false);
+      for (var i = 0; i < challengeCount && i < completed.length; i++) {
+        adjustedCompleted[i] = completed[i];
+      }
+
       final pointsEarned = data['pointsEarned'] ?? 0;
-      final streak = data['streak'] ?? _progress.streakCount;
-      final total = _challenges.fold<int>(0, (sum, c) => sum + c.points);
+      final streak = data['streak'] ?? 0;
+
+      debugPrint(
+        '✅ Loaded progress for $uid on $today: ${adjustedCompleted.where((c) => c).length}/${challengeCount} completed',
+      );
+
       return UserChallengeProgress(
-        completed: completed.cast<bool>(),
+        completed: adjustedCompleted,
         pointsEarned: pointsEarned,
         streakCount: streak,
-        totalChallengePoints: total,
+        totalChallengePoints: 0, // Will be set by caller
       );
     } catch (e) {
-      return _progress;
+      debugPrint('❌ Error fetching user progress: $e');
+      return UserChallengeProgress(
+        completed: List<bool>.filled(challengeCount, false),
+        pointsEarned: 0,
+        streakCount: 0,
+        totalChallengePoints: 0,
+      );
     }
   }
 
@@ -321,6 +468,27 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: Colors.grey.shade50,
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(kPrimaryGreen),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading today\'s challenges...',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     final streak = _progress.streakCount;
     final progressPercent = (_progress.progressPercentage * 100).toInt();
 
@@ -335,6 +503,17 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
             pinned: true,
             backgroundColor: kPrimaryGreen,
             iconTheme: const IconThemeData(color: Colors.white),
+            actions: [
+              // Refresh button
+              IconButton(
+                icon: const Icon(Icons.refresh, color: Colors.white),
+                onPressed: () {
+                  _loadChallengeData();
+                  _loadUserRank();
+                },
+                tooltip: 'Refresh challenges',
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(

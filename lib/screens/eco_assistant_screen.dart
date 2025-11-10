@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../utils/constants.dart';
 
@@ -19,14 +17,33 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
   late final GenerativeModel _model;
+  DateTime? _lastRequestTime;
+  static const Duration _minRequestInterval = Duration(seconds: 2);
 
   @override
   void initState() {
     super.initState();
     final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+
+    if (apiKey.isEmpty) {
+      debugPrint('⚠️ WARNING: GEMINI_API_KEY is not set in .env file');
+    }
+
     _model = GenerativeModel(
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-2.0-flash-lite', // More stable than experimental version
       apiKey: apiKey,
+      generationConfig: GenerationConfig(
+        temperature: 0.7,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 512, // Reduced to save quota
+      ),
+      safetySettings: [
+        SafetySetting(HarmCategory.harassment, HarmBlockThreshold.medium),
+        SafetySetting(HarmCategory.hateSpeech, HarmBlockThreshold.medium),
+        SafetySetting(HarmCategory.sexuallyExplicit, HarmBlockThreshold.medium),
+        SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.medium),
+      ],
       systemInstruction: Content.text(
         '''You are EcoBot, a friendly and knowledgeable eco-assistant for the EcoPilot app. 
         Your role is to help users:
@@ -51,7 +68,6 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
         Always promote sustainable practices and celebrate users' eco-efforts.''',
       ),
     );
-    _loadChatHistory();
     _sendWelcomeMessage();
   }
 
@@ -60,63 +76,6 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
-  }
-
-  // Load chat history from Firestore
-  Future<void> _loadChatHistory() async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('chat_history')
-          .orderBy('timestamp', descending: false)
-          .limit(50)
-          .get();
-
-      if (snapshot.docs.isNotEmpty) {
-        setState(() {
-          _messages.clear();
-          for (var doc in snapshot.docs) {
-            final data = doc.data();
-            _messages.add(
-              ChatMessage(
-                text: data['text'] ?? '',
-                isUser: data['isUser'] ?? false,
-                timestamp:
-                    (data['timestamp'] as Timestamp?)?.toDate() ??
-                    DateTime.now(),
-              ),
-            );
-          }
-        });
-        _scrollToBottom();
-      }
-    } catch (e) {
-      debugPrint('Error loading chat history: $e');
-    }
-  }
-
-  // Save message to Firestore
-  Future<void> _saveMessage(ChatMessage message) async {
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('chat_history')
-          .add({
-            'text': message.text,
-            'isUser': message.isUser,
-            'timestamp': Timestamp.fromDate(message.timestamp),
-          });
-    } catch (e) {
-      debugPrint('Error saving message: $e');
-    }
   }
 
   void _sendWelcomeMessage() {
@@ -130,12 +89,30 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
       setState(() {
         _messages.add(welcomeMessage);
       });
-      _saveMessage(welcomeMessage);
     }
   }
 
   Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
+
+    // Rate limiting check
+    if (_lastRequestTime != null) {
+      final timeSinceLastRequest = DateTime.now().difference(_lastRequestTime!);
+      if (timeSinceLastRequest < _minRequestInterval) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Please wait ${(_minRequestInterval.inSeconds - timeSinceLastRequest.inSeconds)} seconds before sending another message.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+    }
 
     final userMessage = ChatMessage(
       text: text,
@@ -150,26 +127,36 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
     });
 
     _scrollToBottom();
-    _saveMessage(userMessage);
+
+    // Update last request time
+    _lastRequestTime = DateTime.now();
 
     try {
-      // Build conversation history for context
-      final conversationHistory = _messages
-          .where((m) => m.isUser)
-          .take(_messages.length > 10 ? 5 : _messages.length)
-          .map((m) => m.text)
-          .join('\n');
+      // Create a simpler, more direct prompt
+      final response = await _model.generateContent([Content.text(text)]);
 
-      final prompt =
-          '''User question: $text
+      // Check if response has text
+      String botResponse;
+      if (response.text != null && response.text!.isNotEmpty) {
+        botResponse = response.text!;
+      } else {
+        // Check candidates
+        if (response.candidates.isNotEmpty) {
+          final candidate = response.candidates.first;
+          botResponse = candidate.content.parts
+              .whereType<TextPart>()
+              .map((part) => part.text)
+              .join('\n');
 
-Previous context: $conversationHistory
-
-Provide a helpful, concise response focusing on sustainability and eco-friendliness.''';
-
-      final response = await _model.generateContent([Content.text(prompt)]);
-      final botResponse =
-          response.text ?? "I'm not sure how to help with that.";
+          if (botResponse.isEmpty) {
+            botResponse =
+                "I'm here to help! Could you rephrase your question? 🌱";
+          }
+        } else {
+          botResponse =
+              "I'm here to help! Could you rephrase your question? 🌱";
+        }
+      }
 
       final botMessage = ChatMessage(
         text: botResponse,
@@ -177,25 +164,50 @@ Provide a helpful, concise response focusing on sustainability and eco-friendlin
         timestamp: DateTime.now(),
       );
 
-      setState(() {
-        _messages.add(botMessage);
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _messages.add(botMessage);
+          _isLoading = false;
+        });
 
-      _scrollToBottom();
-      _saveMessage(botMessage);
+        _scrollToBottom();
+      }
     } catch (e) {
       debugPrint('Error getting AI response: $e');
+      debugPrint('Error details: ${e.toString()}');
+
+      String errorText = "Sorry, I encountered an error. Please try again! 😅";
+
+      // Provide more specific error messages
+      if (e.toString().contains('API key') ||
+          e.toString().contains('INVALID_ARGUMENT')) {
+        errorText =
+            "⚠️ API key issue detected. Please check your Gemini API configuration in the .env file.";
+      } else if (e.toString().contains('quota') ||
+          e.toString().contains('RESOURCE_EXHAUSTED')) {
+        errorText =
+            "⏰ API usage limit reached. The free tier allows 15 requests per minute. Please wait a moment and try again.\n\nTip: You can get a new API key or upgrade at aistudio.google.com";
+      } else if (e.toString().contains('network') ||
+          e.toString().contains('Failed host lookup')) {
+        errorText =
+            "📡 Network error. Please check your internet connection and try again.";
+      } else if (e.toString().contains('429')) {
+        errorText =
+            "⏰ Too many requests. Please wait 30-60 seconds before trying again.";
+      }
+
       final errorMessage = ChatMessage(
-        text: "Sorry, I encountered an error. Please try again! 😅",
+        text: errorText,
         isUser: false,
         timestamp: DateTime.now(),
       );
 
-      setState(() {
-        _messages.add(errorMessage);
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _messages.add(errorMessage);
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -229,14 +241,15 @@ Provide a helpful, concise response focusing on sustainability and eco-friendlin
           children: [
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/chatbot.png',
+                width: 40,
+                height: 40,
+                color: Colors.white,
               ),
-              child: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 24),
             ),
             const SizedBox(width: 12),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
@@ -280,21 +293,6 @@ Provide a helpful, concise response focusing on sustainability and eco-friendlin
               );
 
               if (confirm == true) {
-                final user = FirebaseAuth.instance.currentUser;
-                if (user != null) {
-                  final batch = FirebaseFirestore.instance.batch();
-                  final snapshot = await FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(user.uid)
-                      .collection('chat_history')
-                      .get();
-
-                  for (var doc in snapshot.docs) {
-                    batch.delete(doc.reference);
-                  }
-                  await batch.commit();
-                }
-
                 setState(() {
                   _messages.clear();
                 });

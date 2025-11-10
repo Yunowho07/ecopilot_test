@@ -16,6 +16,7 @@ import 'home_screen.dart';
 import 'scan_screen.dart';
 import 'disposal_guidance_screen.dart';
 import 'leaderboard_screen.dart';
+import 'eco_assistant_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -902,6 +903,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
+        },
+        backgroundColor: constants.kPrimaryGreen,
+        icon: Image.asset(
+          'assets/chatbot.png',
+          width: 40,
+          height: 40,
+          color: Colors.white,
+        ),
+        label: const Text(
+          'Eco Assistant',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        elevation: 6,
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNavBar(),
     );
   }

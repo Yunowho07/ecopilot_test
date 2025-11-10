@@ -502,6 +502,8 @@ class FirebaseService {
         'ecoPoints': 0, // Changed from ecoScore to ecoPoints
         'title': 'Green Beginner',
         'streakDays': 0,
+        'streak': 0,
+        'lastChallengeDate': null, // Track last challenge completion
         'createdAt': Timestamp.now(),
       });
     }
@@ -537,11 +539,47 @@ class FirebaseService {
 
   /// Return a small summary for the user used by UI (streak, ecoPoints, etc.).
   /// If the document doesn't exist, returns defaults.
+  /// Also validates and resets streak if user missed days.
   Future<Map<String, dynamic>> getUserSummary(String uid) async {
     try {
       final doc = await _firestore.collection('users').doc(uid).get();
       final data = doc.data() ?? {};
-      final streak = data['streak'] ?? data['streakDays'] ?? 0;
+
+      // Validate streak based on last challenge completion date
+      int streak = data['streak'] ?? data['streakDays'] ?? 0;
+      final lastChallengeDate = data['lastChallengeDate'] as String?;
+
+      // MIGRATION: If streak exists but no lastChallengeDate, reset to 0
+      if (streak > 0 && lastChallengeDate == null) {
+        debugPrint(
+          '⚠️ Streak exists ($streak) but no lastChallengeDate found. Resetting to 0 for migration.',
+        );
+        streak = 0;
+        await _firestore.collection('users').doc(uid).set({
+          'streak': 0,
+          'lastChallengeDate': null,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } else if (streak > 0 && lastChallengeDate != null) {
+        final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final yesterday = DateFormat(
+          'yyyy-MM-dd',
+        ).format(DateTime.now().subtract(const Duration(days: 1)));
+
+        // Reset streak if user missed a day
+        if (lastChallengeDate != today && lastChallengeDate != yesterday) {
+          streak = 0;
+          // Update Firestore to reflect the reset
+          await _firestore.collection('users').doc(uid).set({
+            'streak': 0,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+          debugPrint(
+            'Streak reset to 0: Last completion was $lastChallengeDate, today is $today',
+          );
+        }
+      }
+
       final ecoPoints = data['ecoPoints'] ?? 0;
       final totalPoints =
           data['totalPoints'] ?? ecoPoints; // For backward compatibility
@@ -970,14 +1008,10 @@ class FirebaseService {
       // Check if all challenges are now completed
       final allCompleted = completed.every((c) => c);
 
-      // Award bonus points if all challenges completed (10 point bonus for both)
+      // NO BONUS POINTS - Award only the challenge points
       int bonusPoints = 0;
-      if (allCompleted && totalChallenges == 2) {
-        bonusPoints = 10; // Bonus for completing both daily challenges
-        debugPrint(
-          'All daily challenges completed! Awarding $bonusPoints bonus points',
-        );
-      }
+      // Removed: Bonus points for completing all challenges
+      // Users expect: 2 challenges × 5 points = 10 total (no bonus)
 
       // 2. Update user challenge progress
       await _firestore.collection('user_challenges').doc('$uid-$today').set({
@@ -993,11 +1027,31 @@ class FirebaseService {
       final userData = userDoc.data() ?? {};
       final currentEcoPoints = userData['ecoPoints'] ?? 0;
       final currentStreak = userData['streak'] ?? 0;
+      final lastCompletedDate = userData['lastChallengeDate'] as String?;
       int updatedStreak = currentStreak;
 
-      // Increment streak only if all challenges are completed
+      // Calculate streak based on consecutive days
       if (allCompleted) {
-        updatedStreak = currentStreak + 1;
+        final yesterday = DateFormat(
+          'yyyy-MM-dd',
+        ).format(DateTime.now().subtract(const Duration(days: 1)));
+
+        if (lastCompletedDate == null) {
+          // First time completing challenges
+          updatedStreak = 1;
+        } else if (lastCompletedDate == yesterday) {
+          // Consecutive day - increment streak
+          updatedStreak = currentStreak + 1;
+        } else if (lastCompletedDate == today) {
+          // Already completed today - keep current streak
+          updatedStreak = currentStreak;
+        } else {
+          // Missed a day - reset streak to 1
+          updatedStreak = 1;
+          debugPrint(
+            'Streak reset: Last completion was on $lastCompletedDate, today is $today',
+          );
+        }
 
         // Award streak milestone bonuses
         if (updatedStreak == 10 ||
@@ -1009,11 +1063,21 @@ class FirebaseService {
       }
 
       // 4. Update user's eco points and streak
-      await _firestore.collection('users').doc(uid).set({
+      final updateData = <String, dynamic>{
         'ecoPoints': currentEcoPoints + points + bonusPoints,
         'streak': updatedStreak,
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      };
+
+      // Only update lastChallengeDate if all challenges completed
+      if (allCompleted) {
+        updateData['lastChallengeDate'] = today;
+      }
+
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .set(updateData, SetOptions(merge: true));
 
       // 5. Update monthly points
       final monthlyDoc = await _firestore
