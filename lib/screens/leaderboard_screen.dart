@@ -32,16 +32,23 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   void _loadLeaderboard() {
-    _future = _service.getLeaderboard(limit: 100);
+    setState(() {
+      _future = _service.getLeaderboard(limit: 100);
+    });
+
     _future
         .then((list) {
-          debugPrint('Leaderboard loaded: ${list.length} users');
-          if (list.isEmpty) {
-            debugPrint('Leaderboard is empty - no users found in database');
+          debugPrint('✅ Leaderboard loaded: ${list.length} users');
+          if (list.isNotEmpty) {
+            debugPrint(
+              '📊 Top users: ${list.take(3).map((u) => '${u['name']}:${u['ecoScore']}pts').join(', ')}',
+            );
+          } else {
+            debugPrint('⚠️ Leaderboard is empty - no users found in database');
           }
         })
         .catchError((error) {
-          debugPrint('Error loading leaderboard: $error');
+          debugPrint('❌ Error loading leaderboard: $error');
         });
     _loadCurrentUserStats();
   }
@@ -69,229 +76,236 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          // Stunning Animated Hero Header
-          SliverAppBar(
-            expandedHeight: 240,
-            floating: false,
-            pinned: true,
-            backgroundColor: kPrimaryGreen,
-            iconTheme: const IconThemeData(color: Colors.white),
-            flexibleSpace: FlexibleSpaceBar(
-              title: const Text(
-                'Leaderboard',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
+      body: RefreshIndicator(
+        onRefresh: () async {
+          _loadLeaderboard();
+          await _future;
+        },
+        color: kPrimaryGreen,
+        child: CustomScrollView(
+          slivers: [
+            // Stunning Animated Hero Header
+            SliverAppBar(
+              expandedHeight: 240,
+              floating: false,
+              pinned: true,
+              backgroundColor: kPrimaryGreen,
+              iconTheme: const IconThemeData(color: Colors.white),
+              flexibleSpace: FlexibleSpaceBar(
+                title: const Text(
+                  'Leaderboard',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
                 ),
-              ),
-              background: Stack(
-                children: [
-                  // Animated Gradient Background
-                  Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          const Color(0xFF1DB954),
-                          kPrimaryGreen,
-                          kPrimaryGreen.withOpacity(0.85),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Decorative circles
-                  Positioned(
-                    top: -50,
-                    right: -50,
-                    child: Container(
-                      width: 200,
-                      height: 200,
+                background: Stack(
+                  children: [
+                    // Animated Gradient Background
+                    Container(
                       decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.1),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            const Color(0xFF1DB954),
+                            kPrimaryGreen,
+                            kPrimaryGreen.withOpacity(0.85),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    bottom: -30,
-                    left: -30,
-                    child: Container(
-                      width: 150,
-                      height: 150,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.white.withOpacity(0.05),
+                    // Decorative circles
+                    Positioned(
+                      top: -50,
+                      right: -50,
+                      child: Container(
+                        width: 200,
+                        height: 200,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.1),
+                        ),
                       ),
                     ),
-                  ),
-                  // Trophy Icon with glow effect
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 60, 20, 50),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Glow effect
-                              Container(
-                                width: 80,
-                                height: 80,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.amber.withOpacity(0.5),
-                                      blurRadius: 30,
-                                      spreadRadius: 10,
+                    Positioned(
+                      bottom: -30,
+                      left: -30,
+                      child: Container(
+                        width: 150,
+                        height: 150,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.white.withOpacity(0.05),
+                        ),
+                      ),
+                    ),
+                    // Trophy Icon with glow effect
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 60, 20, 50),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                // Glow effect
+                                Container(
+                                  width: 80,
+                                  height: 80,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.amber.withOpacity(0.5),
+                                        blurRadius: 30,
+                                        spreadRadius: 10,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.emoji_events,
+                                  color: Colors.amber.shade300,
+                                  size: 56,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 20),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Your Points',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.9),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Text(
+                                      '$_currentUserPoints',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Icons.stars,
+                                      color: Colors.amber.shade300,
+                                      size: 24,
                                     ),
                                   ],
                                 ),
-                              ),
-                              Icon(
-                                Icons.emoji_events,
-                                color: Colors.amber.shade300,
-                                size: 56,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 20),
-                          Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Your Points',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.9),
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text(
-                                    '$_currentUserPoints',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 36,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1,
+                                if (_currentUserRank > 0)
+                                  Container(
+                                    margin: const EdgeInsets.only(top: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      'Rank #$_currentUserRank',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    Icons.stars,
-                                    color: Colors.amber.shade300,
-                                    size: 24,
-                                  ),
-                                ],
-                              ),
-                              if (_currentUserRank > 0)
-                                Container(
-                                  margin: const EdgeInsets.only(top: 4),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.white.withOpacity(0.3),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    'Rank #$_currentUserRank',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // Content Section
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: _future,
-                builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return _buildLoadingState();
-                  }
-                  if (snap.hasError) {
-                    return _buildErrorState(snap.error.toString());
-                  }
-                  final list = snap.data ?? [];
-                  if (list.isEmpty) {
-                    return _buildEmptyState();
-                  }
-
-                  // Find current user rank
-                  if (currentUid != null) {
-                    final userIndex = list.indexWhere(
-                      (item) => item['uid'] == currentUid,
-                    );
-                    if (userIndex >= 0) {
-                      _currentUserRank = userIndex + 1;
-                    }
-                  }
-
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Top 3 Podium
-                      if (list.length >= 3) _buildTopThreePodium(list),
-                      const SizedBox(height: 30),
-
-                      // Section Header
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Text(
-                          'ALL RANKINGS',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey.shade600,
-                            letterSpacing: 1.2,
-                          ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-
-                      // Rest of Rankings
-                      ...List.generate(
-                        list.length,
-                        (idx) =>
-                            _buildRankingCard(list[idx], idx + 1, currentUid),
-                      ),
-
-                      const SizedBox(height: 80),
-                    ],
-                  );
-                },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+
+            // Content Section
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _future,
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return _buildLoadingState();
+                    }
+                    if (snap.hasError) {
+                      return _buildErrorState(snap.error.toString());
+                    }
+                    final list = snap.data ?? [];
+                    if (list.isEmpty) {
+                      return _buildEmptyState();
+                    }
+
+                    // Find current user rank
+                    if (currentUid != null) {
+                      final userIndex = list.indexWhere(
+                        (item) => item['uid'] == currentUid,
+                      );
+                      if (userIndex >= 0) {
+                        _currentUserRank = userIndex + 1;
+                      }
+                    }
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Top 3 Podium
+                        if (list.length >= 3) _buildTopThreePodium(list),
+                        const SizedBox(height: 30),
+
+                        // Section Header
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: Text(
+                            'ALL RANKINGS',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade600,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+
+                        // Rest of Rankings
+                        ...List.generate(
+                          list.length,
+                          (idx) =>
+                              _buildRankingCard(list[idx], idx + 1, currentUid),
+                        ),
+
+                        const SizedBox(height: 80),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -370,39 +384,185 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   // Empty State Widget
   Widget _buildEmptyState() {
-    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(48),
       decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: theme.brightness == Brightness.dark
-              ? Colors.grey.shade800
-              : Colors.grey.shade200,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            kPrimaryGreen.withOpacity(0.1),
+            Colors.blue.withOpacity(0.05),
+          ],
         ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: kPrimaryGreen.withOpacity(0.3), width: 2),
       ),
       child: Column(
         children: [
-          Icon(
-            Icons.emoji_events_outlined,
-            size: 80,
-            color: Colors.grey.shade300,
+          // Animated Trophy Icon
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      Colors.amber.withOpacity(0.3),
+                      Colors.amber.withOpacity(0.1),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: kPrimaryGreen.withOpacity(0.1),
+                ),
+                child: Icon(
+                  Icons.emoji_events,
+                  size: 60,
+                  color: Colors.amber.shade400,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            'No Rankings Yet',
+
+          const SizedBox(height: 24),
+
+          // Title
+          const Text(
+            'Be the First Champion! 🏆',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.grey.shade700,
+              color: Colors.black87,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 12),
+
+          // Description
+          Text(
+            'Start earning points and compete with others!',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
+          ),
+
+          const SizedBox(height: 32),
+
+          // Action Cards
+          _buildActionCard(
+            icon: Icons.qr_code_scanner,
+            title: 'Scan Products',
+            description: 'Earn points by scanning eco-friendly products',
+            color: Colors.green,
+          ),
+          const SizedBox(height: 12),
+          _buildActionCard(
+            icon: Icons.emoji_events,
+            title: 'Complete Challenges',
+            description: 'Take on daily challenges to boost your score',
+            color: Colors.orange,
+          ),
+          const SizedBox(height: 12),
+          _buildActionCard(
+            icon: Icons.eco,
+            title: 'Go Green',
+            description: 'Make sustainable choices and climb the ranks',
+            color: kPrimaryGreen,
+          ),
+
+          const SizedBox(height: 24),
+
+          // Info Box
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.blue.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline, color: Colors.blue.shade700),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Start your eco-journey today and compete with friends!',
+                    style: TextStyle(color: Colors.blue.shade900, fontSize: 14),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Be the first to join the leaderboard!',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade500),
+        ],
+      ),
+    );
+  }
+
+  // Action Card Helper
+  Widget _buildActionCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [color, color.withOpacity(0.8)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
           ),
         ],
       ),

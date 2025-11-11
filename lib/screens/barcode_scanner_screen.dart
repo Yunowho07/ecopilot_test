@@ -184,7 +184,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
 
     try {
       final model = GenerativeModel(
-        model: 'gemini-2.0-flash-exp',
+        model: 'models/gemini-2.5-pro',
         apiKey: geminiApiKey,
       );
 
@@ -222,7 +222,7 @@ CRITICAL REQUIREMENTS:
 Return ONLY a valid JSON object (no markdown, no code blocks, no backticks) with this EXACT structure:
 {
   "product_name": "exact product name from data",
-  "category": "product category",
+  "category": "Food & Beverages (F&B)",
   "packaging_type": "detailed description of packaging materials (e.g., 'Plastic wrapper, cardboard box')",
   "ingredients": "list of key ingredients or 'N/A' if not applicable",
   "eco_score": "single letter A, B, C, D, or E based on environmental impact",

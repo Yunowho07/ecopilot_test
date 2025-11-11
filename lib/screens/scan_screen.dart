@@ -370,8 +370,6 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   Future<void> _capturePicture() async {
     debugPrint("Triggering Picture Capture (Top Right Button Tapped)...");
 
-    // ⚠️ UNCOMMENT and replace with actual capture logic:
-
     if (_cameraController != null && _cameraController!.value.isInitialized) {
       try {
         final XFile file = await _cameraController!.takePicture();
@@ -379,11 +377,22 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
         await _analyzeProduct(imageFile);
       } catch (e) {
         debugPrint("Error taking picture: $e");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to capture image: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        // Fallback to gallery picker
+        await _pickImage(ImageSource.gallery);
       }
     } else {
-      // Fallback to gallery/camera picker
+      // Camera not initialized, fallback to gallery/camera picker
+      debugPrint("Camera not initialized, using image picker...");
+      await _pickImage(ImageSource.camera);
     }
-    // For simulation, we fall back to the picker immediately:
   }
 
   // ... (analyze, navigate, save, showActionSheet methods remain unchanged) ...
@@ -401,7 +410,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
       }
 
       final model = GenerativeModel(
-        model: 'models/gemini-2.5-pro',
+        model: 'gemini-1.5-flash',
         apiKey: _geminiApiKey,
       );
 
@@ -448,6 +457,24 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
 
       _navigateToResultScreen(analysisToShow);
     } catch (e) {
+      debugPrint('❌ Error analyzing image: $e');
+
+      // Show user-friendly error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to analyze product: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: () => _analyzeImage(imageFile),
+            ),
+          ),
+        );
+      }
+
       analysisData = ProductAnalysisData(
         productName: 'Analysis Error',
         ingredients: 'Failed to analyze product: $e',
@@ -1508,70 +1535,3 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
     );
   }
 }
-
-// Helper painter to draw the corner guides for the scanner
-class _CornerPainter extends CustomPainter {
-  final Color color;
-  final double cornerLength;
-  final double cornerThickness;
-
-  _CornerPainter({
-    required this.color,
-    required this.cornerLength,
-    required this.cornerThickness,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = cornerThickness
-      ..style = PaintingStyle.stroke;
-
-    // Top-Left Corner
-    canvas.drawLine(Offset(0, 0), Offset(cornerLength, 0), paint);
-    canvas.drawLine(Offset(0, 0), Offset(0, cornerLength), paint);
-
-    // Top-Right Corner
-    canvas.drawLine(
-      Offset(size.width - cornerLength, 0),
-      Offset(size.width, 0),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(size.width, 0),
-      Offset(size.width, cornerLength),
-      paint,
-    );
-
-    // Bottom-Left Corner
-    canvas.drawLine(
-      Offset(0, size.height),
-      Offset(cornerLength, size.height),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(0, size.height - cornerLength),
-      Offset(0, size.height),
-      paint,
-    );
-
-    // Bottom-Right Corner
-    canvas.drawLine(
-      Offset(size.width - cornerLength, size.height),
-      Offset(size.width, size.height),
-      paint,
-    );
-    canvas.drawLine(
-      Offset(size.width, size.height - cornerLength),
-      Offset(size.width, size.height),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// BarcodeScannerPage removed — the Scan screen now uses the native camera
-// capture flow (see _capturePicture) instead of the mobile_scanner plugin.

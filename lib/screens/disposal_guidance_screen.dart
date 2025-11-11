@@ -1183,12 +1183,8 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
             ? IconButton(
                 icon: const Icon(Icons.arrow_back, color: Colors.white),
                 onPressed: () {
-                  // Navigate back to Recent Disposal screen
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(
-                      builder: (_) => const RecentDisposalScreen(),
-                    ),
-                  );
+                  // Navigate back to previous screen (Recent Disposal)
+                  Navigator.of(context).pop();
                 },
               )
             : Builder(

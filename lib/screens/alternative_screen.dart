@@ -1189,20 +1189,20 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
     );
     setState(() => _loading = true);
 
-    // Step 1: Try Gemini AI for intelligent alternatives
-    debugPrint('📍 Step 1: Trying Gemini AI...');
-    bool geminiSuccess = await _tryGeminiAlternatives(scanned);
-    if (geminiSuccess) {
-      debugPrint('✅ Success! Using Gemini AI alternatives');
+    // Step 1: Try Firestore cache first (fastest)
+    debugPrint('📍 Step 1: Checking Firestore cache...');
+    bool firestoreSuccess = await _tryFirestoreAlternatives(scanned);
+    if (firestoreSuccess) {
+      debugPrint('✅ Success! Using cached Firestore alternatives');
       setState(() => _loading = false);
       return;
     }
 
-    // Step 2: Try Firestore database
-    debugPrint('📍 Step 2: Trying Firestore database...');
-    bool firestoreSuccess = await _tryFirestoreAlternatives(scanned);
-    if (firestoreSuccess) {
-      debugPrint('✅ Success! Using Firestore alternatives');
+    // Step 2: Try Gemini AI for intelligent alternatives
+    debugPrint('📍 Step 2: Trying Gemini AI (no cache found)...');
+    bool geminiSuccess = await _tryGeminiAlternatives(scanned);
+    if (geminiSuccess) {
+      debugPrint('✅ Success! Using Gemini AI alternatives (saved to cache)');
       setState(() => _loading = false);
       return;
     }
@@ -1235,7 +1235,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       debugPrint('   Category: ${scanned.category}');
       debugPrint('   Eco Score: ${scanned.ecoScore}');
 
-      // Build an enhanced prompt for Gemini 2.5 Pro
+      // Build an enhanced prompt for Gemini 2.0 Flash (latest model)
       final prompt =
           '''
 You are an expert eco-product recommender with access to current e-commerce data in Malaysia.
@@ -1373,6 +1373,10 @@ Generate the alternatives now:''';
         debugPrint(
           '✅ Successfully generated ${generated.length} alternatives from Gemini',
         );
+
+        // Save to Firestore for future caching
+        await _saveAlternativesToFirestore(scanned, generated);
+
         setState(() {
           _loadedAlternatives = generated;
           _dataSource = 'Gemini AI';
@@ -1399,18 +1403,40 @@ Generate the alternatives now:''';
 
   Future<bool> _tryFirestoreAlternatives(ProductAnalysisData scanned) async {
     try {
-      // Query Firestore for alternatives based on category
+      debugPrint('🔍 Searching Firestore for cached alternatives...');
+
+      // Create product key for exact match lookup
+      final productKey = scanned.productName
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+          .trim();
+
       QuerySnapshot querySnapshot;
 
-      if (scanned.category.isNotEmpty && scanned.category != 'N/A') {
+      // First, try to find alternatives specifically cached for this product
+      debugPrint('   Trying product-specific cache: $productKey');
+      querySnapshot = await FirebaseFirestore.instance
+          .collection('alternative_products')
+          .where('sourceProductKey', isEqualTo: productKey)
+          .limit(10)
+          .get();
+
+      // If no product-specific cache, try category-based alternatives
+      if (querySnapshot.docs.isEmpty &&
+          scanned.category.isNotEmpty &&
+          scanned.category != 'N/A') {
+        debugPrint('   No product cache, trying category: ${scanned.category}');
         querySnapshot = await FirebaseFirestore.instance
             .collection('alternative_products')
             .where('category', isEqualTo: scanned.category)
             .orderBy('ecoScore')
             .limit(10)
             .get();
-      } else {
-        // Fallback: get top-rated alternatives
+      }
+
+      // Final fallback: get top-rated alternatives
+      if (querySnapshot.docs.isEmpty) {
+        debugPrint('   No category match, trying top-rated alternatives');
         querySnapshot = await FirebaseFirestore.instance
             .collection('alternative_products')
             .orderBy('rating', descending: true)
@@ -1418,7 +1444,14 @@ Generate the alternatives now:''';
             .get();
       }
 
-      if (querySnapshot.docs.isEmpty) return false;
+      if (querySnapshot.docs.isEmpty) {
+        debugPrint('❌ No alternatives found in Firestore');
+        return false;
+      }
+
+      debugPrint(
+        '✅ Found ${querySnapshot.docs.length} alternatives in Firestore',
+      );
 
       final List<AlternativeProduct> fetched = [];
       for (final doc in querySnapshot.docs) {
@@ -1438,7 +1471,12 @@ Generate the alternatives now:''';
 
         setState(() {
           _loadedAlternatives = better.isNotEmpty ? better : fetched;
-          _dataSource = 'Firestore Database';
+          _dataSource =
+              querySnapshot.docs.first.data().toString().contains(
+                'sourceProductKey',
+              )
+              ? 'Firestore Cache (Product-Specific)'
+              : 'Firestore Database';
         });
         return true;
       }
@@ -1446,6 +1484,47 @@ Generate the alternatives now:''';
       debugPrint('Firestore fetch failed: $e');
     }
     return false;
+  }
+
+  /// Save Gemini-generated alternatives to Firestore for caching
+  Future<void> _saveAlternativesToFirestore(
+    ProductAnalysisData scanned,
+    List<AlternativeProduct> alternatives,
+  ) async {
+    try {
+      debugPrint(
+        '💾 Saving ${alternatives.length} alternatives to Firestore...',
+      );
+
+      // Create a product-specific document ID based on product name
+      final productKey = scanned.productName
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+          .trim();
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      for (final alt in alternatives) {
+        final docRef = FirebaseFirestore.instance
+            .collection('alternative_products')
+            .doc(alt.id);
+
+        batch.set(docRef, {
+          ...alt.toFirestore(),
+          'sourceProductName': scanned.productName,
+          'sourceProductKey': productKey,
+          'sourceCategory': scanned.category,
+          'sourceEcoScore': scanned.ecoScore,
+          'generatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+      debugPrint('✅ Successfully saved alternatives to Firestore');
+    } catch (e) {
+      debugPrint('❌ Failed to save alternatives to Firestore: $e');
+      // Don't throw - this is just caching, not critical
+    }
   }
 
   double? _parsePrice(dynamic price) {
