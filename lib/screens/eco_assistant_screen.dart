@@ -30,7 +30,7 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
     }
 
     _model = GenerativeModel(
-      model: 'gemini-2.0-flash-lite', // More stable than experimental version
+      model:'gemini-2.5-flash', // Fast, efficient model perfect for chat - 1K RPM limit
       apiKey: apiKey,
       generationConfig: GenerationConfig(
         temperature: 0.7,

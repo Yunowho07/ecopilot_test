@@ -346,7 +346,7 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
       } else {
         // Use Gemini via google_generative_ai
         final model = GenerativeModel(
-          model: 'models/gemini-2.5-pro',
+          model:'models/gemini-2.5-pro', // Stable production model with excellent vision for disposal analysis
           apiKey: _geminiApiKey,
         );
 

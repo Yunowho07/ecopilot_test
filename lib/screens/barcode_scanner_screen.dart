@@ -184,7 +184,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
 
     try {
       final model = GenerativeModel(
-        model: 'models/gemini-2.5-pro',
+        model:'models/gemini-2.5-pro', // Fast processing for barcode-scanned products with existing data
         apiKey: geminiApiKey,
       );
 

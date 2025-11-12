@@ -410,7 +410,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
       }
 
       final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
+        model: 'models/gemini-2.5-pro',
         apiKey: _geminiApiKey,
       );
 

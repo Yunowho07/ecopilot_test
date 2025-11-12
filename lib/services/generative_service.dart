@@ -26,8 +26,8 @@ class GenerativeService {
 
       final content = [genAi.Content.text(prompt)];
 
-      // Use Gemini 1.5 Flash - stable, fast, and reliable model with vision support
-      final modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+      // Use Gemini 2.5 Pro - the latest and most powerful multimodal model
+      final modelsToTry = ['gemini-2.5-pro', 'gemini-pro','gemini-2.5-pro-exp','gemini-2.5-flash',];
       for (final modelName in modelsToTry) {
         try {
           final model = genAi.GenerativeModel(model: modelName, apiKey: apiKey);

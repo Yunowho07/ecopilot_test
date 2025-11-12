@@ -478,6 +478,10 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
                   data['timestamp'] ??
                   data['scannedAt'] ??
                   null;
+
+              // Extract eco_score from multiple possible field names
+              final ecoScore = data['eco_score'] ?? data['ecoScore'] ?? 'N/A';
+
               return {
                 'id': doc.id,
                 'name': name,
@@ -487,6 +491,8 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
                     ? imageUrl
                     : 'https://placehold.co/100x120/A8D8B9/212121?text=Product',
                 'createdAt': createdAt,
+                'eco_score': ecoScore, // Add eco_score to the map
+                'ecoScore': ecoScore, // Add both variations for compatibility
               };
             }).toList();
 
