@@ -23,7 +23,7 @@ import 'package:ecopilot_test/screens/result_disposal_screen.dart';
 /// to Cloudinary (if configured), stores the result in Firestore and returns
 /// the product map to the caller via Navigator.pop(result).
 class DisposalScanScreen extends StatefulWidget {
-  const DisposalScanScreen({Key? key}) : super(key: key);
+  const DisposalScanScreen({super.key});
 
   @override
   State<DisposalScanScreen> createState() => _DisposalScanScreenState();
@@ -195,13 +195,10 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         }
       }
 
-      if (newCamera == null) {
-        // Fallback to the other camera
-        newCamera = _cameras!.firstWhere(
+      newCamera ??= _cameras!.firstWhere(
           (camera) => camera != _cameraController?.description,
           orElse: () => _cameras!.first,
         );
-      }
 
       // Dispose current controller
       await _cameraController?.dispose();
@@ -313,12 +310,12 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
     if (_bytes == null) return;
     setState(() => _busy = true);
     try {
-      final _geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+      final geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
 
       String outputText;
       ProductAnalysisData analysisData;
 
-      if (_geminiApiKey.isEmpty) {
+      if (geminiApiKey.isEmpty) {
         // No API key — inform the user and stop. We no longer use a
         // simulated offline analyzer to avoid fabricating results.
         if (mounted) {
@@ -347,7 +344,7 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         // Use Gemini via google_generative_ai
         final model = GenerativeModel(
           model:'models/gemini-2.5-pro', // Stable production model with excellent vision for disposal analysis
-          apiKey: _geminiApiKey,
+          apiKey: geminiApiKey,
         );
 
         const prompt = '''

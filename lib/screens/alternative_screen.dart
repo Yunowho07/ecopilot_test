@@ -109,7 +109,7 @@ class AlternativeProduct {
 
 class EcoScoreBadge extends StatelessWidget {
   final String score;
-  const EcoScoreBadge({Key? key, required this.score}) : super(key: key);
+  const EcoScoreBadge({super.key, required this.score});
 
   @override
   Widget build(BuildContext context) {
@@ -141,14 +141,14 @@ class AlternativeProductCard extends StatelessWidget {
   final bool isInWishlist;
 
   const AlternativeProductCard({
-    Key? key,
+    super.key,
     required this.product,
     this.onTap,
     this.onBuyNow,
     this.onAddToWishlist,
     this.onCompare,
     this.isInWishlist = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -458,7 +458,7 @@ class AlternativeProductCard extends StatelessWidget {
 
 class AlternativeScreen extends StatefulWidget {
   final ProductAnalysisData? scannedProduct;
-  const AlternativeScreen({Key? key, this.scannedProduct}) : super(key: key);
+  const AlternativeScreen({super.key, this.scannedProduct});
   @override
   State<AlternativeScreen> createState() => _AlternativeScreenState();
 }
@@ -2047,7 +2047,7 @@ Generate the alternatives now:''';
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        value: _selectedBrand,
+                        initialValue: _selectedBrand,
                         decoration: InputDecoration(
                           hintText: 'All Brands',
                           border: OutlineInputBorder(

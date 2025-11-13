@@ -6,7 +6,7 @@ import 'package:ecopilot_test/utils/constants.dart';
 class ResultScreen extends StatelessWidget {
   final ProductAnalysisData analysisData;
 
-  const ResultScreen({Key? key, required this.analysisData}) : super(key: key);
+  const ResultScreen({super.key, required this.analysisData});
 
   @override
   Widget build(BuildContext context) {

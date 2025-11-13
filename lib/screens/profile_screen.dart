@@ -37,7 +37,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Color _rankColor = constants.kRankGreenExplorer;
 
   // Recent activity list used to store results from the Scan screen
-  List<Map<String, dynamic>> _recentActivity = [];
+  final List<Map<String, dynamic>> _recentActivity = [];
 
   // State variables for photo upload preview and error handling
   bool _isUploading = false;

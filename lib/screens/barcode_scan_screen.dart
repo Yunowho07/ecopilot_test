@@ -4,7 +4,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:http/http.dart' as http;
 
 class BarcodeScanScreen extends StatefulWidget {
-  const BarcodeScanScreen({Key? key}) : super(key: key);
+  const BarcodeScanScreen({super.key});
 
   @override
   State<BarcodeScanScreen> createState() => _BarcodeScanScreenState();

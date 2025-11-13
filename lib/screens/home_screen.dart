@@ -47,11 +47,11 @@ class _HomeScreenState extends State<HomeScreen> {
   // Use a map to store challenge data to simplify state updates on the home screen
   DailyChallenge? _dailyChallenge;
   // Fallback challenge text (legacy code expected `_challenge`)
-  String _challenge = 'Challenge yourself';
+  final String _challenge = 'Challenge yourself';
   // Recent activity list used by the bottom nav scan flow (legacy callers expect `_recentActivity`)
   final List<Map<String, dynamic>> _recentActivity = <Map<String, dynamic>>[];
   int _userStreak = 0;
-  int _selectedIndex = 0; // For Bottom Navigation Bar
+  final int _selectedIndex = 0; // For Bottom Navigation Bar
 
   // Monthly Eco Points tracking
   int _monthlyEcoPoints = 0;
@@ -1624,20 +1624,21 @@ class _HomeScreenState extends State<HomeScreen> {
     final disposal = (data['disposal_method'] ?? 'Rinse and recycle locally')
         .toString();
     // Using the safe boolean read logic from your onTap function
-    bool _readBool(dynamic v) {
+    bool readBool(dynamic v) {
       if (v is bool) return v;
-      if (v is String)
+      if (v is String) {
         return v.toLowerCase() == 'true' || v.toLowerCase() == 'yes';
+      }
       if (v is num) return v != 0;
       return false;
     }
 
-    final containsMicroplastics = _readBool(data['contains_microplastics']);
-    final palmOilDerivative = _readBool(data['palm_oil_derivative']);
-    final crueltyFree = _readBool(data['cruelty_free']);
+    final containsMicroplastics = readBool(data['contains_microplastics']);
+    final palmOilDerivative = readBool(data['palm_oil_derivative']);
+    final crueltyFree = readBool(data['cruelty_free']);
 
     // Function to determine the color for the Eco-Score background
-    Color _getEcoScoreColor(String s) {
+    Color getEcoScoreColor(String s) {
       switch (s) {
         case 'A':
           return Colors.green.shade700;
@@ -1655,7 +1656,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Custom styled Text for detail sections
-    Widget _detailText(String label, String value, {bool boldValue = false}) {
+    Widget detailText(String label, String value, {bool boldValue = false}) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 6.0),
         child: RichText(
@@ -1759,7 +1760,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(
                         score,
                         style: TextStyle(
-                          color: _getEcoScoreColor(score),
+                          color: getEcoScoreColor(score),
                           fontWeight: FontWeight.bold,
                           fontSize: 28,
                           height: 1,
@@ -1769,7 +1770,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(
                         'ECO SCORE',
                         style: TextStyle(
-                          color: _getEcoScoreColor(score),
+                          color: getEcoScoreColor(score),
                           fontWeight: FontWeight.w600,
                           fontSize: 8,
                           letterSpacing: 0.5,
@@ -2259,18 +2260,18 @@ class _HomeScreenState extends State<HomeScreen> {
       dt = ts;
     }
 
-    String _twoDigits(int n) => n.toString().padLeft(2, '0');
-    String _formatDateTime(DateTime d) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    String formatDateTime(DateTime d) {
       final month = d.month;
       final day = d.day;
       final year = d.year;
       final hour12 = d.hour % 12 == 0 ? 12 : d.hour % 12;
-      final minute = _twoDigits(d.minute);
+      final minute = twoDigits(d.minute);
       final ampm = d.hour >= 12 ? 'PM' : 'AM';
-      return '$month/$day/$year ${_twoDigits(hour12)}:$minute $ampm';
+      return '$month/$day/$year ${twoDigits(hour12)}:$minute $ampm';
     }
 
-    final timeText = dt != null ? _formatDateTime(dt) : '';
+    final timeText = dt != null ? formatDateTime(dt) : '';
 
     // Try common image keys
     String? imageUrl;
@@ -2291,7 +2292,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
-    Color _getEcoScoreColor(String s) {
+    Color getEcoScoreColor(String s) {
       switch (s) {
         case 'A':
           return Colors.green.shade700;
@@ -2481,11 +2482,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 56,
                     height: 56,
                     decoration: BoxDecoration(
-                      color: _getEcoScoreColor(score),
+                      color: getEcoScoreColor(score),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: _getEcoScoreColor(score).withOpacity(0.4),
+                          color: getEcoScoreColor(score).withOpacity(0.4),
                           blurRadius: 8,
                           offset: const Offset(0, 3),
                         ),
@@ -2535,7 +2536,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ...latest.map((doc) => _buildActivityTile(doc)).toList(),
+        ...latest.map((doc) => _buildActivityTile(doc)),
         if (docs.length > visibleCount)
           Padding(
             padding: const EdgeInsets.only(top: 8.0),

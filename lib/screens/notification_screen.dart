@@ -207,9 +207,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   AppNotification _makeSample(NotificationCategory cat) {
     final rnd = Random();
     final id =
-        DateTime.now().millisecondsSinceEpoch.toString() +
-        '_' +
-        rnd.nextInt(9999).toString();
+        '${DateTime.now().millisecondsSinceEpoch}_${rnd.nextInt(9999)}';
     switch (cat) {
       case NotificationCategory.dailyChallenge:
         return AppNotification(
@@ -235,7 +233,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
           category: cat,
           title: 'Milestone Unlocked',
           body:
-              '🔥 7-day streak complete! You\'ve earned the \"Green Guardian\" badge.',
+              '🔥 7-day streak complete! You\'ve earned the "Green Guardian" badge.',
           time: DateTime.now(),
         );
       case NotificationCategory.scanInsight:
@@ -485,7 +483,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                       ),
                       onPressed: () async {
                         setState(() {
-                          for (var n in _notifications) n.read = true;
+                          for (var n in _notifications) {
+                            n.read = true;
+                          }
                         });
                         await _save();
                       },

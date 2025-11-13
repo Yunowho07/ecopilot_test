@@ -357,19 +357,21 @@ class FirebaseService {
           );
 
           final streamed = await request.send();
-          if (onProgress != null)
+          if (onProgress != null) {
             onProgress(uploadBytes.length, uploadBytes.length);
+          }
 
           final respStr = await streamed.stream.bytesToString();
           if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
             throw Exception(
-              'Cloudinary upload failed: ${streamed.statusCode} ${respStr}',
+              'Cloudinary upload failed: ${streamed.statusCode} $respStr',
             );
           }
           final Map<String, dynamic> decoded = jsonDecode(respStr);
           final url = decoded['secure_url'] as String?;
-          if (url == null || url.isEmpty)
+          if (url == null || url.isEmpty) {
             throw Exception('Cloudinary response missing secure_url');
+          }
 
           await updatePhotoUrl(url);
           return url;
@@ -444,19 +446,21 @@ class FirebaseService {
           );
 
           final streamed = await request.send();
-          if (onProgress != null)
+          if (onProgress != null) {
             onProgress(uploadBytes.length, uploadBytes.length);
+          }
 
           final respStr = await streamed.stream.bytesToString();
           if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
             throw Exception(
-              'Cloudinary upload failed: ${streamed.statusCode} ${respStr}',
+              'Cloudinary upload failed: ${streamed.statusCode} $respStr',
             );
           }
           final Map<String, dynamic> decoded = jsonDecode(respStr);
           final url = decoded['secure_url'] as String?;
-          if (url == null || url.isEmpty)
+          if (url == null || url.isEmpty) {
             throw Exception('Cloudinary response missing secure_url');
+          }
           return url;
         } catch (e) {
           debugPrint(
@@ -823,20 +827,20 @@ class FirebaseService {
       'carbonFootprint': carbonFootprint,
 
       // Image URL (both conventions)
-      'image_url': imageUrl ?? null,
-      'imageUrl': imageUrl ?? null,
+      'image_url': imageUrl,
+      'imageUrl': imageUrl,
 
       // Category / packaging
-      'category': category ?? null,
-      'product_category': category ?? null,
+      'category': category,
+      'product_category': category,
 
       // Ingredients (both conventions)
-      'ingredients': ingredients ?? null,
-      'ingredient_list': ingredients ?? null,
-      'ingredientList': ingredients ?? null,
+      'ingredients': ingredients,
+      'ingredient_list': ingredients,
+      'ingredientList': ingredients,
 
-      'packaging': packagingType ?? null,
-      'packagingType': packagingType ?? null,
+      'packaging': packagingType,
+      'packagingType': packagingType,
 
       // Disposal steps stored as an array plus a joined string
       'disposalSteps': disposalList.isNotEmpty ? disposalList : null,
@@ -852,8 +856,8 @@ class FirebaseService {
       'tips_text': tipsList.isNotEmpty ? tipsList.join('\n') : null,
 
       // Nearby center
-      'nearbyCenter': nearbyCenter ?? null,
-      'nearby_center': nearbyCenter ?? null,
+      'nearbyCenter': nearbyCenter,
+      'nearby_center': nearbyCenter,
 
       'isDisposal': isDisposal,
 
@@ -1102,8 +1106,7 @@ class FirebaseService {
           }, SetOptions(merge: true));
 
       debugPrint(
-        'Challenge completed successfully: +$points points' +
-            (bonusPoints > 0 ? ' (+$bonusPoints bonus)' : ''),
+        'Challenge completed successfully: +$points points${bonusPoints > 0 ? ' (+$bonusPoints bonus)' : ''}',
       );
 
       return {

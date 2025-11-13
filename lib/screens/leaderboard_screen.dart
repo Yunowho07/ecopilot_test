@@ -571,7 +571,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   // Top 3 Podium Widget - Enhanced Design
   Widget _buildTopThreePodium(List<Map<String, dynamic>> list) {
-    final first = list.length > 0 ? list[0] : null;
+    final first = list.isNotEmpty ? list[0] : null;
     final second = list.length > 1 ? list[1] : null;
     final third = list.length > 2 ? list[2] : null;
 

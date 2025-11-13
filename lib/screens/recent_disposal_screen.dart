@@ -476,8 +476,7 @@ class _RecentDisposalScreenState extends State<RecentDisposalScreen> {
               final createdAt =
                   data['createdAt'] ??
                   data['timestamp'] ??
-                  data['scannedAt'] ??
-                  null;
+                  data['scannedAt'];
 
               // Extract eco_score from multiple possible field names
               final ecoScore = data['eco_score'] ?? data['ecoScore'] ?? 'N/A';

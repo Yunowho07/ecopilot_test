@@ -18,7 +18,7 @@ import 'package:ecopilot_test/screens/eco_assistant_screen.dart';
 /// Clean Disposal Guidance screen (hub + details).
 class DisposalGuidanceScreen extends StatefulWidget {
   final String? productId;
-  const DisposalGuidanceScreen({Key? key, this.productId}) : super(key: key);
+  const DisposalGuidanceScreen({super.key, this.productId});
 
   @override
   State<DisposalGuidanceScreen> createState() => _DisposalGuidanceScreenState();
@@ -208,10 +208,11 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('Failed to save scan: $e');
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to save scan: $e')));
+      }
     }
   }
 

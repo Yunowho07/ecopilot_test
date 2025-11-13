@@ -15,7 +15,7 @@ import 'package:ecopilot_test/screens/eco_assistant_screen.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 
 class AppDrawer extends StatelessWidget {
-  const AppDrawer({Key? key}) : super(key: key);
+  const AppDrawer({super.key});
 
   Future<void> _handleSignOut(BuildContext context) async {
     try {

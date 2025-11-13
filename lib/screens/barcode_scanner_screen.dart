@@ -13,7 +13,7 @@ import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'package:ecopilot_test/screens/result_disposal_screen.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
-  const BarcodeScannerScreen({Key? key}) : super(key: key);
+  const BarcodeScannerScreen({super.key});
 
   @override
   State<BarcodeScannerScreen> createState() => _BarcodeScannerScreenState();

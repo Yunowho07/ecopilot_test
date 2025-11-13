@@ -7,13 +7,13 @@ import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 
 class ResultDisposalScreen extends StatelessWidget {
   final ProductAnalysisData analysisData;
-  const ResultDisposalScreen({Key? key, required this.analysisData})
-    : super(key: key);
+  const ResultDisposalScreen({super.key, required this.analysisData});
 
   List<String> _disposalStepsAsList() {
     if (analysisData.disposalMethod.trim().isEmpty ||
-        analysisData.disposalMethod == 'N/A')
+        analysisData.disposalMethod == 'N/A') {
       return [];
+    }
     return analysisData.disposalMethod
         .split(RegExp(r"\r?\n"))
         .map((s) => s.trim())
@@ -571,10 +571,10 @@ class _DoneButton extends StatefulWidget {
   final List<String> disposalStepsList;
 
   const _DoneButton({
-    Key? key,
+    super.key,
     required this.analysisData,
     required this.disposalStepsList,
-  }) : super(key: key);
+  });
 
   @override
   State<_DoneButton> createState() => _DoneButtonState();

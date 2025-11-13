@@ -7,12 +7,13 @@ import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'package:ecopilot_test/screens/alternative_screen.dart';
 
 class RecentActivityScreen extends StatelessWidget {
-  const RecentActivityScreen({Key? key}) : super(key: key);
+  const RecentActivityScreen({super.key});
 
   bool _readBool(dynamic v) {
     if (v is bool) return v;
-    if (v is String)
+    if (v is String) {
       return v.toLowerCase() == 'true' || v.toLowerCase() == 'yes';
+    }
     if (v is num) return v != 0;
     return false;
   }
@@ -73,7 +74,7 @@ class RecentActivityScreen extends StatelessWidget {
       data['crueltyFree'] ?? data['cruelty_free'] ?? false,
     );
 
-    Color _getEcoScoreColor(String s) {
+    Color getEcoScoreColor(String s) {
       final ecoScoreColors = {
         'A': kResultCardGreen,
         'B': kDiscoverMoreGreen,
@@ -167,7 +168,7 @@ class RecentActivityScreen extends StatelessWidget {
                       Text(
                         score,
                         style: TextStyle(
-                          color: _getEcoScoreColor(score),
+                          color: getEcoScoreColor(score),
                           fontWeight: FontWeight.bold,
                           fontSize: 28,
                           height: 1,
@@ -177,7 +178,7 @@ class RecentActivityScreen extends StatelessWidget {
                       Text(
                         'ECO SCORE',
                         style: TextStyle(
-                          color: _getEcoScoreColor(score),
+                          color: getEcoScoreColor(score),
                           fontWeight: FontWeight.w600,
                           fontSize: 8,
                           letterSpacing: 0.5,
@@ -822,10 +823,11 @@ class RecentActivityScreen extends StatelessWidget {
                         disposalMethod = _readString(data['disposalMethod']);
                       } else if (data['disposalSteps'] != null) {
                         final ds = data['disposalSteps'];
-                        if (ds is List)
+                        if (ds is List) {
                           disposalMethod = ds.join(' • ');
-                        else
+                        } else {
                           disposalMethod = _readString(ds);
+                        }
                       }
 
                       DateTime? created;
@@ -833,9 +835,9 @@ class RecentActivityScreen extends StatelessWidget {
                           data['createdAt'] ??
                           data['created_at'] ??
                           data['timestamp'];
-                      if (createdRaw is Timestamp)
+                      if (createdRaw is Timestamp) {
                         created = createdRaw.toDate();
-                      else if (createdRaw is int)
+                      } else if (createdRaw is int)
                         created = DateTime.fromMillisecondsSinceEpoch(
                           createdRaw,
                         );

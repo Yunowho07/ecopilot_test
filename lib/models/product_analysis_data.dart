@@ -240,23 +240,23 @@ class ProductAnalysisData {
 
     bool microplastics = false;
     final mp = m['contains_microplastics'] ?? m['containsMicroplastics'];
-    if (mp is bool)
+    if (mp is bool) {
       microplastics = mp;
-    else if (mp is String)
+    } else if (mp is String)
       microplastics = mp.toLowerCase() == 'yes' || mp.toLowerCase() == 'true';
 
     bool palmOil = false;
     final po = m['palm_oil_derivative'] ?? m['palmOilDerivative'];
-    if (po is bool)
+    if (po is bool) {
       palmOil = po;
-    else if (po is String)
+    } else if (po is String)
       palmOil = po.toLowerCase() == 'yes' || po.toLowerCase() == 'true';
 
     bool crueltyFree = false;
     final cf = m['cruelty_free'] ?? m['crueltyFree'];
-    if (cf is bool)
+    if (cf is bool) {
       crueltyFree = cf;
-    else if (cf is String)
+    } else if (cf is String)
       crueltyFree = cf.toLowerCase() == 'yes' || cf.toLowerCase() == 'true';
 
     return ProductAnalysisData(

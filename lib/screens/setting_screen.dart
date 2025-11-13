@@ -240,7 +240,7 @@ class _SettingScreenState extends State<SettingScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear Cache'),
-        content: Text('This will free up ${_cacheSize} MB of storage.'),
+        content: Text('This will free up $_cacheSize MB of storage.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -916,7 +916,7 @@ class _SettingScreenState extends State<SettingScreen> {
                       _buildSettingsItem(
                         Icons.folder_outlined,
                         'Cache Size',
-                        subtitle: '${_cacheSize} MB',
+                        subtitle: '$_cacheSize MB',
                         color: Colors.brown,
                         trailing: _loading
                             ? const SizedBox(
@@ -1216,7 +1216,7 @@ class _SettingScreenState extends State<SettingScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: kPrimaryGreen,
+            activeThumbColor: kPrimaryGreen,
           ),
         ],
       ),
@@ -1305,8 +1305,7 @@ class _SettingScreenState extends State<SettingScreen> {
 class _InfoScreen extends StatelessWidget {
   final String title;
   final String content;
-  const _InfoScreen({required this.title, required this.content, Key? key})
-    : super(key: key);
+  const _InfoScreen({required this.title, required this.content, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1336,7 +1335,7 @@ class _InfoScreen extends StatelessWidget {
 }
 
 class _DataCollectionScreen extends StatefulWidget {
-  const _DataCollectionScreen({Key? key}) : super(key: key);
+  const _DataCollectionScreen({super.key});
 
   @override
   State<_DataCollectionScreen> createState() => _DataCollectionScreenState();
@@ -1456,7 +1455,7 @@ class _DataCollectionScreenState extends State<_DataCollectionScreen> {
         ),
         value: value,
         onChanged: onChanged,
-        activeColor: kPrimaryGreen,
+        activeThumbColor: kPrimaryGreen,
       ),
     );
   }

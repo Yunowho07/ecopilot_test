@@ -208,10 +208,10 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     ];
 
     // Seeded shuffle based on date
-    final random = (seed) {
+    random(seed) {
       final x = (seed * 9301 + 49297) % 233280;
       return x / 233280;
-    };
+    }
 
     final shuffled = List<Challenge>.from(allChallenges);
     for (var i = shuffled.length - 1; i > 0; i--) {
@@ -326,7 +326,7 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       final streak = data['streak'] ?? 0;
 
       debugPrint(
-        '✅ Loaded progress for $uid on $today: ${adjustedCompleted.where((c) => c).length}/${challengeCount} completed',
+        '✅ Loaded progress for $uid on $today: ${adjustedCompleted.where((c) => c).length}/$challengeCount completed',
       );
 
       return UserChallengeProgress(
@@ -1045,32 +1045,41 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     // Determine challenge category icon (basic detection from title)
     IconData getChallengeIcon() {
       final title = challenge.title.toLowerCase();
-      if (title.contains('recycle') || title.contains('plastic'))
+      if (title.contains('recycle') || title.contains('plastic')) {
         return Icons.recycling;
+      }
       if (title.contains('transport') ||
           title.contains('cycle') ||
-          title.contains('walk'))
+          title.contains('walk')) {
         return Icons.directions_bike;
-      if (title.contains('bottle') || title.contains('water'))
+      }
+      if (title.contains('bottle') || title.contains('water')) {
         return Icons.water_drop;
-      if (title.contains('energy') || title.contains('light'))
+      }
+      if (title.contains('energy') || title.contains('light')) {
         return Icons.lightbulb_outline;
-      if (title.contains('food') || title.contains('meal'))
+      }
+      if (title.contains('food') || title.contains('meal')) {
         return Icons.restaurant;
+      }
       return Icons.eco;
     }
 
     Color getChallengeColor() {
       final title = challenge.title.toLowerCase();
       if (title.contains('recycle')) return Colors.green;
-      if (title.contains('transport') || title.contains('cycle'))
+      if (title.contains('transport') || title.contains('cycle')) {
         return Colors.blue;
-      if (title.contains('bottle') || title.contains('water'))
+      }
+      if (title.contains('bottle') || title.contains('water')) {
         return Colors.cyan;
-      if (title.contains('energy') || title.contains('light'))
+      }
+      if (title.contains('energy') || title.contains('light')) {
         return Colors.amber;
-      if (title.contains('food') || title.contains('meal'))
+      }
+      if (title.contains('food') || title.contains('meal')) {
         return Colors.orange;
+      }
       return kPrimaryGreen;
     }
 
