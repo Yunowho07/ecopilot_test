@@ -2,6 +2,10 @@
     <!-- Internet permission for Facebook login -->
     <uses-permission android:name="android.permission.INTERNET"/>
     
+    <!-- Location permissions for disposal confirmation -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
     <!-- Permission required to use the device camera -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />

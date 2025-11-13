@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,6 +42,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final FirebaseService _firebaseService = FirebaseService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _userName = 'User';
+
+  // Image slider state
+  int _currentSlideIndex = 0;
+  Timer? _sliderTimer;
+  final PageController _pageController = PageController();
+  final List<String> _sliderImages = [
+    'assets/slider1.jpg',
+    'assets/slider2.jpg',
+    'assets/slider3.jpg',
+  ];
 
   // 🚫 REMOVED: String _tip = 'Loading tip...'; // Replaced by FutureBuilder
 
@@ -121,6 +132,28 @@ class _HomeScreenState extends State<HomeScreen> {
     _ensureChallengesExist();
     _ensureTipsExist();
     _checkIfTipBookmarked();
+    _startSliderTimer();
+  }
+
+  @override
+  void dispose() {
+    _sliderTimer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  // Start automatic image slider
+  void _startSliderTimer() {
+    _sliderTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (_pageController.hasClients) {
+        final nextPage = (_currentSlideIndex + 1) % _sliderImages.length;
+        _pageController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeInOut,
+        );
+      }
+    });
   }
 
   // Ensure today's challenges exist in Firestore
@@ -296,50 +329,58 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // ⚠️ CONCEPTUAL: Placeholder for loading today's challenge data
+  // Load today's challenge data from Firestore
   void _loadDailyChallengeData() async {
     // 1. Get today's date string
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final user = _firebaseService.currentUser;
+    if (user == null) return;
 
-    // 2. Simulate fetching the first challenge and user progress for the home screen preview
-    // In a real app, this uses Firestore:
+    try {
+      // 2. Fetch challenges from Firestore
+      final challengeDoc = await FirebaseFirestore.instance
+          .collection('challenges')
+          .doc(today)
+          .get();
+      final userChallengeDoc = await FirebaseFirestore.instance
+          .collection('user_challenges')
+          .doc('${user.uid}-$today')
+          .get();
 
-    final challengeDoc = await FirebaseFirestore.instance
-        .collection('challenges')
-        .doc(today)
-        .get();
-    final userChallengeDoc = await FirebaseFirestore.instance
-        .collection('user_challenges')
-        .doc('${_firebaseService.currentUser!.uid}-$today')
-        .get();
+      if (challengeDoc.exists) {
+        final challenges = List.from(challengeDoc.data()?['challenges'] ?? []);
+        if (challenges.isNotEmpty) {
+          final firstChallenge = challenges.first;
+          final isCompleted = userChallengeDoc.exists
+              ? List.from(userChallengeDoc.data()!['completed']).first
+              : false;
 
-    if (challengeDoc.exists) {
-      final challenges = List.from(challengeDoc.data()?['challenges'] ?? []);
-      if (challenges.isNotEmpty) {
-        final firstChallenge = challenges.first;
-        final isCompleted = userChallengeDoc.exists
-            ? List.from(userChallengeDoc.data()!['completed']).first
-            : false;
-
-        setState(() {
-          _dailyChallenge = DailyChallenge(
-            firstChallenge['title'],
-            firstChallenge['points'],
-            isCompleted,
-          );
-        });
+          if (mounted) {
+            setState(() {
+              _dailyChallenge = DailyChallenge(
+                firstChallenge['title'],
+                firstChallenge['points'],
+                isCompleted,
+              );
+            });
+          }
+          return; // Successfully loaded from Firestore
+        }
       }
+    } catch (e) {
+      debugPrint('Error loading daily challenge: $e');
     }
 
-    // Using simulated data for now:
-    setState(() {
-      _dailyChallenge = DailyChallenge(
-        "Bring your own reusable bottle",
-        10,
-        false, // Assume incomplete for fresh loading
-      );
-      _userStreak = 4; // Simulated streak
-    });
+    // Fallback to default challenge if Firestore fails
+    if (mounted) {
+      setState(() {
+        _dailyChallenge = DailyChallenge(
+          "Bring your own reusable bottle",
+          10,
+          false,
+        );
+      });
+    }
   }
 
   Future<void> _handleSignOut() async {
@@ -1234,123 +1275,187 @@ class _HomeScreenState extends State<HomeScreen> {
             automaticallyImplyLeading: false,
             backgroundColor: kPrimaryGreen,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(32),
-                    bottomRight: Radius.circular(32),
-                  ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.85)],
-                  ),
-                ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        // Greeting
-                        Text(
-                          'Hello!',
-                          style: TextStyle(
-                            fontSize: 20,
-                            color: Colors.white.withOpacity(0.9),
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        // User Name
-                        Text(
-                          _userName,
-                          style: const TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        // Streak and Status
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
+              background: Stack(
+                children: [
+                  // Image Slider Background
+                  Positioned.fill(
+                    child: PageView.builder(
+                      controller: _pageController,
+                      onPageChanged: (index) {
+                        // Update slider index without triggering full rebuild
+                        _currentSlideIndex = index;
+                        // Force update only for the indicator dots
+                        if (mounted) {
+                          setState(() {});
+                        }
+                      },
+                      itemCount: _sliderImages.length,
+                      itemBuilder: (context, index) {
+                        return Image.asset(
+                          _sliderImages[index],
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            // Fallback to gradient if images not found
+                            return Container(
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.3),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.eco,
-                                    color: Colors.white,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    "Let's make a difference",
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.95),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (_userStreak > 0) ...[
-                              const SizedBox(width: 10),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.orange.withOpacity(0.4),
-                                    width: 1.5,
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      '🔥',
-                                      style: TextStyle(fontSize: 14),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '$_userStreak day streak',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    kPrimaryGreen,
+                                    kPrimaryGreen.withOpacity(0.85),
                                   ],
                                 ),
                               ),
-                            ],
-                          ],
-                        ),
-                      ],
+                            );
+                          },
+                        );
+                      },
                     ),
                   ),
-                ),
+                  // Gradient Overlay for better text visibility
+                  Positioned.fill(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.transparent, Colors.black],
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Content
+                  Container(
+                    child: SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            // Greeting
+                            Text(
+                              'Hello!',
+                              style: TextStyle(
+                                fontSize: 20,
+                                color: Colors.white.withOpacity(0.9),
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            // User Name
+                            Text(
+                              _userName,
+                              style: const TextStyle(
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            // Streak and Status
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.3),
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.eco,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        "Let's make a difference",
+                                        style: TextStyle(
+                                          color: Colors.white.withOpacity(0.95),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_userStreak > 0) ...[
+                                  const SizedBox(width: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: Colors.orange.withOpacity(0.4),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          '🔥',
+                                          style: TextStyle(fontSize: 14),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '$_userStreak day streak',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            // Slider Indicators
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: List.generate(
+                                _sliderImages.length,
+                                (index) => AnimatedContainer(
+                                  duration: const Duration(milliseconds: 300),
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  width: _currentSlideIndex == index ? 24 : 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: _currentSlideIndex == index
+                                        ? Colors.white
+                                        : Colors.white.withOpacity(0.4),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             leading: Padding(
@@ -1572,7 +1677,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
         },
         backgroundColor: kPrimaryGreen,
-        icon: Image.asset('assets/chatbot.png',width: 40,height: 40,color: Colors.white,),
+        icon: Image.asset(
+          'assets/chatbot.png',
+          width: 40,
+          height: 40,
+          color: Colors.white,
+        ),
         label: const Text(
           'Eco Assistant',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),

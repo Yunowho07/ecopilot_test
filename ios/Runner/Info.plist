@@ -51,5 +51,11 @@
 	<string>This app needs access to the camera to scan products for eco information.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>This app needs access to the photo library to save or pick product images.</string>
+	
+	<!-- Location usage descriptions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app needs your location to confirm when you're at a disposal center to award eco points.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>This app needs your location to confirm disposal center visits.</string>
 </dict>
 </plist>

@@ -91,12 +91,12 @@ service cloud.firestore {
     match /alternative_products/{alternativeId} {
       // Anyone authenticated can read alternatives
       allow read: if request.auth != null;
-      // Only admins can write (set via Cloud Functions or Admin SDK)
-      allow write: if false;
+      // Allow authenticated users to write (for Gemini-generated alternatives)
+      allow write: if request.auth != null;
       
       // Validate structure
       allow create: if request.resource.data.keys().hasAll([
-        'baseProductId', 'name', 'ecoScore', 'category', 'timestamp'
+        'name', 'ecoScore', 'category'
       ]);
     }
 
@@ -214,6 +214,30 @@ service cloud.firestore {
       
       // Only allow updates if the alternative doesn't have critical fields locked
       allow update: if request.auth != null;
+      
+      // Prevent deletion by regular users (only admins via console)
+      allow delete: if false;
+    }
+
+    // ========================================
+    // USER CONTRIBUTIONS COLLECTION
+    // ========================================
+    // Products contributed by users for barcode not found in databases
+    match /user_contributions/{contributionId} {
+      // Anyone authenticated can read contributions
+      allow read: if request.auth != null;
+      
+      // Only authenticated users can create contributions
+      allow create: if request.auth != null
+                    && request.resource.data.keys().hasAll([
+                      'barcode', 'productName', 'category', 'contributedBy', 'contributedAt'
+                    ])
+                    && request.auth.uid == request.resource.data.contributedBy;
+      
+      // Users can update their own contributions (pending status)
+      allow update: if request.auth != null
+                    && request.auth.uid == resource.data.contributedBy
+                    && resource.data.status == 'pending';
       
       // Prevent deletion by regular users (only admins via console)
       allow delete: if false;

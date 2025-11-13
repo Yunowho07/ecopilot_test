@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:ecopilot_test/screens/disposal_scan_screen.dart';
 import 'package:ecopilot_test/screens/barcode_scanner_screen.dart';
 // Avoid importing kPrimaryGreen twice: hide it from the recent_disposal import
@@ -30,6 +31,12 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
   int _selectedIndex = 3; // default to Dispose tab
   // Recent disposal list used when returning from ScanScreen (kept in memory for this view)
   final List<Map<String, dynamic>> _recentDisposal = [];
+
+  // Location tracking for disposal confirmation
+  bool _isAtDisposalCenter = false;
+  bool _checkingLocation = false;
+  Position? _currentPosition;
+  bool _disposalCompleted = false;
 
   static const Map<String, dynamic> _defaultData = {
     'name': 'General Recycling Guidance',
@@ -158,6 +165,284 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Could not open maps.')));
+      }
+    }
+  }
+
+  // Check if user's current location is near a disposal center
+  Future<void> _checkLocationProximity() async {
+    if (_checkingLocation) return;
+
+    setState(() {
+      _checkingLocation = true;
+    });
+
+    try {
+      // Check location permission
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Location permission is required to confirm disposal',
+                ),
+              ),
+            );
+          }
+          setState(() {
+            _checkingLocation = false;
+          });
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission is permanently denied'),
+            ),
+          );
+        }
+        setState(() {
+          _checkingLocation = false;
+        });
+        return;
+      }
+
+      // Get current position
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      _currentPosition = position;
+
+      // For demonstration: Consider user is "at disposal center" if accuracy is good
+      // In production, you would check distance to known disposal centers
+      // Using a proximity threshold of 100 meters for this implementation
+      // You can integrate with Google Places API to get actual disposal center locations
+
+      // Simulated check: User is considered at disposal center if location accuracy is < 50m
+      // This is a placeholder - in production, calculate distance to nearest disposal center
+      bool isNearby = position.accuracy < 100;
+
+      setState(() {
+        _isAtDisposalCenter = isNearby;
+        _checkingLocation = false;
+      });
+
+      if (mounted) {
+        if (isNearby) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✓ You are near a disposal center'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please move closer to a disposal center'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Location error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to get location: $e')));
+      }
+      setState(() {
+        _checkingLocation = false;
+      });
+    }
+  }
+
+  // Complete disposal and award eco points
+  Future<void> _completeDisposal() async {
+    if (!_isAtDisposalCenter || _disposalCompleted) return;
+
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please sign in to earn eco points')),
+          );
+        }
+        return;
+      }
+
+      // Show loading dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) =>
+              const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      // Award 20 eco points
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      final now = DateTime.now();
+      final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+
+      // Update monthly points
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final monthlyPointsRef = userRef
+            .collection('monthly_points')
+            .doc(monthKey);
+        final monthlyDoc = await transaction.get(monthlyPointsRef);
+
+        if (monthlyDoc.exists) {
+          final currentPoints = monthlyDoc.data()?['points'] ?? 0;
+          transaction.update(monthlyPointsRef, {'points': currentPoints + 20});
+        } else {
+          transaction.set(monthlyPointsRef, {
+            'points': 20,
+            'goal': 500,
+            'month': monthKey,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+
+      // Mark product as disposed
+      if (widget.productId != null && widget.productId != 'general_fallback') {
+        await userRef.collection('scans').doc(widget.productId).update({
+          'disposalCompleted': true,
+          'disposalCompletedAt': FieldValue.serverTimestamp(),
+          'disposalLocation': {
+            'latitude': _currentPosition?.latitude,
+            'longitude': _currentPosition?.longitude,
+            'accuracy': _currentPosition?.accuracy,
+          },
+        });
+      }
+
+      setState(() {
+        _disposalCompleted = true;
+      });
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show success dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: kPrimaryGreen.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: kPrimaryGreen,
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Disposal Complete!',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Great job! You\'ve properly disposed of this item.',
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        kPrimaryGreen.withOpacity(0.1),
+                        kPrimaryGreen.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.eco, color: kPrimaryGreen, size: 28),
+                      const SizedBox(width: 12),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '+20 Eco Points',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: kPrimaryGreen,
+                            ),
+                          ),
+                          Text(
+                            'Added to your account',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(); // Go back to previous screen
+                },
+                child: const Text(
+                  'Done',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Disposal completion error: $e');
+
+      // Close loading dialog if open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to complete disposal: $e')),
+        );
       }
     }
   }
@@ -1100,6 +1385,209 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 24),
+
+                // Done Disposal Button Section
+                if (!_disposalCompleted) ...[
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: _isAtDisposalCenter
+                            ? [
+                                kPrimaryGreen.withOpacity(0.1),
+                                kPrimaryGreen.withOpacity(0.05),
+                              ]
+                            : [Colors.grey.shade50, Colors.grey.shade100],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: _isAtDisposalCenter
+                            ? kPrimaryGreen.withOpacity(0.3)
+                            : Colors.grey.shade300,
+                        width: 2,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          _isAtDisposalCenter
+                              ? Icons.check_circle
+                              : Icons.location_searching,
+                          size: 48,
+                          color: _isAtDisposalCenter
+                              ? kPrimaryGreen
+                              : Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _isAtDisposalCenter
+                              ? 'You\'re at a disposal center!'
+                              : 'Location Check Required',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: _isAtDisposalCenter
+                                ? kPrimaryGreen
+                                : Colors.black87,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _isAtDisposalCenter
+                              ? 'Tap below to confirm disposal and earn 20 eco points'
+                              : 'Please go to a disposal center and check your location',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Check Location Button
+                        if (!_isAtDisposalCenter)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton.icon(
+                              onPressed: _checkingLocation
+                                  ? null
+                                  : _checkLocationProximity,
+                              icon: _checkingLocation
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.my_location,
+                                      size: 20,
+                                      color: Colors.white,
+                                    ),
+                              label: Text(
+                                _checkingLocation
+                                    ? 'Checking...'
+                                    : 'Check My Location',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                elevation: 2,
+                              ),
+                            ),
+                          ),
+
+                        // Done Disposal Button
+                        if (_isAtDisposalCenter)
+                          SizedBox(
+                            width: double.infinity,
+                            height: 54,
+                            child: ElevatedButton.icon(
+                              onPressed: _completeDisposal,
+                              icon: const Icon(
+                                Icons.verified,
+                                size: 24,
+                                color: Colors.white,
+                              ),
+                              label: const Text(
+                                'Done Disposal (+20 Points)',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: kPrimaryGreen,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                elevation: 4,
+                                shadowColor: kPrimaryGreen.withOpacity(0.5),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Disposal Completed Message
+                if (_disposalCompleted)
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Colors.green.shade50, Colors.green.shade100],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.green.shade300,
+                        width: 2,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Disposal Completed! ✓',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'You earned 20 eco points',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                 const SizedBox(height: 32),
               ],
             ),

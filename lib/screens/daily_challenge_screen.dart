@@ -165,20 +165,32 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
     final allChallenges = [
       // Recycling
       Challenge('recycling_0', 'Recycle all plastic waste generated today', 5),
-      Challenge('recycling_1', 'Separate and recycle paper, plastic, and glass', 5),
+      Challenge(
+        'recycling_1',
+        'Separate and recycle paper, plastic, and glass',
+        5,
+      ),
       Challenge('recycling_2', 'Clean and recycle 5 items before disposal', 5),
-      Challenge('recycling_3', 'Find a recycling center for electronic waste',5),
+      Challenge(
+        'recycling_3',
+        'Find a recycling center for electronic waste',
+        5,
+      ),
       Challenge('recycling_4', 'Compost your organic kitchen waste', 5),
 
       // Transportation
-      Challenge('transport_0', 'Use public transport or cycle for one trip',5,),
+      Challenge('transport_0', 'Use public transport or cycle for one trip', 5),
       Challenge('transport_1', 'Walk or bike to your destination today', 5),
       Challenge('transport_2', 'Carpool with friends or colleagues', 5),
       Challenge('transport_3', 'Avoid using a car for the entire day', 5),
       Challenge('transport_4', 'Take stairs instead of elevator 3 times', 5),
 
       // Consumption
-      Challenge('consumption_0', 'Use a reusable water bottle instead of plastic', 5),
+      Challenge(
+        'consumption_0',
+        'Use a reusable water bottle instead of plastic',
+        5,
+      ),
       Challenge('consumption_1', 'Bring your own shopping bag', 5),
       Challenge('consumption_2', 'Choose products with minimal packaging', 5),
       Challenge('consumption_3', 'Buy local or organic produce', 5),
@@ -190,7 +202,11 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       Challenge('energy_1', 'Unplug devices when not in use', 5),
       Challenge('energy_2', 'Take a 5-minute shower to save water', 5),
       Challenge('energy_3', 'Air-dry clothes instead of using dryer', 5),
-      Challenge('energy_4', 'Use natural light instead of artificial lighting', 5),
+      Challenge(
+        'energy_4',
+        'Use natural light instead of artificial lighting',
+        5,
+      ),
 
       // Food
       Challenge('food_0', 'Have one plant-based meal today', 5),
@@ -203,7 +219,11 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       Challenge('awareness_0', 'Learn about one endangered species', 5),
       Challenge('awareness_1', 'Share an eco-tip with 3 friends', 5),
       Challenge('awareness_2', 'Watch a documentary about sustainability', 5),
-      Challenge('awareness_3', 'Research eco-friendly alternatives for daily products', 5),
+      Challenge(
+        'awareness_3',
+        'Research eco-friendly alternatives for daily products',
+        5,
+      ),
       Challenge('awareness_4', 'Join an online environmental community', 5),
     ];
 
@@ -280,6 +300,7 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
 
   /// Fetch the user's progress for today's challenges from Firestore.
   /// If no progress document exists, return a default [UserChallengeProgress].
+  /// Streak is fetched from the users document, not user_challenges.
   Future<UserChallengeProgress> _fetchUserProgress(int challengeCount) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -292,45 +313,50 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
         );
       }
 
-      final doc = await FirebaseFirestore.instance
+      // Fetch today's challenge progress
+      final challengeDoc = await FirebaseFirestore.instance
           .collection('user_challenges')
           .doc('$uid-$today')
           .get();
 
-      if (!doc.exists) {
+      List<bool> completed = List<bool>.filled(challengeCount, false);
+      int pointsEarned = 0;
+
+      if (challengeDoc.exists) {
+        final data = challengeDoc.data() ?? {};
+        completed =
+            (data['completed'] as List<dynamic>?)
+                ?.map((e) => e == true)
+                .toList() ??
+            List<bool>.filled(challengeCount, false);
+
+        // Ensure completed list matches challenge count
+        final adjustedCompleted = List<bool>.filled(challengeCount, false);
+        for (var i = 0; i < challengeCount && i < completed.length; i++) {
+          adjustedCompleted[i] = completed[i];
+        }
+        completed = adjustedCompleted;
+        pointsEarned = data['pointsEarned'] ?? 0;
+      } else {
         debugPrint(
           '📝 No progress found for user $uid on $today, creating new progress',
         );
-        return UserChallengeProgress(
-          completed: List<bool>.filled(challengeCount, false),
-          pointsEarned: 0,
-          streakCount: 0,
-          totalChallengePoints: 0,
-        );
       }
 
-      final data = doc.data() ?? {};
-      final completed =
-          (data['completed'] as List<dynamic>?)
-              ?.map((e) => e == true)
-              .toList() ??
-          List<bool>.filled(challengeCount, false);
-
-      // Ensure completed list matches challenge count
-      final adjustedCompleted = List<bool>.filled(challengeCount, false);
-      for (var i = 0; i < challengeCount && i < completed.length; i++) {
-        adjustedCompleted[i] = completed[i];
-      }
-
-      final pointsEarned = data['pointsEarned'] ?? 0;
-      final streak = data['streak'] ?? 0;
+      // Fetch streak from user's profile document
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      final userData = userDoc.data() ?? {};
+      final streak = userData['streak'] ?? 0;
 
       debugPrint(
-        '✅ Loaded progress for $uid on $today: ${adjustedCompleted.where((c) => c).length}/$challengeCount completed',
+        '✅ Loaded progress for $uid on $today: ${completed.where((c) => c).length}/$challengeCount completed, streak: $streak',
       );
 
       return UserChallengeProgress(
-        completed: adjustedCompleted,
+        completed: completed,
         pointsEarned: pointsEarned,
         streakCount: streak,
         totalChallengePoints: 0, // Will be set by caller
@@ -1065,41 +1091,28 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
       return Icons.eco;
     }
 
-    Color getChallengeColor() {
-      final title = challenge.title.toLowerCase();
-      if (title.contains('recycle')) return Colors.green;
-      if (title.contains('transport') || title.contains('cycle')) {
-        return Colors.blue;
-      }
-      if (title.contains('bottle') || title.contains('water')) {
-        return Colors.cyan;
-      }
-      if (title.contains('energy') || title.contains('light')) {
-        return Colors.amber;
-      }
-      if (title.contains('food') || title.contains('meal')) {
-        return Colors.orange;
-      }
-      return kPrimaryGreen;
-    }
-
-    final challengeColor = getChallengeColor();
     final challengeIcon = getChallengeIcon();
+
+    // Color scheme: Yellow before completion, Green after
+    final cardBackgroundColor = isCompleted
+        ? Colors.green.shade50
+        : Colors.amber.shade50;
+    final borderColor = isCompleted
+        ? Colors.green.shade300
+        : Colors.amber.shade300;
+    final shadowColor = isCompleted
+        ? Colors.green.withOpacity(0.15)
+        : Colors.amber.withOpacity(0.15);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: cardBackgroundColor,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isCompleted ? Colors.green.shade200 : Colors.grey.shade200,
-          width: 2,
-        ),
+        border: Border.all(color: borderColor, width: 2),
         boxShadow: [
           BoxShadow(
-            color: isCompleted
-                ? Colors.green.withOpacity(0.1)
-                : Colors.black.withOpacity(0.05),
+            color: shadowColor,
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -1120,13 +1133,15 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                   height: 56,
                   decoration: BoxDecoration(
                     color: isCompleted
-                        ? Colors.green.shade50
-                        : challengeColor.withOpacity(0.1),
+                        ? Colors.green.shade100
+                        : Colors.amber.shade100,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(
                     isCompleted ? Icons.check_circle : challengeIcon,
-                    color: isCompleted ? Colors.green : challengeColor,
+                    color: isCompleted
+                        ? Colors.green.shade700
+                        : Colors.amber.shade700,
                     size: 28,
                   ),
                 ),
@@ -1143,11 +1158,8 @@ class _DailyChallengeScreenState extends State<DailyChallengeScreen> {
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                           color: isCompleted
-                              ? Colors.grey.shade600
-                              : Colors.black87,
-                          decoration: isCompleted
-                              ? TextDecoration.lineThrough
-                              : TextDecoration.none,
+                              ? Colors.green.shade900
+                              : Colors.amber.shade900,
                           height: 1.4,
                         ),
                       ),

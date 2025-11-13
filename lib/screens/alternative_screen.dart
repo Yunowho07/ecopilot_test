@@ -17,6 +17,7 @@ import 'scan_screen.dart';
 import 'disposal_guidance_screen.dart';
 import 'profile_screen.dart';
 import 'eco_assistant_screen.dart';
+import 'product_wishlist_screen.dart';
 
 const Map<String, Color> _kEcoScoreColors = {
   'A+': Color(0xFF1DB954),
@@ -468,6 +469,8 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
   bool _loading = false;
   List<AlternativeProduct> _loadedAlternatives = [];
   Set<String> _wishlist = {}; // Product IDs in wishlist
+  List<AlternativeProduct> _recentWishlisted =
+      []; // Recently added wishlist items
   String _dataSource = ''; // Track which data source was used
 
   // Filter states
@@ -495,6 +498,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
 
+      // Load all wishlist IDs
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -504,6 +508,24 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       setState(() {
         _wishlist = doc.docs.map((d) => d.id).toSet();
       });
+
+      // Load recent wishlisted items (up to 5 most recent)
+      final recentDocs = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('wishlist')
+          .orderBy('createdAt', descending: true)
+          .limit(5)
+          .get();
+
+      if (recentDocs.docs.isNotEmpty) {
+        final recent = recentDocs.docs
+            .map((d) => AlternativeProduct.fromFirestore(d))
+            .toList();
+        setState(() {
+          _recentWishlisted = recent;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading wishlist: $e');
     }
@@ -528,12 +550,20 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       if (_wishlist.contains(product.id)) {
         await wishlistRef.delete();
         setState(() => _wishlist.remove(product.id));
+        setState(() {
+          _recentWishlisted.removeWhere((item) => item.id == product.id);
+        });
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Removed from wishlist')));
       } else {
-        await wishlistRef.set(product.toFirestore());
+        await wishlistRef.set({
+          ...product.toFirestore(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         setState(() => _wishlist.add(product.id));
+        // Reload recent items
+        _loadWishlist();
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Added to wishlist 💚')));
@@ -597,6 +627,243 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
     });
   }
 
+  // Build Recent Wishlist Section Widget
+  Widget _buildRecentWishlistSection() {
+    if (_recentWishlisted.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    return SliverToBoxAdapter(
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: kPrimaryGreen,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Your Recent Favorites',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '${_recentWishlisted.length} items',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              height: 220,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _recentWishlisted.length,
+                itemBuilder: (context, index) {
+                  final product = _recentWishlisted[index];
+                  return Container(
+                    width: 170,
+                    margin: const EdgeInsets.only(right: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 15,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _showAlternativeDetails(product),
+                        borderRadius: BorderRadius.circular(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Product Image with Overlay Badge
+                            Stack(
+                              children: [
+                                Container(
+                                  width: double.infinity,
+                                  height: 130,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Colors.grey.shade100,
+                                        Colors.grey.shade50,
+                                      ],
+                                    ),
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(20),
+                                      topRight: Radius.circular(20),
+                                    ),
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(20),
+                                      topRight: Radius.circular(20),
+                                    ),
+                                    child: product.imagePath.isNotEmpty
+                                        ? (product.imagePath.startsWith('http')
+                                              ? Image.network(
+                                                  product.imagePath,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (ctx, err, st) => Center(
+                                                        child: Icon(
+                                                          Icons.eco,
+                                                          size: 40,
+                                                          color: kPrimaryGreen
+                                                              .withOpacity(0.3),
+                                                        ),
+                                                      ),
+                                                )
+                                              : Image.asset(
+                                                  product.imagePath,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder:
+                                                      (ctx, err, st) => Center(
+                                                        child: Icon(
+                                                          Icons.eco,
+                                                          size: 40,
+                                                          color: kPrimaryGreen
+                                                              .withOpacity(0.3),
+                                                        ),
+                                                      ),
+                                                ))
+                                        : Center(
+                                            child: Icon(
+                                              Icons.eco,
+                                              size: 40,
+                                              color: kPrimaryGreen.withOpacity(
+                                                0.3,
+                                              ),
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                // Eco Score Badge Overlay
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: EcoScoreBadge(score: product.ecoScore),
+                                ),
+                                // Favorite Icon
+                                Positioned(
+                                  top: 8,
+                                  left: 8,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.15),
+                                          blurRadius: 8,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.favorite,
+                                      size: 16,
+                                      color: Colors.red,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            // Product Info
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      product.name,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                        height: 1.3,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const Spacer(),
+                                    if (product.price != null)
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'RM ${product.price!.toStringAsFixed(2)}',
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                              color: kPrimaryGreen,
+                                            ),
+                                          ),
+                                          const Spacer(),
+                                          if (product.rating != null)
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                  Icons.star,
+                                                  size: 12,
+                                                  color: Colors.amber,
+                                                ),
+                                                const SizedBox(width: 2),
+                                                Text(
+                                                  product.rating!
+                                                      .toStringAsFixed(1),
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.black87,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                        ],
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Compare with scanned product
   void _showComparison(AlternativeProduct alternative) {
     final scanned = widget.scannedProduct;
@@ -612,7 +879,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.75,
+        height: MediaQuery.of(context).size.height * 0.85,
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.only(
@@ -633,9 +900,17 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
               ),
             ),
 
-            // Header
-            Padding(
+            // Header with gradient
+            Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [kPrimaryGreen.withOpacity(0.1), Colors.white],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+              ),
               child: Row(
                 children: [
                   Icon(Icons.compare_arrows, color: kPrimaryGreen, size: 28),
@@ -657,26 +932,160 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Column(
                   children: [
-                    // Comparison Table
-                    _buildComparisonRow(
+                    const SizedBox(height: 16),
+                    // Product Images Side by Side
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Container(
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.grey.shade300,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.shopping_bag,
+                                      size: 48,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade200,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Text(
+                                  'Current Product',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Icon(
+                            Icons.arrow_forward,
+                            color: kPrimaryGreen,
+                            size: 28,
+                          ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Container(
+                                height: 120,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: kPrimaryGreen,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: alternative.imagePath.isNotEmpty
+                                      ? (alternative.imagePath.startsWith(
+                                              'http',
+                                            )
+                                            ? Image.network(
+                                                alternative.imagePath,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (ctx, err, st) =>
+                                                    Icon(
+                                                      Icons.eco,
+                                                      size: 48,
+                                                      color: kPrimaryGreen
+                                                          .withOpacity(0.3),
+                                                    ),
+                                              )
+                                            : Image.asset(
+                                                alternative.imagePath,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (ctx, err, st) =>
+                                                    Icon(
+                                                      Icons.eco,
+                                                      size: 48,
+                                                      color: kPrimaryGreen
+                                                          .withOpacity(0.3),
+                                                    ),
+                                              ))
+                                      : Center(
+                                          child: Icon(
+                                            Icons.eco,
+                                            size: 48,
+                                            color: kPrimaryGreen.withOpacity(
+                                              0.3,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kPrimaryGreen.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'Better Alternative',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: kPrimaryGreen,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    // Comparison Details
+                    _buildDetailComparisonRow(
                       'Product Name',
                       scanned.productName,
                       alternative.name,
                     ),
-                    const Divider(),
-                    _buildComparisonRow(
+                    const SizedBox(height: 12),
+                    _buildDetailComparisonRow(
                       'Eco Score',
                       scanned.ecoScore,
                       alternative.ecoScore,
                     ),
-                    const Divider(),
-                    _buildComparisonRow(
+                    const SizedBox(height: 12),
+                    _buildDetailComparisonRow(
                       'Packaging',
                       scanned.packagingType,
                       alternative.materialType,
                     ),
-                    const Divider(),
-                    _buildComparisonRow(
+                    const SizedBox(height: 12),
+                    _buildDetailComparisonRow(
                       'Category',
                       scanned.category,
                       alternative.category,
@@ -686,40 +1095,64 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                     if (alternative.carbonSavings.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Container(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              kPrimaryGreen.withOpacity(0.1),
+                              kPrimaryGreen.withOpacity(0.15),
                               kPrimaryGreen.withOpacity(0.05),
                             ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: kPrimaryGreen.withOpacity(0.3),
+                            width: 2,
                           ),
                         ),
                         child: Column(
                           children: [
-                            Icon(Icons.eco, color: kPrimaryGreen, size: 40),
-                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: kPrimaryGreen.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.eco,
+                                color: kPrimaryGreen,
+                                size: 40,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                             const Text(
                               'Environmental Impact',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.black87,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              alternative.carbonSavings,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: kPrimaryGreen,
-                                fontWeight: FontWeight.w600,
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
                               ),
-                              textAlign: TextAlign.center,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                alternative.carbonSavings,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: kPrimaryGreen,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
                             ),
                             const SizedBox(height: 8),
                             Text(
@@ -727,6 +1160,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey.shade600,
+                                fontStyle: FontStyle.italic,
                               ),
                             ),
                           ],
@@ -736,25 +1170,52 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
 
                     const SizedBox(height: 24),
 
-                    // Action Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _openBuyLink(alternative.buyLink);
-                        },
-                        icon: const Icon(Icons.shopping_bag),
-                        label: const Text('Choose This Alternative'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: kPrimaryGreen,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                    // Action Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: BorderSide(
+                                color: Colors.grey.shade300,
+                                width: 2,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: const Text(
+                              'Close',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              _openBuyLink(alternative.buyLink);
+                            },
+                            icon: const Icon(Icons.shopping_bag),
+                            label: const Text('Choose This'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: kPrimaryGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                   ],
@@ -763,6 +1224,108 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildDetailComparisonRow(
+    String label,
+    String scannedValue,
+    String altValue,
+  ) {
+    bool altIsBetter = false;
+    if (label == 'Eco Score') {
+      altIsBetter = _ecoRank(altValue) < _ecoRank(scannedValue);
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    scannedValue.isEmpty || scannedValue == 'N/A'
+                        ? '-'
+                        : scannedValue,
+                    style: const TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(
+                  Icons.arrow_forward,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
+              ),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: altIsBetter
+                        ? kPrimaryGreen.withOpacity(0.1)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: altIsBetter ? kPrimaryGreen : Colors.grey.shade300,
+                      width: altIsBetter ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          altValue.isEmpty || altValue == 'N/A'
+                              ? '-'
+                              : altValue,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: altIsBetter ? kPrimaryGreen : Colors.black87,
+                            fontWeight: altIsBetter
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                      if (altIsBetter)
+                        Icon(
+                          Icons.check_circle,
+                          color: kPrimaryGreen,
+                          size: 16,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -918,9 +1481,20 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: kPrimaryGreen.withOpacity(0.3),
+                            width: 3,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: kPrimaryGreen.withOpacity(0.1),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(17),
                           child: p.imagePath.isNotEmpty
                               ? (p.imagePath.startsWith('http')
                                     ? Image.network(
@@ -928,7 +1502,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                                         fit: BoxFit.cover,
                                         errorBuilder: (ctx, err, st) => Icon(
                                           Icons.eco,
-                                          size: 60,
+                                          size: 48,
                                           color: kPrimaryGreen.withOpacity(0.3),
                                         ),
                                       )
@@ -937,14 +1511,16 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                                         fit: BoxFit.cover,
                                         errorBuilder: (ctx, err, st) => Icon(
                                           Icons.eco,
-                                          size: 60,
+                                          size: 48,
                                           color: kPrimaryGreen.withOpacity(0.3),
                                         ),
                                       ))
-                              : Icon(
-                                  Icons.eco,
-                                  size: 60,
-                                  color: kPrimaryGreen.withOpacity(0.3),
+                              : Center(
+                                  child: Icon(
+                                    Icons.eco,
+                                    size: 48,
+                                    color: kPrimaryGreen.withOpacity(0.3),
+                                  ),
                                 ),
                         ),
                       ),
@@ -1334,6 +1910,7 @@ Generate the alternatives now:''';
 
       debugPrint('✅ JSON parsed successfully, found ${decoded.length} items');
       final List<AlternativeProduct> generated = [];
+      int itemIndex = 0;
 
       for (final item in decoded) {
         if (item is! Map) continue;
@@ -1342,8 +1919,15 @@ Generate the alternatives now:''';
         if (name.isEmpty) continue;
 
         debugPrint('   ✓ Adding alternative: $name (${item['ecoScore']})');
+
+        // Generate unique ID using timestamp + index + name hash
+        final uniqueId =
+            '${DateTime.now().millisecondsSinceEpoch}_${itemIndex}_${name.hashCode.abs()}';
+        itemIndex++;
+
         generated.add(
           AlternativeProduct(
+            id: uniqueId,
             name: name,
             ecoScore: (item['ecoScore'] ?? item['eco_score'] ?? 'A').toString(),
             materialType: (item['material'] ?? item['packaging'] ?? '')
@@ -1582,6 +2166,7 @@ Generate the alternatives now:''';
     candidates.add('$base/alternatives.json');
 
     for (final url in candidates) {
+      int itemIndex = 0;
       try {
         final resp = await http
             .get(Uri.parse(url))
@@ -1608,8 +2193,15 @@ Generate the alternatives now:''';
                   .toString();
               final carbon = (item['carbonSavings'] ?? item['carbon'] ?? '')
                   .toString();
+
+              // Generate unique ID for Cloudinary products
+              final uniqueId =
+                  'cloudinary_${DateTime.now().millisecondsSinceEpoch}_${itemIndex}_${name.hashCode.abs()}';
+              itemIndex++;
+
               fetched.add(
                 AlternativeProduct(
+                  id: uniqueId,
                   name: name,
                   ecoScore: eco,
                   materialType: material,
@@ -1748,6 +2340,57 @@ Generate the alternatives now:''';
           'Better Alternatives',
           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
         ),
+        actions: [
+          // Wishlist Button
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.favorite, color: Colors.white),
+                onPressed: () {
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) => const ProductWishlistScreen(),
+                        ),
+                      )
+                      .then((_) {
+                        // Reload wishlist when returning from wishlist screen
+                        _loadWishlist();
+                      });
+                },
+                tooltip: 'My Wishlist',
+              ),
+              if (_wishlist.isNotEmpty)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 18,
+                      minHeight: 18,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${_wishlist.length > 9 ? '9+' : _wishlist.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: CustomScrollView(
         slivers: [
@@ -1968,6 +2611,9 @@ Generate the alternatives now:''';
               ),
             ),
           ),
+
+          // Recent Wishlist Section
+          _buildRecentWishlistSection(),
 
           // Filter Panel
           if (_showFilters && !_loading)

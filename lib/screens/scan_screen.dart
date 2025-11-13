@@ -11,6 +11,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'profile_screen.dart' as profile_screen;
 import 'alternative_screen.dart' as alternative_screen;
@@ -243,22 +244,10 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
         });
         _navigateToResultScreen(productData);
       } else {
-        // Product not found
+        // Product not found - Show contribution dialog
         setState(() => _isLoading = false);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Product not found in database (Barcode: $barcodeValue)',
-              ),
-              backgroundColor: Colors.orange,
-              action: SnackBarAction(
-                label: 'Retry',
-                textColor: Colors.white,
-                onPressed: () => setState(() => _isLoading = false),
-              ),
-            ),
-          );
+          _showProductContributionDialog(barcodeValue);
         }
       }
     } catch (e) {
@@ -272,21 +261,51 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
     }
   }
 
-  // Lookup product by barcode from Open Beauty Facts
+  // Lookup product by barcode from Open Food Facts AND Open Beauty Facts
   Future<ProductAnalysisData?> _lookupBarcode(String barcode) async {
     try {
-      final uri = Uri.parse(
-        'https://world.openbeautyfacts.org/api/v0/product/$barcode.json',
+      // Try Open Food Facts first (for food products)
+      debugPrint('🔍 Searching Open Food Facts for barcode: $barcode');
+      var uri = Uri.parse(
+        'https://world.openfoodfacts.org/api/v0/product/$barcode.json',
       );
-      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
-      if (resp.statusCode != 200) return null;
+      var resp = await http.get(uri).timeout(const Duration(seconds: 8));
 
-      final Map<String, dynamic> json = resp.body.isNotEmpty
-          ? (await Future.value(jsonDecode(resp.body)) as Map<String, dynamic>)
-          : {};
-      if (json['status'] != 1) return null; // Not found
+      Map<String, dynamic>? json;
+      Map<String, dynamic>? prod;
+      String database = 'Open Food Facts';
 
-      final prod = json['product'] as Map<String, dynamic>;
+      if (resp.statusCode == 200 && resp.body.isNotEmpty) {
+        json = jsonDecode(resp.body) as Map<String, dynamic>;
+        if (json['status'] == 1) {
+          prod = json['product'] as Map<String, dynamic>;
+          debugPrint('✅ Product found in Open Food Facts');
+        }
+      }
+
+      // If not found in Open Food Facts, try Open Beauty Facts
+      if (prod == null) {
+        debugPrint('🔍 Searching Open Beauty Facts for barcode: $barcode');
+        uri = Uri.parse(
+          'https://world.openbeautyfacts.org/api/v0/product/$barcode.json',
+        );
+        resp = await http.get(uri).timeout(const Duration(seconds: 8));
+
+        if (resp.statusCode == 200 && resp.body.isNotEmpty) {
+          json = jsonDecode(resp.body) as Map<String, dynamic>;
+          if (json['status'] == 1) {
+            prod = json['product'] as Map<String, dynamic>;
+            database = 'Open Beauty Facts';
+            debugPrint('✅ Product found in Open Beauty Facts');
+          }
+        }
+      }
+
+      // If still not found, return null
+      if (prod == null) {
+        debugPrint('❌ Product not found in either database');
+        return null;
+      }
 
       String name =
           (prod['product_name'] as String?) ??
@@ -392,6 +411,404 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
       // Camera not initialized, fallback to gallery/camera picker
       debugPrint("Camera not initialized, using image picker...");
       await _pickImage(ImageSource.camera);
+    }
+  }
+
+  // Show dialog to request user contribution for unknown product
+  Future<void> _showProductContributionDialog(String barcode) async {
+    final formKey = GlobalKey<FormState>();
+    final productNameController = TextEditingController();
+    final categoryController = TextEditingController();
+    final ingredientsController = TextEditingController();
+    final brandController = TextEditingController();
+
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.help_outline, color: Colors.orange, size: 40),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Product Not Found',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This product (Barcode: $barcode) is not in our database.',
+                  style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: kPrimaryGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: kPrimaryGreen.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.volunteer_activism,
+                        color: kPrimaryGreen,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Help us by adding it! Earn 10 eco points',
+                          style: TextStyle(
+                            color: kPrimaryGreen,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Product Name Field
+                TextFormField(
+                  controller: productNameController,
+                  decoration: InputDecoration(
+                    labelText: 'Product Name *',
+                    hintText: 'e.g., Organic Shampoo',
+                    prefixIcon: Icon(Icons.shopping_bag, color: kPrimaryGreen),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: kPrimaryGreen, width: 2),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Product name is required';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Brand Field
+                TextFormField(
+                  controller: brandController,
+                  decoration: InputDecoration(
+                    labelText: 'Brand (Optional)',
+                    hintText: 'e.g., Green & Clean',
+                    prefixIcon: Icon(Icons.business, color: kPrimaryGreen),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: kPrimaryGreen, width: 2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Category Field
+                TextFormField(
+                  controller: categoryController,
+                  decoration: InputDecoration(
+                    labelText: 'Category *',
+                    hintText: 'e.g., Personal Care, Food, etc.',
+                    prefixIcon: Icon(Icons.category, color: kPrimaryGreen),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: kPrimaryGreen, width: 2),
+                    ),
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Category is required';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Ingredients Field
+                TextFormField(
+                  controller: ingredientsController,
+                  decoration: InputDecoration(
+                    labelText: 'Ingredients (Optional)',
+                    hintText: 'List main ingredients',
+                    prefixIcon: Icon(Icons.list_alt, color: kPrimaryGreen),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: kPrimaryGreen, width: 2),
+                    ),
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '* Required fields',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              setState(() => _isBarcodeMode = false);
+            },
+            child: Text('Skip', style: TextStyle(color: Colors.grey.shade600)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                // Save contribution
+                await _saveProductContribution(
+                  barcode: barcode,
+                  productName: productNameController.text.trim(),
+                  brand: brandController.text.trim(),
+                  category: categoryController.text.trim(),
+                  ingredients: ingredientsController.text.trim(),
+                );
+                Navigator.of(context).pop();
+                setState(() => _isBarcodeMode = false);
+              }
+            },
+            icon: const Icon(Icons.send, size: 18),
+            label: const Text('Submit & Earn 10 Points'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: kPrimaryGreen,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Save user contribution to Firestore and award points
+  Future<void> _saveProductContribution({
+    required String barcode,
+    required String productName,
+    required String brand,
+    required String category,
+    required String ingredients,
+  }) async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please sign in to contribute')),
+          );
+        }
+        return;
+      }
+
+      // Show loading
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) =>
+              const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      // Save to user_contributions collection
+      await FirebaseFirestore.instance.collection('user_contributions').add({
+        'barcode': barcode,
+        'productName': productName,
+        'brand': brand,
+        'category': category,
+        'ingredients': ingredients,
+        'contributedBy': user.uid,
+        'contributedAt': FieldValue.serverTimestamp(),
+        'status': 'pending', // Can be reviewed by admin later
+      });
+
+      // Award 10 eco points
+      final now = DateTime.now();
+      final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      final monthlyPointsRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('monthly_points')
+          .doc(monthKey);
+
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final monthlyDoc = await transaction.get(monthlyPointsRef);
+
+        if (monthlyDoc.exists) {
+          final currentPoints = monthlyDoc.data()?['points'] ?? 0;
+          transaction.update(monthlyPointsRef, {'points': currentPoints + 10});
+        } else {
+          transaction.set(monthlyPointsRef, {
+            'points': 10,
+            'goal': 500,
+            'month': monthKey,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+        }
+      });
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      // Show success dialog
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: kPrimaryGreen.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: kPrimaryGreen,
+                    size: 32,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Thank You!',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your contribution helps build a better database for everyone!',
+                  style: TextStyle(fontSize: 15, color: Colors.grey.shade700),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        kPrimaryGreen.withOpacity(0.1),
+                        kPrimaryGreen.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.eco, color: kPrimaryGreen, size: 28),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '+10 Eco Points',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: kPrimaryGreen,
+                            ),
+                          ),
+                          Text(
+                            'Added to your account',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimaryGreen,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        );
+      }
+
+      debugPrint('✅ Product contribution saved and 10 points awarded');
+    } catch (e) {
+      debugPrint('❌ Error saving contribution: $e');
+
+      // Close loading dialog if open
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save contribution: $e')),
+        );
+      }
     }
   }
 
@@ -1248,7 +1665,7 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
               const SizedBox(width: 8),
               Text(
                 _isBarcodeMode
-                    ? 'Scanning barcode from database...'
+                    ? 'Scanning from Open Food Facts & Open Beauty Facts...'
                     : 'Scan image or barcode for eco-insights',
                 textAlign: TextAlign.center,
                 style: TextStyle(
