@@ -74,6 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isTipBookmarked = false;
   String _todayDateString = '';
 
+  // Cache the future to prevent rebuilds
+  late Future<Map<String, String>> _tipFuture;
+
   // Use theme colors from constants
   final primaryGreen = const Color(0xFF4CAF50);
   final yellowAccent = const Color(0xFFFFEB3B);
@@ -126,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _todayDateString = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    _tipFuture = _fetchTodayTip(); // Cache the future once
     _loadUserData();
     _loadDailyChallengeData();
     _loadMonthlyEcoPoints();
@@ -1534,7 +1538,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   // Today's Tips Card - Enhanced with Bookmark & Share
                   FutureBuilder<Map<String, String>>(
-                    future: _fetchTodayTip(),
+                    future:
+                        _tipFuture, // Use cached future instead of calling function
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return _buildModernTipCard(
