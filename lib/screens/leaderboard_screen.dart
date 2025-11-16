@@ -3,7 +3,6 @@ import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:ecopilot_test/utils/rank_utils.dart' as rank_utils;
-import 'dart:math' as math;
 
 class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
@@ -17,6 +16,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   late Future<List<Map<String, dynamic>>> _future;
   int _currentUserRank = 0;
   int _currentUserPoints = 0;
+  String _selectedFilter = 'All time';
 
   @override
   void initState() {
@@ -27,7 +27,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Reload leaderboard when coming back to this screen
     _loadLeaderboard();
   }
 
@@ -71,293 +70,221 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final currentUid = _service.currentUser?.uid;
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: RefreshIndicator(
-        onRefresh: () async {
-          _loadLeaderboard();
-          await _future;
-        },
-        color: kPrimaryGreen,
-        child: CustomScrollView(
-          slivers: [
-            // Stunning Animated Hero Header
-            SliverAppBar(
-              expandedHeight: 240,
-              floating: false,
-              pinned: true,
-              backgroundColor: kPrimaryGreen,
-              iconTheme: const IconThemeData(color: Colors.white),
-              flexibleSpace: FlexibleSpaceBar(
-                title: const Text(
-                  'Leaderboard',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 20,
-                  ),
-                ),
-                background: Stack(
-                  children: [
-                    // Animated Gradient Background
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            const Color(0xFF1DB954),
-                            kPrimaryGreen,
-                            kPrimaryGreen.withOpacity(0.85),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Decorative circles
-                    Positioned(
-                      top: -50,
-                      right: -50,
-                      child: Container(
-                        width: 200,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.1),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: -30,
-                      left: -30,
-                      child: Container(
-                        width: 150,
-                        height: 150,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(0.05),
-                        ),
-                      ),
-                    ),
-                    // Trophy Icon with glow effect
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 60, 20, 50),
-                        child: Row(
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              kPrimaryGreen.withOpacity(0.9),
+              kPrimaryGreen.withOpacity(0.7),
+              kPrimaryGreen.withOpacity(0.5),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              _loadLeaderboard();
+              await _future;
+            },
+            color: Colors.white,
+            child: CustomScrollView(
+              slivers: [
+                // Header with Title and Filter Tabs
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 30, 20, 20),
+                    child: Column(
+                      children: [
+                        // Trophy icon with title
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Glow effect
-                                Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.amber.withOpacity(0.5),
-                                        blurRadius: 30,
-                                        spreadRadius: 10,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.emoji_events,
-                                  color: Colors.amber.shade300,
-                                  size: 56,
-                                ),
-                              ],
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.emoji_events,
+                                color: kPrimaryYellow,
+                                size: 32,
+                              ),
                             ),
-                            const SizedBox(width: 20),
-                            Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Your Points',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.9),
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Text(
-                                      '$_currentUserPoints',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      Icons.stars,
-                                      color: Colors.amber.shade300,
-                                      size: 24,
-                                    ),
-                                  ],
-                                ),
-                                if (_currentUserRank > 0)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 4),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.3),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      'Rank #$_currentUserRank',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                              ],
+                            const SizedBox(width: 16),
+                            const Text(
+                              'LEADERBOARD',
+                              style: TextStyle(
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                letterSpacing: 1.5,
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // Content Section
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: _future,
-                  builder: (context, snap) {
-                    if (snap.connectionState == ConnectionState.waiting) {
-                      return _buildLoadingState();
-                    }
-                    if (snap.hasError) {
-                      return _buildErrorState(snap.error.toString());
-                    }
-                    final list = snap.data ?? [];
-                    if (list.isEmpty) {
-                      return _buildEmptyState();
-                    }
-
-                    // Find current user rank
-                    if (currentUid != null) {
-                      final userIndex = list.indexWhere(
-                        (item) => item['uid'] == currentUid,
-                      );
-                      if (userIndex >= 0) {
-                        _currentUserRank = userIndex + 1;
-                      }
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Top 3 Podium
-                        if (list.length >= 3) _buildTopThreePodium(list),
-                        const SizedBox(height: 30),
-
-                        // Section Header
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 16),
-                          child: Text(
-                            'ALL RANKINGS',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.grey.shade600,
-                              letterSpacing: 1.2,
-                            ),
+                        const SizedBox(height: 24),
+                        // Filter tabs with better design
+                        Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildFilterTab('All time', true),
+                              _buildFilterTab('This Week', false),
+                              _buildFilterTab('This Month', false),
+                            ],
                           ),
                         ),
-
-                        // Rest of Rankings
-                        ...List.generate(
-                          list.length,
-                          (idx) =>
-                              _buildRankingCard(list[idx], idx + 1, currentUid),
-                        ),
-
-                        const SizedBox(height: 80),
                       ],
-                    );
-                  },
+                    ),
+                  ),
                 ),
-              ),
+                // Content
+                SliverToBoxAdapter(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _future,
+                    builder: (context, snap) {
+                      if (snap.connectionState == ConnectionState.waiting) {
+                        return _buildLoadingState();
+                      }
+                      if (snap.hasError) {
+                        return _buildErrorState(snap.error.toString());
+                      }
+                      final list = snap.data ?? [];
+                      if (list.isEmpty) {
+                        return _buildEmptyState();
+                      }
+
+                      // Find current user rank
+                      if (currentUid != null) {
+                        for (int i = 0; i < list.length; i++) {
+                          if (list[i]['uid'] == currentUid) {
+                            _currentUserRank = i + 1;
+                            break;
+                          }
+                        }
+                      }
+
+                      return Column(
+                        children: [
+                          _buildTopThreePodium(list),
+                          const SizedBox(height: 8),
+                          // Section divider
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    height: 1,
+                                    color: Colors.white.withOpacity(0.2),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                  child: Text(
+                                    'ALL RANKINGS',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white.withOpacity(0.7),
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Container(
+                                    height: 1,
+                                    color: Colors.white.withOpacity(0.2),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                            ),
+                            child: Column(
+                              children: [
+                                for (int i = 0; i < list.length; i++)
+                                  _buildRankingCard(list[i], i + 1, currentUid),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 30),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  // Loading State Widget
-  Widget _buildLoadingState() {
-    return Container(
-      padding: const EdgeInsets.all(48),
-      child: Column(
-        children: [
-          CircularProgressIndicator(color: kPrimaryGreen),
-          const SizedBox(height: 24),
-          Text(
-            'Loading rankings...',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
+  Widget _buildFilterTab(String label, bool isSelected) {
+    return Expanded(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? kPrimaryYellow : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.black : Colors.white,
           ),
-        ],
+        ),
       ),
     );
   }
 
-  // Error State Widget
+  Widget _buildLoadingState() {
+    return Container(
+      padding: const EdgeInsets.all(48),
+      child: const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      ),
+    );
+  }
+
   Widget _buildErrorState(String error) {
-    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.red.shade200),
-      ),
       child: Column(
         children: [
-          Icon(Icons.error_outline, size: 64, color: Colors.red.shade400),
+          const Icon(Icons.error_outline, size: 64, color: Colors.white),
           const SizedBox(height: 16),
           const Text(
             'Unable to Load Leaderboard',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: Colors.white,
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Please check your internet connection and try again.',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -369,8 +296,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimaryGreen,
-              foregroundColor: Colors.white,
+              backgroundColor: Colors.white,
+              foregroundColor: kPrimaryGreen,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -382,300 +309,99 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  // Empty State Widget
   Widget _buildEmptyState() {
     return Container(
       padding: const EdgeInsets.all(48),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            kPrimaryGreen.withOpacity(0.1),
-            Colors.blue.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: kPrimaryGreen.withOpacity(0.3), width: 2),
-      ),
       child: Column(
         children: [
-          // Animated Trophy Icon
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [
-                      Colors.amber.withOpacity(0.3),
-                      Colors.amber.withOpacity(0.1),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: kPrimaryGreen.withOpacity(0.1),
-                ),
-                child: Icon(
-                  Icons.emoji_events,
-                  size: 60,
-                  color: Colors.amber.shade400,
-                ),
-              ),
-            ],
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white24,
+            ),
+            child: const Icon(
+              Icons.emoji_events,
+              size: 60,
+              color: Colors.white,
+            ),
           ),
-
           const SizedBox(height: 24),
-
-          // Title
           const Text(
-            'Be the First Champion! 🏆',
+            'No Rankings Yet',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.black87,
+              color: Colors.white,
             ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Start earning points to see rankings!',
             textAlign: TextAlign.center,
-          ),
-
-          const SizedBox(height: 12),
-
-          // Description
-          Text(
-            'Start earning points and compete with others!',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade600),
-          ),
-
-          const SizedBox(height: 32),
-
-          // Action Cards
-          _buildActionCard(
-            icon: Icons.qr_code_scanner,
-            title: 'Scan Products',
-            description: 'Earn points by scanning eco-friendly products',
-            color: Colors.green,
-          ),
-          const SizedBox(height: 12),
-          _buildActionCard(
-            icon: Icons.emoji_events,
-            title: 'Complete Challenges',
-            description: 'Take on daily challenges to boost your score',
-            color: Colors.orange,
-          ),
-          const SizedBox(height: 12),
-          _buildActionCard(
-            icon: Icons.eco,
-            title: 'Go Green',
-            description: 'Make sustainable choices and climb the ranks',
-            color: kPrimaryGreen,
-          ),
-
-          const SizedBox(height: 24),
-
-          // Info Box
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.blue.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: Colors.blue.shade700),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Start your eco-journey today and compete with friends!',
-                    style: TextStyle(color: Colors.blue.shade900, fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.white70),
           ),
         ],
       ),
     );
   }
 
-  // Action Card Helper
-  Widget _buildActionCard({
-    required IconData icon,
-    required String title,
-    required String description,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [color, color.withOpacity(0.8)],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: Colors.white, size: 24),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Top 3 Podium Widget - Enhanced Design
   Widget _buildTopThreePodium(List<Map<String, dynamic>> list) {
     final first = list.isNotEmpty ? list[0] : null;
     final second = list.length > 1 ? list[1] : null;
     final third = list.length > 2 ? list[2] : null;
 
     return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Colors.amber.withOpacity(0.1),
-            kPrimaryGreen.withOpacity(0.1),
-            Colors.blue.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.amber.withOpacity(0.3), width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.amber.withOpacity(0.2),
-            blurRadius: 20,
-            spreadRadius: 5,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1.5),
       ),
       child: Column(
         children: [
-          // Animated Title
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.amber.shade400, Colors.amber.shade600],
+          // Crown icon with glow effect
+          if (first != null)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: kPrimaryYellow.withOpacity(0.2),
+                shape: BoxShape.circle,
               ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.amber.withOpacity(0.4),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
+              child: const Icon(
+                Icons.workspace_premium,
+                color: kPrimaryYellow,
+                size: 48,
+              ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.stars, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                const Text(
-                  'TOP PERFORMERS',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.stars, color: Colors.white, size: 20),
-              ],
+          const SizedBox(height: 8),
+          const Text(
+            'TOP PERFORMERS',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+              letterSpacing: 2,
             ),
           ),
-          const SizedBox(height: 32),
-          // Podium with better spacing
+          const SizedBox(height: 24),
+          // Podium layout - reordered to show 2, 1, 3
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // Second Place
+              // Second Place (left)
               if (second != null)
-                Expanded(
-                  child: _buildEnhancedPodiumItem(
-                    second,
-                    2,
-                    120,
-                    Colors.grey.shade400,
-                    Colors.grey.shade50,
-                  ),
-                ),
-              const SizedBox(width: 8),
-              // First Place (Tallest)
+                Expanded(child: _buildPodiumItem(second, 2, 75)),
+              const SizedBox(width: 16),
+              // First Place (center - larger)
               if (first != null)
-                Expanded(
-                  child: _buildEnhancedPodiumItem(
-                    first,
-                    1,
-                    150,
-                    Colors.amber.shade400,
-                    Colors.amber.shade50,
-                  ),
-                ),
-              const SizedBox(width: 8),
-              // Third Place
+                Expanded(child: _buildPodiumItem(first, 1, 100)),
+              const SizedBox(width: 16),
+              // Third Place (right)
               if (third != null)
-                Expanded(
-                  child: _buildEnhancedPodiumItem(
-                    third,
-                    3,
-                    100,
-                    Colors.orange.shade400,
-                    Colors.orange.shade50,
-                  ),
-                ),
+                Expanded(child: _buildPodiumItem(third, 3, 75)),
             ],
           ),
         ],
@@ -683,63 +409,75 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
-  // Enhanced Podium Item Widget with better animations and design
-  Widget _buildEnhancedPodiumItem(
+  Widget _buildPodiumItem(
     Map<String, dynamic> item,
     int rank,
-    double height,
-    Color medalColor,
-    Color backgroundColor,
+    double avatarSize,
   ) {
     final name = (item['name'] ?? 'Anonymous') as String;
     final photo = (item['photoUrl'] ?? '') as String;
     final points = (item['ecoScore'] ?? 0) as int;
 
+    // Extract username from full name or email
+    String displayName = name;
+    if (name.contains('@')) {
+      displayName = '@${name.split('@')[0]}';
+    } else if (name.contains(' ')) {
+      displayName = '@${name.split(' ')[0].toLowerCase()}';
+    } else {
+      displayName = '@$name';
+    }
+
+    // Medal emoji based on rank
+    final medal = rank == 1
+        ? '🥇'
+        : rank == 2
+        ? '🥈'
+        : '🥉';
+
+    // Border color
+    final borderColor = rank == 1
+        ? kPrimaryYellow
+        : rank == 2
+        ? Colors.grey.shade300
+        : Colors.orange.shade300;
+
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // Crown for first place
-        if (rank == 1)
-          Transform.rotate(
-            angle: -math.pi / 12,
-            child: const Icon(
-              Icons.workspace_premium,
-              color: Colors.amber,
-              size: 28,
-            ),
-          ),
-        if (rank == 1) const SizedBox(height: 4),
-        // Profile Picture with Medal and Glow
+        // Medal badge
+        Text(medal, style: TextStyle(fontSize: rank == 1 ? 32 : 28)),
+        const SizedBox(height: 8),
+        // Profile Picture with shadow
         Stack(
-          clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
-            // Glow effect
+            // Shadow/glow effect
             Container(
-              width: rank == 1 ? 90 : 70,
-              height: rank == 1 ? 90 : 70,
+              width: avatarSize + 8,
+              height: avatarSize + 8,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: medalColor.withOpacity(0.5),
+                    color: borderColor.withOpacity(0.5),
                     blurRadius: 20,
-                    spreadRadius: 5,
+                    spreadRadius: 2,
                   ),
                 ],
               ),
             ),
-            // Profile picture container
+            // Avatar
             Container(
-              width: rank == 1 ? 80 : 60,
-              height: rank == 1 ? 80 : 60,
+              width: avatarSize,
+              height: avatarSize,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: medalColor, width: 3),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [backgroundColor, backgroundColor.withOpacity(0.8)],
+                border: Border.all(
+                  color: borderColor,
+                  width: rank == 1 ? 4 : 3,
                 ),
+                color: Colors.white,
               ),
               child: CircleAvatar(
                 backgroundColor: Colors.grey.shade200,
@@ -750,126 +488,58 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                     ? Icon(
                         Icons.person,
                         color: Colors.grey.shade600,
-                        size: rank == 1 ? 36 : 28,
+                        size: avatarSize * 0.5,
                       )
                     : null,
-              ),
-            ),
-            // Medal badge
-            Positioned(
-              bottom: -8,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [medalColor, medalColor.withOpacity(0.8)],
-                  ),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: medalColor.withOpacity(0.4),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Text(
-                  rank == 1
-                      ? '🥇'
-                      : rank == 2
-                      ? '🥈'
-                      : '🥉',
-                  style: const TextStyle(fontSize: 18),
-                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 12),
-        // Name
+        // Username
         Text(
-          name,
+          displayName,
           textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: rank == 1 ? 14 : 12,
+            fontSize: rank == 1 ? 15 : 13,
             fontWeight: FontWeight.bold,
-            color: Colors.black87,
+            color: Colors.white,
           ),
         ),
         const SizedBox(height: 6),
         // Points badge
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [medalColor, medalColor.withOpacity(0.8)],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: medalColor.withOpacity(0.3),
-                blurRadius: 8,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            color: Colors.white.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.stars, color: Colors.white, size: rank == 1 ? 16 : 14),
+              Icon(
+                Icons.star,
+                size: rank == 1 ? 14 : 12,
+                color: kPrimaryYellow,
+              ),
               const SizedBox(width: 4),
               Text(
                 '$points',
                 style: TextStyle(
                   fontSize: rank == 1 ? 13 : 11,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: kPrimaryGreen,
                 ),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Podium base
-        Container(
-          height: height,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [backgroundColor, backgroundColor.withOpacity(0.7)],
-            ),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            border: Border.all(color: medalColor, width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: medalColor.withOpacity(0.2),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              '#$rank',
-              style: TextStyle(
-                fontSize: rank == 1 ? 40 : 32,
-                fontWeight: FontWeight.bold,
-                color: medalColor,
-              ),
-            ),
           ),
         ),
       ],
     );
   }
 
-  // Enhanced Ranking Card Widget with modern design
   Widget _buildRankingCard(
     Map<String, dynamic> item,
     int rank,
@@ -881,258 +551,158 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final points = (item['ecoScore'] ?? 0) as int;
     final isCurrent = (currentUid != null && currentUid == uid);
 
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
-    // Get rank color based on points
-    final rankColor = getRankColor(points);
-    final rankTitle = getRankTitle(points);
-
     // Skip top 3 as they're shown in podium
     if (rank <= 3) return const SizedBox.shrink();
 
+    // Extract username
+    String displayName = name;
+    if (name.contains('@')) {
+      displayName = '@${name.split('@')[0]}';
+    } else if (name.contains(' ')) {
+      displayName = '@${name.split(' ')[0].toLowerCase()}';
+    } else {
+      displayName = '@$name';
+    }
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        gradient: isCurrent
-            ? LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  kPrimaryGreen.withOpacity(0.15),
-                  kPrimaryGreen.withOpacity(0.05),
-                ],
-              )
-            : null,
-        color: isCurrent ? null : theme.cardColor,
+        color: Colors.white.withOpacity(isCurrent ? 0.2 : 0.1),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: isCurrent
-              ? kPrimaryGreen
-              : isDark
-              ? Colors.grey.shade800
-              : Colors.grey.shade200,
-          width: isCurrent ? 2.5 : 1,
+          color: isCurrent ? kPrimaryYellow : Colors.white.withOpacity(0.15),
+          width: isCurrent ? 2 : 1,
         ),
-        boxShadow: [
-          if (isCurrent)
-            BoxShadow(
-              color: kPrimaryGreen.withOpacity(0.3),
-              blurRadius: 15,
-              spreadRadius: 2,
-              offset: const Offset(0, 6),
-            )
-          else
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-        ],
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 12,
-        ),
-        leading: Row(
-          mainAxisSize: MainAxisSize.min,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
           children: [
-            // Rank Badge with gradient
+            // Rank badge
             Container(
-              width: 48,
-              height: 48,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    _getRankBadgeColor(rank),
-                    _getRankBadgeColor(rank).withOpacity(0.8),
+                    Colors.white.withOpacity(0.3),
+                    Colors.white.withOpacity(0.2),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: [
-                  BoxShadow(
-                    color: _getRankBadgeColor(rank).withOpacity(0.4),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
                 child: Text(
-                  '#$rank',
+                  '$rank',
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 16),
-            // Profile Picture with rank-colored border
+            const SizedBox(width: 14),
+            // Profile Picture
             Container(
-              width: 56,
-              height: 56,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: rankColor, width: 2.5),
+                border: Border.all(
+                  color: isCurrent
+                      ? kPrimaryYellow
+                      : Colors.white.withOpacity(0.5),
+                  width: 2,
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: rankColor.withOpacity(0.3),
+                    color: Colors.black.withOpacity(0.1),
                     blurRadius: 8,
-                    offset: const Offset(0, 4),
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
               child: CircleAvatar(
-                backgroundColor: Colors.grey.shade100,
+                backgroundColor: Colors.grey.shade200,
                 backgroundImage: photo.isNotEmpty
                     ? CachedNetworkImageProvider(photo)
                     : null,
                 child: photo.isEmpty
-                    ? Icon(Icons.person, color: Colors.grey.shade600, size: 26)
+                    ? Icon(Icons.person, color: Colors.grey.shade600, size: 24)
                     : null,
               ),
             ),
-          ],
-        ),
-        title: Row(
-          children: [
+            const SizedBox(width: 14),
+            // Name and points
             Expanded(
-              child: Text(
-                name,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: isCurrent ? kPrimaryGreen : Colors.black87,
-                ),
-              ),
-            ),
-            if (isCurrent)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: kPrimaryGreen.withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: const Text(
-                  'YOU',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Row(
-            children: [
-              Icon(Icons.eco, size: 14, color: rankColor),
-              const SizedBox(width: 4),
-              Text(
-                rankTitle,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: rankColor,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                isCurrent ? kPrimaryGreen : Colors.grey.shade100,
-                isCurrent
-                    ? kPrimaryGreen.withOpacity(0.8)
-                    : Colors.grey.shade50,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isCurrent ? kPrimaryGreen : Colors.grey.shade300,
-              width: 1.5,
-            ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.stars,
-                    size: 18,
-                    color: isCurrent ? Colors.white : Colors.amber.shade700,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          displayName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isCurrent) const SizedBox(width: 8),
+                      if (isCurrent)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kPrimaryYellow,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'YOU',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '$points',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                      color: isCurrent ? Colors.white : Colors.black87,
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(Icons.star, size: 14, color: kPrimaryYellow),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$points points',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.8),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              Text(
-                'points',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isCurrent ? Colors.white70 : Colors.grey.shade600,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
+            ),
+            // Chevron icon
+            Icon(
+              Icons.chevron_right,
+              color: Colors.white.withOpacity(0.3),
+              size: 24,
+            ),
+          ],
         ),
       ),
     );
-  }
-
-  // Get rank badge color based on position
-  Color _getRankBadgeColor(int rank) {
-    if (rank == 1) return Colors.amber.shade600;
-    if (rank == 2) return Colors.grey.shade600;
-    if (rank == 3) return Colors.orange.shade600;
-    if (rank <= 10) return kPrimaryGreen;
-    return Colors.grey.shade400;
-  }
-
-  // Get rank color based on points
-  Color getRankColor(int points) {
-    final rankInfo = rank_utils.rankForPoints(points);
-    return rankInfo.color;
-  }
-
-  // Get rank title based on points
-  String getRankTitle(int points) {
-    final rankInfo = rank_utils.rankForPoints(points);
-    return rankInfo.title;
   }
 }

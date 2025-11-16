@@ -1288,10 +1288,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       onPageChanged: (index) {
                         // Update slider index without triggering full rebuild
                         _currentSlideIndex = index;
-                        // Force update only for the indicator dots
-                        if (mounted) {
-                          setState(() {});
-                        }
+                        // Removed setState to prevent refreshing the entire screen
+                        // including the StreamBuilder for recent activity
                       },
                       itemCount: _sliderImages.length,
                       itemBuilder: (context, index) {
