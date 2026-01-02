@@ -8,20 +8,27 @@ service cloud.firestore {
     // ========================================
     // Main user profiles with eco points, rank, streak tracking
     match /users/{userId} {
-      // Allow authenticated user to read & write their own profile
+      // Allow authenticated user to read their own profile and any other user profile (for leaderboards)
       allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
       
-      // Validate user document structure
+      // Allow authenticated user to update their own profile
+      allow update: if request.auth != null && request.auth.uid == userId;
+      
+      // Validate user document structure on create
       allow create: if request.auth != null 
                     && request.auth.uid == userId
                     && request.resource.data.keys().hasAll(['name', 'email'])
                     && request.resource.data.ecoPoints is int
                     && request.resource.data.streakCount is int;
+      
+      // Allow user to delete their own profile
+      allow delete: if request.auth != null && request.auth.uid == userId;
 
       // Point History subcollection: /users/{userId}/point_history/{historyId}
+      // Allow all authenticated users to read (for leaderboard calculations)
+      // Only allow owner to write
       match /point_history/{historyId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null;
         allow write: if request.auth != null && request.auth.uid == userId;
       }
 
@@ -47,6 +54,14 @@ service cloud.firestore {
       match /wishlist/{productId} {
         allow read: if request.auth != null && request.auth.uid == userId;
         allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Redemptions subcollection: /users/{userId}/redemptions/{redemptionId}
+      match /redemptions/{redemptionId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null && request.auth.uid == userId;
+        allow update: if request.auth != null && request.auth.uid == userId;
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
     }
 
@@ -241,6 +256,21 @@ service cloud.firestore {
       
       // Prevent deletion by regular users (only admins via console)
       allow delete: if false;
+    }
+
+    // ========================================
+    // REDEMPTION OFFERS COLLECTION
+    // ========================================
+    // Redemption offers available to all users
+    match /redemption_offers/{offerId} {
+      // All authenticated users can read redemption offers
+      allow read: if request.auth != null;
+      
+      // Only authenticated users can create offers (for seeding sample data)
+      allow create: if request.auth != null;
+      
+      // Only admins can update or delete offers
+      allow update, delete: if false;
     }
 
     // ========================================

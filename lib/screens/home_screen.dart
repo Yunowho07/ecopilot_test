@@ -1,13 +1,11 @@
 import 'dart:async';
 import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart'; // Required for date formatting
 import 'package:share_plus/share_plus.dart';
 import '../auth/firebase_service.dart';
-import '/auth/landing.dart';
 import 'profile_screen.dart';
 import 'alternative_screen.dart';
 import '/screens/scan_screen.dart';
@@ -137,6 +135,14 @@ class _HomeScreenState extends State<HomeScreen> {
     _ensureTipsExist();
     _checkIfTipBookmarked();
     _startSliderTimer();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh monthly points when returning to this screen
+    _loadMonthlyEcoPoints();
+    _loadDailyChallengeData();
   }
 
   @override
@@ -275,11 +281,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final user = _firebaseService.currentUser;
       if (user == null) return;
 
-      // Get current month string (e.g., "2025-11")
+      // Get current month string (e.g., "2026-01")
       final now = DateTime.now();
       final monthKey = DateFormat('yyyy-MM').format(now);
 
-      // Fetch user's monthly points document
+      debugPrint('🔍 Loading monthly points for user: ${user.uid}');
+      debugPrint('📅 Month key: $monthKey');
+
+      // Read directly from monthly_points document (same source as addEcoPoints writes to)
       final monthlyDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -287,35 +296,39 @@ class _HomeScreenState extends State<HomeScreen> {
           .doc(monthKey)
           .get();
 
+      int monthlyPoints = 0;
+      int monthlyGoal = 500;
+
       if (monthlyDoc.exists) {
         final data = monthlyDoc.data();
-        if (mounted) {
-          setState(() {
-            _monthlyEcoPoints = data?['points'] ?? 0;
-            _monthlyGoal = data?['goal'] ?? 500;
-          });
-        }
+        monthlyPoints = data?['points'] ?? 0;
+        monthlyGoal = data?['goal'] ?? 500;
+        debugPrint(
+          '✅ Monthly points loaded from document: $monthlyPoints / $monthlyGoal',
+        );
       } else {
-        // Initialize monthly points document
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('monthly_points')
-            .doc(monthKey)
-            .set({
-              'points': 0,
-              'goal': 500,
-              'month': monthKey,
-              'createdAt': FieldValue.serverTimestamp(),
-            });
+        debugPrint(
+          '⚠️ No monthly points document found for $monthKey, starting at 0',
+        );
       }
+
+      if (mounted) {
+        setState(() {
+          _monthlyEcoPoints = monthlyPoints;
+          _monthlyGoal = monthlyGoal;
+        });
+      }
+
+      debugPrint(
+        '✅ Monthly points updated: $monthlyPoints / $monthlyGoal (${monthlyGoal > 0 ? ((monthlyPoints / monthlyGoal) * 100).toStringAsFixed(1) : 0}%)',
+      );
     } catch (e) {
-      debugPrint('Error loading monthly eco points: $e');
+      debugPrint('❌ Error loading monthly eco points: $e');
     }
   }
 
   // Fetch user data from the service
-  void _loadUserData() {
+  Future<void> _loadUserData() async {
     final user = _firebaseService.currentUser;
     if (user != null) {
       setState(() {
@@ -334,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // Load today's challenge data from Firestore
-  void _loadDailyChallengeData() async {
+  Future<void> _loadDailyChallengeData() async {
     // 1. Get today's date string
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
     final user = _firebaseService.currentUser;
@@ -384,24 +397,6 @@ class _HomeScreenState extends State<HomeScreen> {
           false,
         );
       });
-    }
-  }
-
-  Future<void> _handleSignOut() async {
-    try {
-      await FirebaseService().signOut();
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AuthLandingScreen()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Sign out failed: $e')));
-      }
     }
   }
 
@@ -944,7 +939,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Modern Challenge Card Widget
   Widget _buildModernChallengeCard() {
-    final theme = Theme.of(context);
     final challenge = _dailyChallenge;
     final isCompleted = challenge?.isCompleted ?? false;
     final challengeText = challenge != null ? challenge.title : _challenge;
@@ -968,13 +962,11 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: theme.cardColor,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: theme.brightness == Brightness.dark
-                  ? Colors.black.withOpacity(0.3)
-                  : Colors.black.withOpacity(0.08),
+              color: Colors.black.withOpacity(0.08),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -1124,7 +1116,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Modern Score Card Widget
   Widget _buildModernScoreCard() {
-    final theme = Theme.of(context);
     final progress = _monthlyGoal > 0
         ? (_monthlyEcoPoints / _monthlyGoal).clamp(0.0, 1.0)
         : 0.0;
@@ -1225,17 +1216,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Empty Activity Card
   Widget _buildEmptyActivityCard() {
-    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
-        color: theme.cardColor,
+        color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.brightness == Brightness.dark
-              ? Colors.grey.shade800
-              : Colors.grey.shade200,
-        ),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Column(
         children: [
@@ -1260,418 +1246,443 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // Refresh all data
+  Future<void> _refreshData() async {
+    await Future.wait([
+      _loadMonthlyEcoPoints(),
+      _loadDailyChallengeData(),
+      _loadUserData(),
+    ]);
+    debugPrint('🔄 Home screen data refreshed');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: Colors.grey.shade50,
       drawer: const AppDrawer(),
-      body: CustomScrollView(
-        slivers: [
-          // Hero Header with Gradient
-          SliverAppBar(
-            expandedHeight: 240,
-            floating: false,
-            pinned: true,
-            automaticallyImplyLeading: false,
-            backgroundColor: kPrimaryGreen,
-            flexibleSpace: FlexibleSpaceBar(
-              background: Stack(
-                children: [
-                  // Image Slider Background
-                  Positioned.fill(
-                    child: PageView.builder(
-                      controller: _pageController,
-                      onPageChanged: (index) {
-                        // Update slider index without triggering full rebuild
-                        _currentSlideIndex = index;
-                        // Removed setState to prevent refreshing the entire screen
-                        // including the StreamBuilder for recent activity
-                      },
-                      itemCount: _sliderImages.length,
-                      itemBuilder: (context, index) {
-                        return Image.asset(
-                          _sliderImages[index],
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            // Fallback to gradient if images not found
-                            return Container(
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    kPrimaryGreen,
-                                    kPrimaryGreen.withOpacity(0.85),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                  // Gradient Overlay for better text visibility
-                  Positioned.fill(
-                    child: Container(
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Colors.black],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Content
-                  Container(
-                    child: SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            // Greeting
-                            Text(
-                              'Hello!',
-                              style: TextStyle(
-                                fontSize: 20,
-                                color: Colors.white.withOpacity(0.9),
-                                fontWeight: FontWeight.w400,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            // User Name
-                            Text(
-                              _userName,
-                              style: const TextStyle(
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            // Streak and Status
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: Colors.white.withOpacity(0.3),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.eco,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        "Let's make a difference",
-                                        style: TextStyle(
-                                          color: Colors.white.withOpacity(0.95),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: CustomScrollView(
+          slivers: [
+            // Hero Header with Gradient
+            SliverAppBar(
+              expandedHeight: 240,
+              floating: false,
+              pinned: true,
+              automaticallyImplyLeading: false,
+              backgroundColor: kPrimaryGreen,
+              flexibleSpace: FlexibleSpaceBar(
+                background: Stack(
+                  children: [
+                    // Image Slider Background
+                    Positioned.fill(
+                      child: PageView.builder(
+                        controller: _pageController,
+                        onPageChanged: (index) {
+                          // Update slider index without triggering full rebuild
+                          _currentSlideIndex = index;
+                          // Removed setState to prevent refreshing the entire screen
+                          // including the StreamBuilder for recent activity
+                        },
+                        itemCount: _sliderImages.length,
+                        itemBuilder: (context, index) {
+                          return Image.asset(
+                            _sliderImages[index],
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              // Fallback to gradient if images not found
+                              return Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      kPrimaryGreen,
+                                      kPrimaryGreen.withOpacity(0.85),
                                     ],
                                   ),
                                 ),
-                                if (_userStreak > 0) ...[
-                                  const SizedBox(width: 10),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    // Gradient Overlay for better text visibility
+                    Positioned.fill(
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Colors.black],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Content
+                    Container(
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              // Greeting
+                              Text(
+                                'Hello!',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  color: Colors.white.withOpacity(0.9),
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              // User Name
+                              Text(
+                                _userName,
+                                style: const TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              // Streak and Status
+                              Row(
+                                children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 12,
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: Colors.orange.withOpacity(0.2),
+                                      color: Colors.white.withOpacity(0.2),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: Colors.orange.withOpacity(0.4),
+                                        color: Colors.white.withOpacity(0.3),
                                         width: 1.5,
                                       ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        const Text(
-                                          '🔥',
-                                          style: TextStyle(fontSize: 14),
+                                        const Icon(
+                                          Icons.eco,
+                                          color: Colors.white,
+                                          size: 16,
                                         ),
-                                        const SizedBox(width: 4),
+                                        const SizedBox(width: 6),
                                         Text(
-                                          '$_userStreak day streak',
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          "Let's make a difference",
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(
+                                              0.95,
+                                            ),
                                             fontSize: 13,
-                                            fontWeight: FontWeight.bold,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                       ],
                                     ),
                                   ),
+                                  if (_userStreak > 0) ...[
+                                    const SizedBox(width: 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: Colors.orange.withOpacity(0.4),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Text(
+                                            '🔥',
+                                            style: TextStyle(fontSize: 14),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '$_userStreak day streak',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            // Slider Indicators
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(
-                                _sliderImages.length,
-                                (index) => AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  width: _currentSlideIndex == index ? 24 : 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    color: _currentSlideIndex == index
-                                        ? Colors.white
-                                        : Colors.white.withOpacity(0.4),
-                                    borderRadius: BorderRadius.circular(4),
+                              ),
+                              const SizedBox(height: 8),
+                              // Slider Indicators
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(
+                                  _sliderImages.length,
+                                  (index) => AnimatedContainer(
+                                    duration: const Duration(milliseconds: 300),
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    width: _currentSlideIndex == index ? 24 : 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: _currentSlideIndex == index
+                                          ? Colors.white
+                                          : Colors.white.withOpacity(0.4),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            leading: Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white, size: 28),
-                onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
-              ),
-            ),
-            actions: [
-              // Notification Icon
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: FirebaseAuth.instance.currentUser != null
-                      ? FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(FirebaseAuth.instance.currentUser!.uid)
-                            .collection('notifications')
-                            .where('read', isEqualTo: false)
-                            .snapshots()
-                      : null,
-                  builder: (context, snapshot) {
-                    final hasUnread =
-                        snapshot.hasData && snapshot.data!.docs.isNotEmpty;
-                    return Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.notifications_outlined,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          onPressed: () {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const NotificationScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                        if (hasUnread)
-                          Positioned(
-                            right: 8,
-                            top: 8,
-                            child: Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: Colors.red,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
+              leading: Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: IconButton(
+                  icon: const Icon(Icons.menu, color: Colors.white, size: 28),
+                  onPressed: () {
+                    _scaffoldKey.currentState?.openDrawer();
                   },
                 ),
               ),
-            ],
-          ),
-
-          // Content Section
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Today's Tips Card - Enhanced with Bookmark & Share
-                  FutureBuilder<Map<String, String>>(
-                    future:
-                        _tipFuture, // Use cached future instead of calling function
+              actions: [
+                // Refresh Button
+                IconButton(
+                  icon: const Icon(
+                    Icons.refresh,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                  onPressed: _refreshData,
+                  tooltip: 'Refresh data',
+                ),
+                // Notification Icon
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseAuth.instance.currentUser != null
+                        ? FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(FirebaseAuth.instance.currentUser!.uid)
+                              .collection('notifications')
+                              .where('read', isEqualTo: false)
+                              .snapshots()
+                        : null,
                     builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return _buildModernTipCard(
-                          tip: 'Loading today\'s tip...',
-                          category: 'eco_habits',
-                          isLoading: true,
-                        );
-                      } else if (snapshot.hasError) {
-                        return _buildModernTipCard(
-                          tip: 'Error loading tip.',
-                          category: 'eco_habits',
-                          isError: true,
-                        );
-                      } else {
-                        final data =
-                            snapshot.data ??
-                            {
-                              'tip': 'No tips available.',
-                              'category': 'eco_habits',
-                            };
-                        return _buildModernTipCard(
-                          tip: data['tip']!,
-                          category: data['category']!,
-                        );
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Daily Eco Challenge - Enhanced
-                  _buildModernChallengeCard(),
-                  const SizedBox(height: 20),
-
-                  // Weekly Eco Points - Enhanced
-                  _buildModernScoreCard(),
-                  const SizedBox(height: 30),
-
-                  // Recent Activity Section
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Recent Activity',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const RecentActivityScreen(),
+                      final hasUnread =
+                          snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+                      return Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.notifications_outlined,
+                              color: Colors.white,
+                              size: 28,
                             ),
-                          );
-                        },
-                        icon: const Icon(Icons.history, size: 18),
-                        label: const Text('View All'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: kPrimaryGreen,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Recent Activity List
-                  Builder(
-                    builder: (context) {
-                      final user = FirebaseAuth.instance.currentUser;
-                      final Stream<QuerySnapshot<Map<String, dynamic>>>?
-                      scansStream = user != null
-                          ? FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(user.uid)
-                                .collection('scans')
-                                .orderBy('timestamp', descending: true)
-                                .limit(10)
-                                .withConverter<Map<String, dynamic>>(
-                                  fromFirestore: (snap, _) =>
-                                      snap.data() ?? <String, dynamic>{},
-                                  toFirestore: (m, _) => m,
-                                )
-                                .snapshots()
-                          : null;
-
-                      return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                        stream: scansStream,
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return Center(
-                              child: Padding(
-                                padding: const EdgeInsets.all(32.0),
-                                child: CircularProgressIndicator(
-                                  color: kPrimaryGreen,
+                            onPressed: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const NotificationScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          if (hasUnread)
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
                                 ),
                               ),
-                            );
-                          }
-                          if (!snapshot.hasData ||
-                              snapshot.data!.docs.isEmpty) {
-                            return _buildEmptyActivityCard();
-                          }
-                          final docs = snapshot.data!.docs;
-                          final filtered = docs.where((doc) {
-                            final m = doc.data();
-                            final v = m['isDisposal'];
-                            return v == null ? true : (v == false);
-                          }).toList();
-
-                          if (filtered.isEmpty) {
-                            return _buildEmptyActivityCard();
-                          }
-
-                          final previewDocs = filtered.take(3).toList();
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: previewDocs
-                                .map((doc) => _buildActivityTile(doc))
-                                .toList(),
-                          );
-                        },
+                            ),
+                        ],
                       );
                     },
                   ),
-                  const SizedBox(height: 80),
-                ],
+                ),
+              ],
+            ),
+
+            // Content Section
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Today's Tips Card - Enhanced with Bookmark & Share
+                    FutureBuilder<Map<String, String>>(
+                      future:
+                          _tipFuture, // Use cached future instead of calling function
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return _buildModernTipCard(
+                            tip: 'Loading today\'s tip...',
+                            category: 'eco_habits',
+                            isLoading: true,
+                          );
+                        } else if (snapshot.hasError) {
+                          return _buildModernTipCard(
+                            tip: 'Error loading tip.',
+                            category: 'eco_habits',
+                            isError: true,
+                          );
+                        } else {
+                          final data =
+                              snapshot.data ??
+                              {
+                                'tip': 'No tips available.',
+                                'category': 'eco_habits',
+                              };
+                          return _buildModernTipCard(
+                            tip: data['tip']!,
+                            category: data['category']!,
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Daily Eco Challenge - Enhanced
+                    _buildModernChallengeCard(),
+                    const SizedBox(height: 20),
+
+                    // Weekly Eco Points - Enhanced
+                    _buildModernScoreCard(),
+                    const SizedBox(height: 30),
+
+                    // Recent Activity Section
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Recent Activity',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const RecentActivityScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.history, size: 18),
+                          label: const Text('View All'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: kPrimaryGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Recent Activity List
+                    Builder(
+                      builder: (context) {
+                        final user = FirebaseAuth.instance.currentUser;
+                        final Stream<QuerySnapshot<Map<String, dynamic>>>?
+                        scansStream = user != null
+                            ? FirebaseFirestore.instance
+                                  .collection('users')
+                                  .doc(user.uid)
+                                  .collection('scans')
+                                  .orderBy('timestamp', descending: true)
+                                  .limit(10)
+                                  .withConverter<Map<String, dynamic>>(
+                                    fromFirestore: (snap, _) =>
+                                        snap.data() ?? <String, dynamic>{},
+                                    toFirestore: (m, _) => m,
+                                  )
+                                  .snapshots()
+                            : null;
+
+                        return StreamBuilder<
+                          QuerySnapshot<Map<String, dynamic>>
+                        >(
+                          stream: scansStream,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(32.0),
+                                  child: CircularProgressIndicator(
+                                    color: kPrimaryGreen,
+                                  ),
+                                ),
+                              );
+                            }
+                            if (!snapshot.hasData ||
+                                snapshot.data!.docs.isEmpty) {
+                              return _buildEmptyActivityCard();
+                            }
+                            final docs = snapshot.data!.docs;
+                            final filtered = docs.where((doc) {
+                              final m = doc.data();
+                              final v = m['isDisposal'];
+                              return v == null ? true : (v == false);
+                            }).toList();
+
+                            if (filtered.isEmpty) {
+                              return _buildEmptyActivityCard();
+                            }
+
+                            final previewDocs = filtered.take(3).toList();
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: previewDocs
+                                  .map((doc) => _buildActivityTile(doc))
+                                  .toList(),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 80),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
@@ -1694,29 +1705,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNavBar(),
-    );
-  }
-
-  // Placeholder for the icon and text used for the boolean checks (✔ / ❌)
-  Widget _buildBooleanRow(String label, bool value) {
-    final icon = value ? Icons.check_circle : Icons.cancel;
-    final color = value ? kPrimaryGreen : Colors.red.shade600;
-    final text = value ? 'Yes' : 'No';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              '$label: $text',
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -1766,27 +1754,6 @@ class _HomeScreenState extends State<HomeScreen> {
         default:
           return Colors.grey.shade700;
       }
-    }
-
-    // Custom styled Text for detail sections
-    Widget detailText(String label, String value, {bool boldValue = false}) {
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 6.0),
-        child: RichText(
-          text: TextSpan(
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            children: [
-              TextSpan(text: '$label: '),
-              TextSpan(
-                text: value,
-                style: TextStyle(
-                  fontWeight: boldValue ? FontWeight.bold : FontWeight.normal,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
     }
 
     // --- Main Card Widget - Redesigned ---
@@ -2636,54 +2603,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildActivityList(
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
-  ) {
-    // Show only latest 5 by default
-    final visibleCount = 5;
-    final latest = docs.take(visibleCount).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ...latest.map((doc) => _buildActivityTile(doc)),
-        if (docs.length > visibleCount)
-          Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () {
-                  // Push a new page that lists all recent activity
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(
-                          title: const Text('All Recent Activity'),
-                          backgroundColor: kPrimaryGreen,
-                        ),
-                        body: ListView.separated(
-                          padding: const EdgeInsets.all(12),
-                          itemBuilder: (context, index) {
-                            final doc = docs[index];
-                            return _buildActivityTile(doc);
-                          },
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 6),
-                          itemCount: docs.length,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-                child: const Text('See all'),
-              ),
-            ),
-          ),
-      ],
     );
   }
 

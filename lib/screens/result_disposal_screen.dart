@@ -571,7 +571,6 @@ class _DoneButton extends StatefulWidget {
   final List<String> disposalStepsList;
 
   const _DoneButton({
-    super.key,
     required this.analysisData,
     required this.disposalStepsList,
   });

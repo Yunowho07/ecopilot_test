@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
 // Define a placeholder for kPrimaryGreen if it's not in constants.dart
 // I will assume kPrimaryGreen is a constant Color object in your constants.dart
@@ -17,7 +19,11 @@ class LeaderboardScreen extends StatefulWidget {
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   final FirebaseService _service = FirebaseService();
   late Future<List<Map<String, dynamic>>> _future;
+  String _selectedPeriod = 'all'; // 'weekly', 'monthly', 'all'
+  // Fields for tracking current user's rank and points (currently assigned but not displayed)
+  // ignore: unused_field
   int _currentUserRank = 0;
+  // ignore: unused_field
   int _currentUserPoints = 0;
 
   @override
@@ -33,25 +39,47 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   void _loadLeaderboard() {
+    debugPrint('🔄 Loading leaderboard for period: $_selectedPeriod');
+
     setState(() {
-      _future = _service.getLeaderboard(limit: 100);
+      _future = _getLeaderboardByPeriod();
     });
 
     _future
         .then((list) {
-          debugPrint('✅ Leaderboard loaded: ${list.length} users');
+          debugPrint(
+            '✅ Leaderboard loaded ($_selectedPeriod): ${list.length} users',
+          );
           if (list.isNotEmpty) {
             debugPrint(
               '📊 Top users: ${list.take(3).map((u) => '${u['name']}:${u['ecoScore']}pts').join(', ')}',
             );
           } else {
-            debugPrint('⚠️ Leaderboard is empty - no users found in database');
+            String reason;
+            switch (_selectedPeriod) {
+              case 'monthly':
+                reason = 'No users earned points this month';
+                break;
+              default:
+                reason = 'No users found in database';
+            }
+            debugPrint('⚠️ Leaderboard is empty ($_selectedPeriod) - $reason');
           }
         })
         .catchError((error) {
-          debugPrint('❌ Error loading leaderboard: $error');
+          debugPrint('❌ Error loading leaderboard ($_selectedPeriod): $error');
         });
     _loadCurrentUserStats();
+  }
+
+  Future<List<Map<String, dynamic>>> _getLeaderboardByPeriod() async {
+    switch (_selectedPeriod) {
+      case 'monthly':
+        return await _service.getMonthlyLeaderboard(limit: 100);
+      case 'all':
+      default:
+        return await _service.getLeaderboard(limit: 100);
+    }
   }
 
   Future<void> _loadCurrentUserStats() async {
@@ -139,6 +167,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(width: 8),
                   // User profile picture
                   if (currentUser != null)
                     Container(
@@ -169,6 +198,58 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                             : null,
                       ),
                     ),
+                ],
+              ),
+            ),
+
+            // Time Period Selector
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  _buildPeriodTab('Monthly', 'monthly', Icons.calendar_month),
+                  _buildPeriodTab('All-Time', 'all', Icons.emoji_events),
+                ],
+              ),
+            ),
+
+            // Info Banner
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1db954).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: const Color(0xFF1db954).withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _selectedPeriod == 'monthly'
+                        ? Icons.info_outline
+                        : Icons.emoji_events,
+                    size: 20,
+                    color: const Color(0xFF1db954),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _selectedPeriod == 'monthly'
+                          ? 'Points earned this month'
+                          : 'All-time eco points ranking',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -285,22 +366,87 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   Widget _buildEmptyState() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.emoji_events, size: 60, color: Color(0xFF1db954)),
-          SizedBox(height: 24),
-          Text(
-            'No Rankings Yet',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+    // Period-specific empty state messages
+    String title;
+    String subtitle;
+    IconData icon;
+
+    switch (_selectedPeriod) {
+      case 'monthly':
+        title = 'No Monthly Activity Yet';
+        subtitle =
+            'Be the first to earn eco points this month\nand claim the top spot!';
+        icon = Icons.calendar_month;
+        break;
+      case 'all':
+      default:
+        title = 'No Rankings Yet';
+        subtitle =
+            'Start your eco-journey by scanning products\nand making sustainable choices!';
+        icon = Icons.emoji_events;
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1db954).withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, size: 60, color: const Color(0xFF1db954)),
             ),
-          ),
-          SizedBox(height: 12),
-        ],
+            const SizedBox(height: 24),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.grey.shade600,
+                height: 1.4,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: () => Navigator.pop(context),
+              icon: Icon(
+                _selectedPeriod != 'all' ? Icons.eco : Icons.qr_code_scanner,
+                size: 20,
+              ),
+              label: Text(
+                _selectedPeriod != 'all'
+                    ? 'Start Earning Points'
+                    : 'Start Scanning',
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1db954),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 4,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -529,6 +675,63 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildPeriodTab(String label, String period, IconData icon) {
+    final isSelected = _selectedPeriod == period;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedPeriod = period;
+            _loadLeaderboard();
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            gradient: isSelected
+                ? LinearGradient(
+                    colors: [
+                      const Color(0xFF1db954),
+                      const Color(0xFF1db954).withOpacity(0.85),
+                    ],
+                  )
+                : null,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF1db954).withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                  color: isSelected ? Colors.white : Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

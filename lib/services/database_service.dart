@@ -1,14 +1,14 @@
 // lib/services/database_service.dart
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/models/database_models.dart';
 
 /// Database Service for EcoPilot
 /// Provides CRUD operations for all database tables
 class DatabaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  // Auth instance available if needed
+  // final FirebaseAuth _auth = FirebaseAuth.instance;
 
   // ========================================
   // USERS TABLE OPERATIONS

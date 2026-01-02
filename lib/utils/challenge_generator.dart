@@ -12,13 +12,13 @@ class ChallengeGenerator {
     'recycling': [
       {
         'title': 'Recycle all plastic waste generated today',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '♻️',
       },
       {
         'title': 'Separate and recycle paper, plastic, and glass',
-        'points': 20,
+        'points': 10,
         'difficulty': 'hard',
         'icon': '🗑️',
       },
@@ -30,13 +30,13 @@ class ChallengeGenerator {
       },
       {
         'title': 'Find a recycling center for electronic waste',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '🔌',
       },
       {
         'title': 'Compost your organic kitchen waste',
-        'points': 12,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '🌿',
       },
@@ -50,25 +50,25 @@ class ChallengeGenerator {
       },
       {
         'title': 'Walk or bike to your destination today',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '🚶',
       },
       {
         'title': 'Carpool with friends or colleagues',
-        'points': 12,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '🚗',
       },
       {
         'title': 'Avoid using a car for the entire day',
-        'points': 25,
+        'points': 10,
         'difficulty': 'hard',
         'icon': '🛑',
       },
       {
         'title': 'Take stairs instead of elevator 3 times',
-        'points': 8,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '🪜',
       },
@@ -82,25 +82,25 @@ class ChallengeGenerator {
       },
       {
         'title': 'Bring your own shopping bag',
-        'points': 8,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '🛍️',
       },
       {
         'title': 'Choose products with minimal packaging',
-        'points': 12,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '📦',
       },
       {
         'title': 'Buy local or organic produce',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '🥬',
       },
       {
         'title': 'Avoid single-use plastics for the day',
-        'points': 20,
+        'points': 10,
         'difficulty': 'hard',
         'icon': '🚫',
       },
@@ -114,7 +114,7 @@ class ChallengeGenerator {
     'energy': [
       {
         'title': 'Turn off lights in unused rooms',
-        'points': 8,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '💡',
       },
@@ -126,13 +126,13 @@ class ChallengeGenerator {
       },
       {
         'title': 'Take a 5-minute shower to save water',
-        'points': 12,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '🚿',
       },
       {
         'title': 'Air-dry clothes instead of using dryer',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '👕',
       },
@@ -152,13 +152,13 @@ class ChallengeGenerator {
       },
       {
         'title': 'Share an eco-tip with 3 friends',
-        'points': 12,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '📢',
       },
       {
         'title': 'Watch a documentary about sustainability',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '📺',
       },
@@ -170,7 +170,7 @@ class ChallengeGenerator {
       },
       {
         'title': 'Join an online environmental community',
-        'points': 12,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '🌍',
       },
@@ -178,7 +178,7 @@ class ChallengeGenerator {
     'food': [
       {
         'title': 'Have one plant-based meal today',
-        'points': 12,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '🥗',
       },
@@ -190,19 +190,19 @@ class ChallengeGenerator {
       },
       {
         'title': 'Cook at home instead of ordering takeout',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '👨‍🍳',
       },
       {
         'title': 'Buy imperfect produce to reduce waste',
-        'points': 12,
+        'points': 10,
         'difficulty': 'easy',
         'icon': '🥕',
       },
       {
         'title': 'Meal prep to reduce packaging waste',
-        'points': 15,
+        'points': 10,
         'difficulty': 'medium',
         'icon': '🍱',
       },

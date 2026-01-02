@@ -11,6 +11,8 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'alternative_screen.dart';
 import 'home_screen.dart';
 import 'scan_screen.dart';
@@ -71,8 +73,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final user = _service.currentUser;
       if (user == null) return;
+
+      // Get all-time eco points from user summary
       final summary = await _service.getUserSummary(user.uid);
-      final points = (summary['ecoPoints'] ?? 0) as int;
+      final points = (summary['ecoScore'] ?? summary['ecoPoints'] ?? 0) as int;
+
       final rankInfo = rankForPoints(points);
       if (!mounted) return;
       setState(() {
@@ -645,39 +650,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Builder(
                             builder: (ctx) {
                               final int points = _ecoPoints;
-                              int currentMax = 50;
-                              int nextMax = 51;
-                              String nextRank = 'Eco Explorer';
+                              final currentRank = rankForPoints(points);
+                              final isMaxRank = currentRank.maxPoints == null;
 
-                              if (points >= 301) {
-                                currentMax = 301;
-                                nextMax = currentMax;
-                                nextRank = 'Top Tier';
-                              } else if (points >= 151) {
-                                currentMax = 151;
-                                nextMax = 301;
-                                nextRank = 'Sustainability Hero';
-                              } else if (points >= 51) {
-                                currentMax = 51;
-                                nextMax = 151;
-                                nextRank = 'Planet Protector';
-                              } else {
-                                currentMax = 0;
-                                nextMax = 51;
-                                nextRank = 'Eco Explorer';
+                              // Calculate progress to next rank
+                              final int currentMin = currentRank.minPoints;
+                              final int? currentMax = currentRank.maxPoints;
+
+                              String nextRankTitle = 'Max Rank';
+                              int pointsNeeded = 0;
+                              double pct = 1.0;
+
+                              if (!isMaxRank && currentMax != null) {
+                                // Get next rank info
+                                final nextRank = rankForPoints(currentMax + 1);
+                                nextRankTitle = nextRank.title;
+                                pointsNeeded = pointsToNextRank(points);
+
+                                // Calculate progress percentage
+                                final int range = currentMax - currentMin + 1;
+                                final int relative = (points - currentMin)
+                                    .clamp(0, range);
+                                pct = (relative / range).clamp(0.0, 1.0);
                               }
-
-                              final int range = (nextMax - currentMax) == 0
-                                  ? 1
-                                  : (nextMax - currentMax);
-                              final int relative = (points - currentMax).clamp(
-                                0,
-                                range,
-                              );
-                              final double pct = (relative / range).clamp(
-                                0.0,
-                                1.0,
-                              );
 
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -686,19 +681,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        points >= 301
-                                            ? 'Maximum rank achieved!'
-                                            : 'Next: $nextRank',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade700,
+                                      Expanded(
+                                        child: Text(
+                                          isMaxRank
+                                              ? '🎉 Maximum Rank Achieved'
+                                              : 'Next: $nextRankTitle',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade700,
+                                          ),
                                         ),
                                       ),
-                                      if (points < 301)
+                                      if (!isMaxRank)
                                         Text(
-                                          '${nextMax - points} pts to go',
+                                          '$pointsNeeded pts to go',
                                           style: TextStyle(
                                             fontSize: 12,
                                             color: Colors.grey.shade600,
@@ -720,7 +717,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    points >= 301
+                                    isMaxRank
                                         ? '🎉 You\'ve reached the top!'
                                         : '${(pct * 100).toStringAsFixed(0)}% complete',
                                     style: TextStyle(
@@ -786,12 +783,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           fontSize: 15,
                           color: Colors.black87,
                         ),
-                        decoration: const InputDecoration(
-                          hintText: 'Enter your name',
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        // decoration: const InputDecoration(
+                        //   hintText: 'Enter your name',
+                        //   border: InputBorder.none,
+                        //   isDense: true,
+                        //   contentPadding: EdgeInsets.zero,
+                        // ),
                         validator: (v) => (v == null || v.trim().isEmpty)
                             ? 'Please enter a name'
                             : null,

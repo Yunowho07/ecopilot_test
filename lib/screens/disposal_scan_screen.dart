@@ -196,9 +196,9 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
       }
 
       newCamera ??= _cameras!.firstWhere(
-          (camera) => camera != _cameraController?.description,
-          orElse: () => _cameras!.first,
-        );
+        (camera) => camera != _cameraController?.description,
+        orElse: () => _cameras!.first,
+      );
 
       // Dispose current controller
       await _cameraController?.dispose();
@@ -254,53 +254,95 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
         _busy = true;
       });
 
-      // Stop camera if it's running
-      if (_showCamera) {
-        await _stopCamera();
-      }
-
       // Request gallery permission when picking from gallery
       if (source == ImageSource.gallery) {
         PermissionStatus galleryStatus;
+
+        // Try photos permission first (iOS/Android 13+)
         try {
-          galleryStatus = await Permission.photos.request();
-        } catch (_) {
-          galleryStatus = await Permission.storage.request();
+          galleryStatus = await Permission.photos.status;
+          if (!galleryStatus.isGranted) {
+            galleryStatus = await Permission.photos.request();
+          }
+        } catch (e) {
+          debugPrint('Photos permission error: $e');
+          // Fallback to storage permission (older Android)
+          try {
+            galleryStatus = await Permission.storage.status;
+            if (!galleryStatus.isGranted) {
+              galleryStatus = await Permission.storage.request();
+            }
+          } catch (e2) {
+            debugPrint('Storage permission error: $e2');
+            // On some devices, permission might not be needed
+            galleryStatus = PermissionStatus.granted;
+          }
         }
-        if (!galleryStatus.isGranted) {
+
+        if (!galleryStatus.isGranted &&
+            galleryStatus != PermissionStatus.limited) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Gallery permission is required to pick images.'),
+              SnackBar(
+                content: const Text(
+                  'Gallery permission is required to pick images.',
+                ),
+                action: SnackBarAction(
+                  label: 'Settings',
+                  onPressed: () => openAppSettings(),
+                ),
               ),
             );
           }
+          setState(() {
+            _busy = false;
+          });
           return;
         }
       }
 
+      // Pick the image
       final XFile? file = await _picker.pickImage(
         source: source,
         imageQuality: 80,
+        maxWidth: 1920,
+        maxHeight: 1920,
       );
-      if (file == null) return;
+
+      // User cancelled
+      if (file == null) {
+        setState(() {
+          _busy = false;
+        });
+        return;
+      }
+
+      // Read the image bytes
       final bytes = await file.readAsBytes();
-      setState(() {
-        _picked = file;
-        _bytes = bytes;
-        _photoConfirmed = false;
-      });
+
+      // Stop camera if it's running
+      if (_showCamera && _cameraController != null) {
+        await _stopCamera();
+      }
+
+      if (mounted) {
+        setState(() {
+          _picked = file;
+          _bytes = bytes;
+          _photoConfirmed = false;
+          _busy = false;
+        });
+      }
     } catch (e) {
       debugPrint('Image pick failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Failed to pick image')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick image: ${e.toString()}')),
+        );
+        setState(() {
+          _busy = false;
+        });
       }
-    } finally {
-      setState(() {
-        _busy = false;
-      });
     }
   }
 
@@ -343,7 +385,8 @@ class _DisposalScanScreenState extends State<DisposalScanScreen> {
       } else {
         // Use Gemini via google_generative_ai
         final model = GenerativeModel(
-          model:'models/gemini-2.5-pro', // Stable production model with excellent vision for disposal analysis
+          model:
+              'models/gemini-2.5-pro', // Stable production model with excellent vision for disposal analysis
           apiKey: geminiApiKey,
         );
 
@@ -354,14 +397,21 @@ Required JSON fields:
 - "product_name": Product name as a string
 - "category": Product category (e.g., "Food & Beverages (F&B)", "Personal Care", "Household Products", "Electronics", "Clothing & Accessories", "Health & Medicine", "Baby & Kids", "Pet Supplies", "Automotive", "Home & Furniture")
 - "ingredients": Ingredients as a comma-separated string (e.g., "Water, Zinc Oxide, etc.")
-- "eco_score": Eco-friendliness rating as a SINGLE LETTER - must be exactly one of: "A", "B", "C", "D", or "E" (A is best, E is worst)
+- "eco_score": Eco-friendliness rating as a SINGLE LETTER - must be exactly one of: "A", "B", "C", "D", or "E" based on STRICT criteria below
 - "carbon_footprint": Estimated CO2e per unit as string (e.g., "0.36 kg CO2e per unit")
 - "packaging_type": Material and recyclability as string (e.g., "Plastic Tube - Recyclable (Type 4 - LDPE)")
 - "disposal_steps": Array of disposal step strings
 - "nearby_center": Nearby recycling center name as string (or "N/A")
 - "tips": Array of eco-friendly tip strings
 
-IMPORTANT: The "eco_score" MUST be a single letter grade (A, B, C, D, or E). Do not use other formats.
+STANDARDIZED ECO SCORE CRITERIA (MUST USE CONSISTENTLY):
+- A: Excellent sustainability (organic, plastic-free, carbon-neutral, certified eco-labels like FSC, Leaping Bunny)
+- B: Good sustainability (minimal plastic, recyclable packaging, some eco certifications, low environmental impact)
+- C: Moderate sustainability (standard recyclable packaging, conventional ingredients, average carbon footprint)
+- D: Poor sustainability (excessive plastic, non-recyclable materials, harmful ingredients, high carbon footprint)
+- E: Very poor sustainability (single-use plastic, toxic ingredients, non-recyclable, very high environmental impact)
+
+IMPORTANT: Apply the SAME eco score criteria consistently. A glass bottle product should always get the same score regardless of which screen analyzes it.
 
 Example valid response (JSON only, no markdown, no backticks):
 {
@@ -460,6 +510,18 @@ Example valid response (JSON only, no markdown, no backticks):
           palmOilDerivative: analysisData.palmOilDerivative,
           crueltyFree: analysisData.crueltyFree,
         );
+
+        // Award points for scanning a disposal product
+        try {
+          await FirebaseService().addEcoPoints(
+            points: 5,
+            reason: 'Scanned disposal item: ${analysisData.productName}',
+            activityType: 'scan_product',
+          );
+          debugPrint('✅ Awarded 5 points for disposal scan');
+        } catch (e) {
+          debugPrint('⚠️ Failed to award scan points: $e');
+        }
       } catch (e) {
         debugPrint('Failed to save scan metadata: $e');
       }
@@ -700,12 +762,36 @@ Example valid response (JSON only, no markdown, no backticks):
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         centerTitle: true,
-        title: const Text(
-          'Scan Product for Disposal',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        title: Column(
+          children: [
+            const Text(
+              'Disposal Scanner',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+              ),
+            ),
+            Text(
+              'AI-Powered Eco Analysis',
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.9),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
         iconTheme: const IconThemeData(color: Colors.white),
-        backgroundColor: kPrimaryGreen,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.85)],
+            ),
+          ),
+        ),
         elevation: 0,
       ),
       body: Column(
@@ -762,23 +848,23 @@ Example valid response (JSON only, no markdown, no backticks):
                                 ),
                               ),
                               // Close camera button
-                              Positioned(
-                                top: 16,
-                                left: 16,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.black.withOpacity(0.6),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.close,
-                                      color: Colors.white,
-                                    ),
-                                    onPressed: _stopCamera,
-                                  ),
-                                ),
-                              ),
+                              // Positioned(
+                              //   top: 16,
+                              //   left: 16,
+                              //   child: Container(
+                              //     decoration: BoxDecoration(
+                              //       color: Colors.black.withOpacity(0.6),
+                              //       shape: BoxShape.circle,
+                              //     ),
+                              //     child: IconButton(
+                              //       icon: const Icon(
+                              //         Icons.close,
+                              //         color: Colors.white,
+                              //       ),
+                              //       onPressed: _stopCamera,
+                              //     ),
+                              //   ),
+                              // ),
                               // Capture button at bottom
                               Positioned(
                                 bottom: 20,
@@ -836,18 +922,115 @@ Example valid response (JSON only, no markdown, no backticks):
                                   ),
                                 ),
                               ),
-                              // Camera guide
+                              // Modern camera guide with corners
                               Center(
-                                child: Container(
-                                  width: 280,
-                                  height: 200,
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                      color: kPrimaryGreen.withOpacity(0.7),
-                                      width: 2,
+                                child: Stack(
+                                  children: [
+                                    Container(
+                                      width: 280,
+                                      height: 200,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                          color: kPrimaryGreen.withOpacity(0.3),
+                                          width: 2,
+                                        ),
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
                                     ),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
+                                    // Corner indicators
+                                    Positioned(
+                                      top: 0,
+                                      left: 0,
+                                      child: Container(
+                                        width: 30,
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            top: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                            left: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                          ),
+                                          borderRadius: const BorderRadius.only(
+                                            topLeft: Radius.circular(20),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      top: 0,
+                                      right: 0,
+                                      child: Container(
+                                        width: 30,
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            top: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                            right: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                          ),
+                                          borderRadius: const BorderRadius.only(
+                                            topRight: Radius.circular(20),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      left: 0,
+                                      child: Container(
+                                        width: 30,
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                            left: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                          ),
+                                          borderRadius: const BorderRadius.only(
+                                            bottomLeft: Radius.circular(20),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      bottom: 0,
+                                      right: 0,
+                                      child: Container(
+                                        width: 30,
+                                        height: 30,
+                                        decoration: BoxDecoration(
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                            right: BorderSide(
+                                              color: kPrimaryGreen,
+                                              width: 4,
+                                            ),
+                                          ),
+                                          borderRadius: const BorderRadius.only(
+                                            bottomRight: Radius.circular(20),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -923,27 +1106,87 @@ Example valid response (JSON only, no markdown, no backticks):
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(
-                                  Icons.camera_alt_outlined,
-                                  size: 80,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'Take or select a product photo',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade400,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
+                                Container(
+                                  padding: const EdgeInsets.all(24),
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        kPrimaryGreen.withOpacity(0.15),
+                                        kPrimaryGreen.withOpacity(0.05),
+                                      ],
+                                    ),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: kPrimaryGreen.withOpacity(0.2),
+                                        blurRadius: 20,
+                                        spreadRadius: 5,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.eco,
+                                    size: 64,
+                                    color: kPrimaryGreen,
                                   ),
                                 ),
-                                const SizedBox(height: 8),
+                                const SizedBox(height: 24),
                                 Text(
-                                  'AI will analyze the product for disposal guidance',
-                                  textAlign: TextAlign.center,
+                                  'Ready to Scan',
                                   style: TextStyle(
-                                    color: Colors.grey.shade500,
-                                    fontSize: 13,
+                                    color: Colors.grey.shade700,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 40,
+                                  ),
+                                  child: Text(
+                                    'Position product and capture',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 14,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 24),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: kPrimaryGreen.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: kPrimaryGreen.withOpacity(0.3),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.auto_awesome,
+                                        size: 16,
+                                        color: kPrimaryGreen,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Powered by Gemini AI',
+                                        style: TextStyle(
+                                          color: kPrimaryGreen,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -998,20 +1241,25 @@ Example valid response (JSON only, no markdown, no backticks):
             ),
           ),
 
-          // Control Panel
+          // Modern Control Panel
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
             decoration: BoxDecoration(
-              color: Colors.white,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.white, Colors.grey.shade50],
+              ),
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(30),
-                topRight: Radius.circular(30),
+                topLeft: Radius.circular(32),
+                topRight: Radius.circular(32),
               ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
+                  blurRadius: 30,
                   offset: const Offset(0, -5),
+                  spreadRadius: 5,
                 ),
               ],
             ),
@@ -1031,12 +1279,12 @@ Example valid response (JSON only, no markdown, no backticks):
                   ),
                   const SizedBox(height: 20),
 
-                  // Quick actions row
+                  // Essential controls only
                   Row(
                     children: [
                       Expanded(
                         child: _buildControlButton(
-                          icon: Icons.cameraswitch,
+                          icon: Icons.cameraswitch_rounded,
                           label: 'Switch Camera',
                           onPressed: (_busy || !_showCamera)
                               ? null
@@ -1044,15 +1292,15 @@ Example valid response (JSON only, no markdown, no backticks):
                           backgroundColor: kPrimaryGreen,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: _buildControlButton(
-                          icon: Icons.photo_library,
+                          icon: Icons.photo_library_rounded,
                           label: 'Gallery',
                           onPressed: _busy
                               ? null
                               : () => _pick(ImageSource.gallery),
-                          backgroundColor: Colors.grey.shade700,
+                          backgroundColor: Colors.blue.shade600,
                         ),
                       ),
                     ],
@@ -1097,42 +1345,6 @@ Example valid response (JSON only, no markdown, no backticks):
                       ),
                     ),
                   ],
-
-                  // Info text
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: kPrimaryGreen.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: kPrimaryGreen.withOpacity(0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: kPrimaryGreen,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            _showCamera
-                                ? 'Position product within the frame and tap the capture button'
-                                : 'Camera will start automatically or select from gallery',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey.shade700,
-                              height: 1.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -1177,42 +1389,55 @@ Example valid response (JSON only, no markdown, no backticks):
     );
   }
 
-  // Helper method to build control buttons
+  // Helper method to build modern control buttons
   Widget _buildControlButton({
     required IconData icon,
     required String label,
     required VoidCallback? onPressed,
     required Color backgroundColor,
   }) {
-    return Container(
+    final isDisabled = onPressed == null;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       height: 56,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: backgroundColor.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: isDisabled
+            ? []
+            : [
+                BoxShadow(
+                  color: backgroundColor.withOpacity(0.4),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                  spreadRadius: 1,
+                ),
+              ],
       ),
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, color: Colors.white, size: 22),
-        label: Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
+      child: Material(
+        color: isDisabled ? Colors.grey.shade300 : backgroundColor,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: isDisabled ? Colors.grey.shade500 : Colors.white,
+                size: 24,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: isDisabled ? Colors.grey.shade500 : Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          elevation: 0,
         ),
       ),
     );

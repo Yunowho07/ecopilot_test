@@ -710,6 +710,167 @@ class FirebaseService {
     }
   }
 
+  /// Get weekly leaderboard by calculating points from point_history in the last 7 days
+  Future<List<Map<String, dynamic>>> getWeeklyLeaderboard({
+    int limit = 50,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final sevenDaysAgo = now.subtract(const Duration(days: 7));
+      debugPrint(
+        '🔍 Fetching weekly leaderboard (last 7 days from ${DateFormat('yyyy-MM-dd').format(sevenDaysAgo)})',
+      );
+
+      // Get all users
+      final usersSnapshot = await _firestore.collection('users').get();
+      debugPrint('👥 Total users found: ${usersSnapshot.docs.length}');
+
+      final userPointsMap = <String, Map<String, dynamic>>{};
+      int usersChecked = 0;
+      int usersWithPoints = 0;
+
+      // For each user, calculate their points from point_history in the last 7 days
+      for (final userDoc in usersSnapshot.docs) {
+        final userId = userDoc.id;
+        final userData = userDoc.data();
+        usersChecked++;
+
+        // Query point_history for entries in the last 7 days
+        final pointHistorySnapshot = await _firestore
+            .collection('users')
+            .doc(userId)
+            .collection('point_history')
+            .where(
+              'timestamp',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(sevenDaysAgo),
+            )
+            .get();
+
+        // Sum up all points from the last 7 days
+        int weeklyPoints = 0;
+        for (final historyDoc in pointHistorySnapshot.docs) {
+          final points = historyDoc.data()['points'] ?? 0;
+          weeklyPoints += points as int;
+        }
+
+        if (weeklyPoints > 0) {
+          usersWithPoints++;
+          userPointsMap[userId] = {
+            'uid': userId,
+            'username': userData['username'] ?? userData['name'] ?? 'Anonymous',
+            'name': userData['name'] ?? userData['displayName'] ?? 'Anonymous',
+            'photoUrl': userData['photoUrl'] ?? '',
+            'ecoScore': weeklyPoints,
+            'ecoPoints': weeklyPoints,
+            'title': userData['title'] ?? '',
+          };
+          debugPrint(
+            '  ✓ ${userData['name']}: $weeklyPoints points (last 7 days)',
+          );
+        }
+      }
+
+      debugPrint(
+        '📊 Weekly summary: $usersWithPoints/$usersChecked users have activity in the last 7 days',
+      );
+
+      // Convert to list and sort
+      final results = userPointsMap.values.toList();
+      results.sort(
+        (a, b) => (b['ecoScore'] as int).compareTo(a['ecoScore'] as int),
+      );
+
+      debugPrint('✅ Weekly leaderboard: ${results.length} users with activity');
+      return results.take(limit).toList();
+    } catch (e) {
+      debugPrint('❌ Error fetching weekly leaderboard: $e');
+      return [];
+    }
+  }
+
+  /// Get monthly leaderboard by reading from monthly_points collection
+  /// (same source as addEcoPoints writes to and home screen reads from)
+  Future<List<Map<String, dynamic>>> getMonthlyLeaderboard({
+    int limit = 50,
+  }) async {
+    try {
+      final now = DateTime.now();
+      final monthKey = DateFormat('yyyy-MM').format(now);
+      debugPrint('🔍 Fetching monthly leaderboard for $monthKey');
+
+      // Get all users
+      final usersSnapshot = await _firestore.collection('users').get();
+      debugPrint('👥 Total users found: ${usersSnapshot.docs.length}');
+
+      final userPointsMap = <String, Map<String, dynamic>>{};
+      int usersChecked = 0;
+      int usersWithPoints = 0;
+
+      // For each user, read their monthly points directly from monthly_points document
+      for (final userDoc in usersSnapshot.docs) {
+        final userId = userDoc.id;
+        final userData = userDoc.data();
+        usersChecked++;
+
+        try {
+          // Read monthly points from the same location addEcoPoints writes to
+          final monthlyDoc = await _firestore
+              .collection('users')
+              .doc(userId)
+              .collection('monthly_points')
+              .doc(monthKey)
+              .get();
+
+          int monthlyPoints = 0;
+          if (monthlyDoc.exists) {
+            final data = monthlyDoc.data();
+            monthlyPoints = data?['points'] ?? 0;
+          }
+
+          if (monthlyPoints > 0) {
+            usersWithPoints++;
+          }
+
+          userPointsMap[userId] = {
+            'uid': userId,
+            'username': userData['username'] ?? userData['name'] ?? 'Anonymous',
+            'name': userData['name'] ?? userData['displayName'] ?? 'Anonymous',
+            'photoUrl': userData['photoUrl'] ?? '',
+            'ecoScore': monthlyPoints,
+            'ecoPoints': monthlyPoints,
+            'title': userData['title'] ?? '',
+          };
+
+          debugPrint(
+            '  ${monthlyPoints > 0 ? '✓' : '○'} ${userData['name']}: $monthlyPoints points this month',
+          );
+        } catch (e) {
+          debugPrint(
+            '  ❌ Error fetching monthly_points for user ${userData['name']}: $e',
+          );
+        }
+      }
+
+      debugPrint(
+        '📊 Monthly summary: $usersWithPoints/$usersChecked users have activity in $monthKey',
+      );
+
+      // Convert to list and sort by points
+      final results = userPointsMap.values.toList();
+      results.sort(
+        (a, b) => (b['ecoScore'] as int).compareTo(a['ecoScore'] as int),
+      );
+
+      debugPrint(
+        '✅ Monthly leaderboard: ${results.length} users, showing top $limit',
+      );
+      return results.take(limit).toList();
+    } catch (e) {
+      debugPrint('❌ Error fetching monthly leaderboard: $e');
+      return [];
+    }
+  }
+
   // ===============================================
   // 📦 FIRESTORE - SCANNED PRODUCTS (From Version 2) 📦
   // ===============================================
@@ -874,11 +1035,16 @@ class FirebaseService {
       'date': DateFormat('yyyy-MM-dd – kk:mm').format(DateTime.now()),
     });
 
-    // Reward 2 Eco Points for scanning a product (part of the reward system)
+    // Reward 5 Eco Points for scanning a product (part of the reward system)
+    // Daily limit: 10 scans, Weekly limit: 50 scans
     // This encourages engagement and discovery of eco-friendly products.
     if (_auth.currentUser != null) {
       try {
-        await addEcoPoints(points: 2, reason: 'Product scan');
+        await addEcoPoints(
+          points: 5,
+          reason: 'Product scan',
+          activityType: 'scan_product',
+        );
       } catch (e) {
         debugPrint('Failed to award points after scan: $e');
       }
@@ -976,7 +1142,6 @@ class FirebaseService {
 
     final uid = user.uid;
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-    final monthKey = DateFormat('yyyy-MM').format(DateTime.now());
 
     try {
       // 1. Get current user challenge progress
@@ -1064,11 +1229,30 @@ class FirebaseService {
             updatedStreak == 200) {
           await checkStreakBonus(updatedStreak);
         }
+
+        // Trigger milestone notification for TikTok-style engagement
+        if (updatedStreak == 7 ||
+            updatedStreak == 14 ||
+            updatedStreak == 30 ||
+            updatedStreak == 50 ||
+            updatedStreak == 100 ||
+            updatedStreak == 200) {
+          // Import and call StreakNotificationManager
+          // This will be called from the UI layer after challenge completion
+          debugPrint('🎉 Milestone reached: $updatedStreak days!');
+        }
       }
 
-      // 4. Update user's eco points and streak
+      // 4. Award eco points using addEcoPoints to update all systems
+      // (all-time, monthly, weekly, and point_history)
+      await addEcoPoints(
+        points: points + bonusPoints,
+        reason: 'Daily challenge completed',
+        activityType: 'complete_daily_challenge',
+      );
+
+      // 5. Update user's streak and lastChallengeDate
       final updateData = <String, dynamic>{
-        'ecoPoints': currentEcoPoints + points + bonusPoints,
         'streak': updatedStreak,
         'updatedAt': FieldValue.serverTimestamp(),
       };
@@ -1082,28 +1266,6 @@ class FirebaseService {
           .collection('users')
           .doc(uid)
           .set(updateData, SetOptions(merge: true));
-
-      // 5. Update monthly points
-      final monthlyDoc = await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('monthly_points')
-          .doc(monthKey)
-          .get();
-
-      final currentMonthlyPoints = monthlyDoc.data()?['points'] ?? 0;
-
-      await _firestore
-          .collection('users')
-          .doc(uid)
-          .collection('monthly_points')
-          .doc(monthKey)
-          .set({
-            'points': currentMonthlyPoints + points + bonusPoints,
-            'goal': 500,
-            'month': monthKey,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
 
       debugPrint(
         'Challenge completed successfully: +$points points${bonusPoints > 0 ? ' (+$bonusPoints bonus)' : ''}',
@@ -1128,22 +1290,109 @@ class FirebaseService {
   // 🎯 ECO POINTS REWARD SYSTEM 🎯
   // ===============================================
 
+  /// Check if user has reached daily or weekly limit for a specific activity
+  /// Returns true if user can still perform the activity, false if limit reached
+  Future<bool> checkActivityLimit({
+    required String activityType,
+    required int dailyLimit,
+    required int weeklyLimit,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+
+    final uid = user.uid;
+    final now = DateTime.now();
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final weekStart = now.subtract(Duration(days: now.weekday - 1));
+    final weekStartDate = DateTime(
+      weekStart.year,
+      weekStart.month,
+      weekStart.day,
+    );
+
+    try {
+      // Query point history for this activity type
+      final snapshot = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('point_history')
+          .where('activityType', isEqualTo: activityType)
+          .where(
+            'timestamp',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(weekStartDate),
+          )
+          .get();
+
+      int dailyCount = 0;
+      int weeklyCount = 0;
+
+      for (var doc in snapshot.docs) {
+        final timestamp = (doc.data()['timestamp'] as Timestamp).toDate();
+        weeklyCount++;
+
+        if (timestamp.isAfter(todayStart)) {
+          dailyCount++;
+        }
+      }
+
+      // Check limits
+      if (dailyCount >= dailyLimit) {
+        debugPrint(
+          '⚠️ Daily limit reached for $activityType: $dailyCount/$dailyLimit',
+        );
+        return false;
+      }
+
+      if (weeklyCount >= weeklyLimit) {
+        debugPrint(
+          '⚠️ Weekly limit reached for $activityType: $weeklyCount/$weeklyLimit',
+        );
+        return false;
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error checking activity limit: $e');
+      return true; // Allow on error to not block users
+    }
+  }
+
+  /// Private wrapper for checkActivityLimit (used internally by addEcoPoints)
+  Future<bool> _checkActivityLimit(
+    String activityType,
+    int dailyLimit,
+    int weeklyLimit,
+  ) async {
+    return checkActivityLimit(
+      activityType: activityType,
+      dailyLimit: dailyLimit,
+      weeklyLimit: weeklyLimit,
+    );
+  }
+
   /// Award eco points to the current user for various actions.
   ///
-  /// Point values:
-  /// - Product scan: 2 points
-  /// - Daily challenge (per task): 5 points
-  /// - Both daily challenges: 10 points
-  /// - Disposal guidance: 3 points
-  /// - Exploring alternatives: 5 points
-  /// - Reading tips/quizzes: 2-5 points
-  /// - Weekly engagement: 10 points
-  /// - Streak bonuses: 5 (10 days), 15 (30 days), 30 (100 days), 50 (200 days)
-  /// - Monthly leaderboard: up to 20 points
+  /// Point values (Updated System):
+  /// - View daily eco tip: 3 points (Daily: 1, Weekly: 7)
+  /// - Complete daily challenge: 20 points (Daily: 1, Weekly: 7)
+  /// - Daily streak bonus: 10 points (Daily: 1, Weekly: 7)
+  /// - Scan product: 5 points (Daily: 10, Weekly: 50)
+  /// - First-time scan bonus: 5 points (Daily: 5, Weekly: 20)
+  /// - Add new product: 30 points (Daily: 3, Weekly: 10)
+  /// - Dispose/recycle: 10 points (Daily: 5, Weekly: 20)
+  /// - Verified disposal bonus: 5 points (Daily: 5, Weekly: 20)
+  /// - Weekly goal: 30 points, Monthly goal: 50 points
+  /// - Daily cap: ~120 points, Weekly cap: ~700 points
+  ///
+  /// This method awards points to ALL THREE categories simultaneously:
+  /// - Weekly eco points (resets every week)
+  /// - Monthly eco points (resets every month)
+  /// - Overall eco points (never resets, cumulative total)
   Future<void> addEcoPoints({
     required int points,
     required String reason,
     bool updateMonthly = true,
+    String? activityType,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -1151,21 +1400,46 @@ class FirebaseService {
       return;
     }
 
+    // Check activity limits if activityType is specified
+    if (activityType != null) {
+      final limits = _getActivityLimits(activityType);
+      if (limits != null) {
+        final canPerform = await _checkActivityLimit(
+          activityType,
+          limits['daily']!,
+          limits['weekly']!,
+        );
+
+        if (!canPerform) {
+          throw Exception(
+            'Activity limit reached for $activityType. '
+            'Daily limit: ${limits['daily']}, Weekly limit: ${limits['weekly']}',
+          );
+        }
+      }
+    }
+
     final uid = user.uid;
-    final monthKey = DateFormat('yyyy-MM').format(DateTime.now());
+    final now = DateTime.now();
+    final monthKey = DateFormat('yyyy-MM').format(now);
+    // Week key format: Year-WeekNumber (e.g., "2025-01" for first week of 2025)
+    final weekNumber =
+        ((now.difference(DateTime(now.year, 1, 1)).inDays) / 7).floor() + 1;
+    final weekKey = '${now.year}-${weekNumber.toString().padLeft(2, '0')}';
 
     try {
-      // 1. Get current user points
+      // 1. Update OVERALL eco points (never resets)
       final userDoc = await _firestore.collection('users').doc(uid).get();
-      final currentPoints = userDoc.data()?['ecoPoints'] ?? 0;
+      final currentOverallPoints = userDoc.data()?['ecoPoints'] ?? 0;
+      final newOverallPoints = currentOverallPoints + points;
 
-      // 2. Update user's eco points
       await _firestore.collection('users').doc(uid).set({
-        'ecoPoints': currentPoints + points,
+        'ecoPoints': newOverallPoints,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // 3. Update monthly points if requested
+      // 2. Update MONTHLY points (resets every month)
+      int currentMonthlyPoints = 0;
       if (updateMonthly) {
         final monthlyDoc = await _firestore
             .collection('users')
@@ -1174,7 +1448,7 @@ class FirebaseService {
             .doc(monthKey)
             .get();
 
-        final currentMonthlyPoints = monthlyDoc.data()?['points'] ?? 0;
+        currentMonthlyPoints = monthlyDoc.data()?['points'] ?? 0;
 
         await _firestore
             .collection('users')
@@ -1186,10 +1460,35 @@ class FirebaseService {
               'goal': 500,
               'month': monthKey,
               'updatedAt': FieldValue.serverTimestamp(),
+              'createdAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
       }
 
-      // 4. Log the point award
+      // 3. Update WEEKLY points (resets every week)
+      final weeklyDoc = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('weekly_points')
+          .doc(weekKey)
+          .get();
+
+      final currentWeeklyPoints = weeklyDoc.data()?['points'] ?? 0;
+
+      await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('weekly_points')
+          .doc(weekKey)
+          .set({
+            'points': currentWeeklyPoints + points,
+            'week': weekKey,
+            'year': now.year,
+            'weekNumber': weekNumber,
+            'updatedAt': FieldValue.serverTimestamp(),
+            'createdAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+
+      // 4. Log the point award in history (for tracking and daily/weekly limits)
       await _firestore
           .collection('users')
           .doc(uid)
@@ -1197,29 +1496,62 @@ class FirebaseService {
           .add({
             'points': points,
             'reason': reason,
+            'activityType': activityType ?? 'general',
             'timestamp': FieldValue.serverTimestamp(),
-            'newTotal': currentPoints + points,
+            'newOverallTotal': newOverallPoints,
+            'weekKey': weekKey,
+            'monthKey': monthKey,
           });
 
       debugPrint(
-        'Awarded $points points for: $reason (New total: ${currentPoints + points})',
+        '✅ Awarded $points points for: $reason\n'
+        '   Overall: $newOverallPoints | Weekly: ${currentWeeklyPoints + points} | Monthly: ${currentMonthlyPoints + points}',
       );
     } catch (e) {
-      debugPrint('Error adding eco points: $e');
+      debugPrint('❌ Error adding eco points: $e');
     }
   }
 
   /// Check and award streak bonuses based on consecutive days
+  /// Updated: 10 points for all milestone streaks (7, 14, 30, 50, 100, 200 days)
   Future<void> checkStreakBonus(int currentStreak) async {
     // Award bonus points at milestone streaks
-    if (currentStreak == 10) {
-      await addEcoPoints(points: 5, reason: '10-day streak bonus!');
+    if (currentStreak == 7) {
+      await addEcoPoints(
+        points: 10,
+        reason: '7-day streak bonus! 🔥',
+        activityType: 'daily_streak_bonus',
+      );
+    } else if (currentStreak == 14) {
+      await addEcoPoints(
+        points: 10,
+        reason: '14-day streak bonus! 🔥',
+        activityType: 'daily_streak_bonus',
+      );
     } else if (currentStreak == 30) {
-      await addEcoPoints(points: 15, reason: '30-day streak bonus!');
+      await addEcoPoints(
+        points: 10,
+        reason: '30-day streak bonus! 🔥',
+        activityType: 'daily_streak_bonus',
+      );
+    } else if (currentStreak == 50) {
+      await addEcoPoints(
+        points: 10,
+        reason: '50-day streak bonus! 🔥',
+        activityType: 'daily_streak_bonus',
+      );
     } else if (currentStreak == 100) {
-      await addEcoPoints(points: 30, reason: '100-day streak bonus!');
+      await addEcoPoints(
+        points: 10,
+        reason: '100-day streak bonus! 🔥',
+        activityType: 'daily_streak_bonus',
+      );
     } else if (currentStreak == 200) {
-      await addEcoPoints(points: 50, reason: '200-day streak bonus!');
+      await addEcoPoints(
+        points: 10,
+        reason: '200-day streak bonus! 🔥',
+        activityType: 'daily_streak_bonus',
+      );
     }
   }
 
@@ -1251,5 +1583,31 @@ class FirebaseService {
     await _firestore.collection('notifications').doc(notificationId).update({
       'isRead': true,
     });
+  }
+
+  // ===============================================
+  // 📦 ACTIVITY LIMITS & HELPERS
+  // ===============================================
+
+  /// Get activity limits for different activity types
+  /// Returns null if no limits are defined for the activity
+  Map<String, int>? _getActivityLimits(String activityType) {
+    switch (activityType) {
+      case 'scan_product':
+        return {'daily': 10, 'weekly': 50};
+      case 'add_new_product':
+        return {'daily': 3, 'weekly': 10};
+      case 'first_time_scan':
+        return {'daily': 5, 'weekly': 20};
+      case 'dispose_product':
+      case 'verified_disposal':
+        return {'daily': 5, 'weekly': 20};
+      case 'complete_daily_challenge':
+      case 'daily_streak_bonus':
+      case 'view_daily_tip':
+        return {'daily': 1, 'weekly': 7};
+      default:
+        return null; // No limits for other activities
+    }
   }
 }

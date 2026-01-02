@@ -1,11 +1,12 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/notification_service.dart';
+import '../services/streak_notification_manager.dart';
+import '../services/fcm_service.dart';
 import '../utils/constants.dart';
 
 // Notification categories used by the app
@@ -128,6 +129,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   bool _dailyScheduled = false;
   bool _ecoTipScheduled = false;
 
+  // Streak notification states
+  Map<String, bool> _streakNotifStatus = {};
+  bool _fcmInitialized = false;
+
   List<AppNotification> _notifications = [];
   NotificationCategory? _filter; // null = all
   bool _loading = true;
@@ -137,6 +142,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     super.initState();
     _load();
     _initSchedules();
+    _initStreakNotifications();
+    _initFCM();
   }
 
   Future<void> _initSchedules() async {
@@ -180,13 +187,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
     await prefs.setString(_prefsKey, encoded);
   }
 
-  Future<void> _add(AppNotification n, {bool save = true}) async {
-    setState(() {
-      _notifications.insert(0, n);
-    });
-    if (save) await _save();
-  }
-
   Future<void> _remove(String id) async {
     setState(() {
       _notifications.removeWhere((n) => n.id == id);
@@ -203,67 +203,71 @@ class _NotificationScreenState extends State<NotificationScreen> {
     await _save();
   }
 
-  // Utilities to create sample notifications (for testing & demo)
-  AppNotification _makeSample(NotificationCategory cat) {
-    final rnd = Random();
-    final id =
-        '${DateTime.now().millisecondsSinceEpoch}_${rnd.nextInt(9999)}';
-    switch (cat) {
-      case NotificationCategory.dailyChallenge:
-        return AppNotification(
-          id: id,
-          category: cat,
-          title: 'Today\'s Challenge',
-          body:
-              '🌞 Good morning! Today\'s challenge: Ditch single-use plastics and earn +20 EcoPoints.',
-          time: DateTime.now(),
-        );
-      case NotificationCategory.ecoTip:
-        return AppNotification(
-          id: id,
-          category: cat,
-          title: 'Eco Tip of the Day',
-          body:
-              '♻️ Eco Tip: Switch to reusable water bottles to cut down on waste.',
-          time: DateTime.now(),
-        );
-      case NotificationCategory.milestone:
-        return AppNotification(
-          id: id,
-          category: cat,
-          title: 'Milestone Unlocked',
-          body:
-              '🔥 7-day streak complete! You\'ve earned the "Green Guardian" badge.',
-          time: DateTime.now(),
-        );
-      case NotificationCategory.scanInsight:
-        return AppNotification(
-          id: id,
-          category: cat,
-          title: 'Scan Insight',
-          body:
-              '🌍 You saved 0.5kg of CO₂ by choosing this product! Check details in your feed.',
-          time: DateTime.now(),
-          data: {'productId': 'sample_123'},
-        );
-      case NotificationCategory.localAlert:
-        return AppNotification(
-          id: id,
-          category: cat,
-          title: 'Local Recycling Alert',
-          body: '📍 New recycling center opened near you — check it out!',
-          time: DateTime.now(),
-        );
+  // Initialize streak notifications
+  Future<void> _initStreakNotifications() async {
+    try {
+      _streakNotifStatus = await StreakNotificationManager()
+          .getNotificationStatus();
+      setState(() {});
+      debugPrint('✅ Streak notification status loaded');
+    } catch (e) {
+      debugPrint('❌ Failed to load streak notification status: $e');
     }
   }
 
-  // Public helpers (simulate incoming notif)
-  Future<void> _simulate(NotificationCategory cat) async {
-    final n = _makeSample(cat);
-    await _add(n);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Notification added')));
+  // Initialize FCM
+  Future<void> _initFCM() async {
+    try {
+      await FCMService().initialize();
+      setState(() {
+        _fcmInitialized = FCMService().isInitialized;
+      });
+      debugPrint('✅ FCM initialized in notification screen');
+    } catch (e) {
+      debugPrint('❌ Failed to initialize FCM: $e');
+    }
+  }
+
+  // Toggle specific streak notification
+  Future<void> _toggleStreakNotification(String type) async {
+    try {
+      final currentStatus = _streakNotifStatus[type] ?? false;
+
+      if (currentStatus) {
+        await StreakNotificationManager().cancelNotification(type);
+      } else {
+        switch (type) {
+          case 'morning':
+            await StreakNotificationManager().scheduleMorningEncouragement();
+            break;
+          case 'midday':
+            await StreakNotificationManager().scheduleMidDayReminder();
+            break;
+          case 'evening':
+            await StreakNotificationManager().scheduleEveningWarning();
+            break;
+          case 'lastchance':
+            await StreakNotificationManager().scheduleLastChanceReminder();
+            break;
+        }
+      }
+
+      await _initStreakNotifications(); // Refresh status
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            currentStatus
+                ? 'Streak reminder disabled'
+                : 'Streak reminder enabled',
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to toggle notification: $e')),
+      );
+    }
   }
 
   Future<void> _toggleDailySchedule() async {
@@ -628,6 +632,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
+
+                      // Streak Reminders Section
+                      _buildStreakRemindersSection(),
                     ],
                   ),
                 ),
@@ -868,6 +875,177 @@ class _NotificationScreenState extends State<NotificationScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Build streak reminders section with toggles
+  Widget _buildStreakRemindersSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.local_fire_department,
+                  color: Colors.orange,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Streak Reminders',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const Spacer(),
+              if (_fcmInitialized)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: kPrimaryGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.cloud_done, size: 14, color: kPrimaryGreen),
+                      SizedBox(width: 4),
+                      Text(
+                        'Cloud',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: kPrimaryGreen,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Stay engaged like TikTok! Get reminders to maintain your streak',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                _buildStreakReminderToggle(
+                  icon: Icons.wb_sunny,
+                  title: 'Morning Boost',
+                  subtitle: '8:00 AM - Start your day right',
+                  type: 'morning',
+                  color: Colors.amber,
+                ),
+                const Divider(height: 24),
+                _buildStreakReminderToggle(
+                  icon: Icons.notifications_active,
+                  title: 'Mid-Day Check',
+                  subtitle: '12:00 PM - Keep momentum going',
+                  type: 'midday',
+                  color: Colors.blue,
+                ),
+                const Divider(height: 24),
+                _buildStreakReminderToggle(
+                  icon: Icons.warning_amber,
+                  title: 'Evening Warning',
+                  subtitle: '6:00 PM - Streak at risk alert',
+                  type: 'evening',
+                  color: Colors.orange,
+                ),
+                const Divider(height: 24),
+                _buildStreakReminderToggle(
+                  icon: Icons.alarm,
+                  title: 'Last Chance',
+                  subtitle: '10:00 PM - Final reminder',
+                  type: 'lastchance',
+                  color: Colors.red,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  /// Build individual streak reminder toggle
+  Widget _buildStreakReminderToggle({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String type,
+    required Color color,
+  }) {
+    final isEnabled = _streakNotifStatus[type] ?? false;
+
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: color, size: 22),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+        Switch(
+          value: isEnabled,
+          activeThumbColor: kPrimaryGreen,
+          onChanged: (value) => _toggleStreakNotification(type),
+        ),
+      ],
     );
   }
 }

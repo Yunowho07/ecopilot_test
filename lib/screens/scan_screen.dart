@@ -273,7 +273,8 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
 
       Map<String, dynamic>? json;
       Map<String, dynamic>? prod;
-      String database = 'Open Food Facts';
+      // Database name available but not currently used
+      // String database = 'Open Food Facts';
 
       if (resp.statusCode == 200 && resp.body.isNotEmpty) {
         json = jsonDecode(resp.body) as Map<String, dynamic>;
@@ -295,7 +296,6 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
           json = jsonDecode(resp.body) as Map<String, dynamic>;
           if (json['status'] == 1) {
             prod = json['product'] as Map<String, dynamic>;
-            database = 'Open Beauty Facts';
             debugPrint('✅ Product found in Open Beauty Facts');
           }
         }
@@ -474,13 +474,26 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          'Help us by adding it! Earn 10 eco points',
-                          style: TextStyle(
-                            color: kPrimaryGreen,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Help us by adding it! Earn 30 eco points',
+                              style: TextStyle(
+                                color: kPrimaryGreen,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Limit: 3 per day, 10 per week',
+                              style: TextStyle(
+                                color: Colors.black54,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -608,7 +621,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
               }
             },
             icon: const Icon(Icons.send, size: 18),
-            label: const Text('Submit & Earn 10 Points'),
+            label: const Text('Submit & Earn 30 Points'),
             style: ElevatedButton.styleFrom(
               backgroundColor: kPrimaryGreen,
               foregroundColor: Colors.white,
@@ -652,42 +665,71 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
         );
       }
 
-      // Save to user_contributions collection
-      await FirebaseFirestore.instance.collection('user_contributions').add({
-        'barcode': barcode,
-        'productName': productName,
-        'brand': brand,
-        'category': category,
-        'ingredients': ingredients,
-        'contributedBy': user.uid,
-        'contributedAt': FieldValue.serverTimestamp(),
-        'status': 'pending', // Can be reviewed by admin later
-      });
+      // Try to award eco points first (this checks daily/weekly limits)
+      try {
+        await FirebaseService().addEcoPoints(
+          points: 30,
+          reason: 'Added new product: $productName',
+          activityType: 'add_new_product',
+        );
 
-      // Award 10 eco points
-      final now = DateTime.now();
-      final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
-      final monthlyPointsRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('monthly_points')
-          .doc(monthKey);
-
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final monthlyDoc = await transaction.get(monthlyPointsRef);
-
-        if (monthlyDoc.exists) {
-          final currentPoints = monthlyDoc.data()?['points'] ?? 0;
-          transaction.update(monthlyPointsRef, {'points': currentPoints + 10});
-        } else {
-          transaction.set(monthlyPointsRef, {
-            'points': 10,
-            'goal': 500,
-            'month': monthKey,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
+        // Save to user_contributions collection
+        await FirebaseFirestore.instance.collection('user_contributions').add({
+          'barcode': barcode,
+          'productName': productName,
+          'brand': brand,
+          'category': category,
+          'ingredients': ingredients,
+          'contributedBy': user.uid,
+          'contributedAt': FieldValue.serverTimestamp(),
+          'status': 'pending', // Can be reviewed by admin later
+        });
+      } catch (e) {
+        // Close loading dialog if open
+        if (mounted) {
+          Navigator.of(context).pop();
         }
-      });
+
+        // Check if it's a limit error
+        final errorMessage = e.toString();
+        if (errorMessage.contains('Activity limit') ||
+            errorMessage.contains('daily limit') ||
+            errorMessage.contains('weekly limit')) {
+          if (mounted) {
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                title: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange.shade700),
+                    const SizedBox(width: 12),
+                    const Text('Limit Reached'),
+                  ],
+                ),
+                content: const Text(
+                  'You have reached the submission limit for adding new products.\n\n'
+                  'Limits:\n'
+                  '• 3 submissions per day\n'
+                  '• 10 submissions per week\n\n'
+                  'Please try again tomorrow or next week.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
+          }
+          return;
+        } else {
+          throw e; // Re-throw other errors
+        }
+      }
 
       // Close loading dialog
       if (mounted) {
@@ -753,7 +795,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '+10 Eco Points',
+                            '+30 Eco Points',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -776,7 +818,14 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
             ),
             actions: [
               ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () {
+                  Navigator.of(context).pop(); // Close dialog
+                  // Navigate to home screen
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    (route) => false,
+                  );
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kPrimaryGreen,
                   foregroundColor: Colors.white,
@@ -795,7 +844,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
         );
       }
 
-      debugPrint('✅ Product contribution saved and 10 points awarded');
+      debugPrint('✅ Product contribution saved and 30 points awarded');
     } catch (e) {
       debugPrint('❌ Error saving contribution: $e');
 
@@ -839,7 +888,7 @@ You are an eco-expert AI. Analyze the uploaded product image and describe clearl
 Product name: [Product Name]
 Category: [Product Category, e.g., Food & Beverages (F&B), Personal Care, Household Products, Electronics, Clothing & Accessories, Health & Medicine, Baby & Kids, Pet Supplies, Automotive, Home & Furniture]
 Ingredients: [List of ingredients, comma-separated, e.g., Water, Zinc Oxide, etc.]
-Eco-friendliness rating: [A, B, C, D, E or etc.]
+Eco-friendliness rating: [Single letter: A, B, C, D, or E. Use STRICT criteria: A=Excellent (organic, plastic-free, certified eco-labels), B=Good (minimal plastic, recyclable, eco certifications), C=Moderate (standard recyclable, conventional), D=Poor (excessive plastic, harmful ingredients), E=Very poor (single-use plastic, toxic, non-recyclable)]
 Carbon Footprint: [Estimated CO2e per unit, e.g., 0.36 kg CO2e per unit]
 Packaging type: [Material and recyclability, e.g., Plastic Tube - Recyclable (Type 4 - LDPE)]
 Disposal method: [Suggested disposal, e.g., Rinse and recycle locally]
@@ -847,6 +896,15 @@ Contains microplastics? [Yes/No]
 Palm oil derivative? [Yes/No (No trace/Contains)]
 Cruelty-Free? [Yes/No (Certified by Leaping Bunny)]
 Better Alternative Product (Higher Eco Score): [Name of an alternative product that belongs to the same category but has a better Eco-friendliness rating — e.g., from C to A or B. Include short reason why it’s better, e.g., “Uses biodegradable surfactants and recycled paper packaging.”]
+      
+STANDARDIZED ECO SCORE CRITERIA (MUST USE CONSISTENTLY):
+- A: Excellent sustainability (organic, plastic-free, carbon-neutral, certified eco-labels like FSC, Leaping Bunny)
+- B: Good sustainability (minimal plastic, recyclable packaging, some eco certifications, low environmental impact)
+- C: Moderate sustainability (standard recyclable packaging, conventional ingredients, average carbon footprint)
+- D: Poor sustainability (excessive plastic, non-recyclable materials, harmful ingredients, high carbon footprint)
+- E: Very poor sustainability (single-use plastic, toxic ingredients, non-recyclable, very high environmental impact)
+
+IMPORTANT: Apply the SAME eco score criteria consistently. A glass bottle product should always get the same score regardless of which screen analyzes it.
       """;
 
       final content = [
@@ -966,6 +1024,18 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
           crueltyFree: analysisData.crueltyFree,
         );
         debugPrint("✅ Scan saved to Firestore via FirebaseService.");
+
+        // Award points for scanning a product
+        try {
+          await FirebaseService().addEcoPoints(
+            points: 5,
+            reason: 'Scanned product: ${analysisData.productName}',
+            activityType: 'scan_product',
+          );
+          debugPrint('✅ Awarded 5 points for product scan');
+        } catch (e) {
+          debugPrint('⚠️ Failed to award scan points: $e');
+        }
       } catch (e) {
         debugPrint("❌ Failed to save scan via FirebaseService: $e");
       }
@@ -1371,28 +1441,28 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.6),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: kPrimaryGreen.withOpacity(0.3),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Text(
-                                  'Position product here',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
+                              // Container(
+                              //   padding: const EdgeInsets.symmetric(
+                              //     horizontal: 20,
+                              //     vertical: 8,
+                              //   ),
+                              //   decoration: BoxDecoration(
+                              //     color: Colors.black.withOpacity(0.6),
+                              //     borderRadius: BorderRadius.circular(20),
+                              //     border: Border.all(
+                              //       color: kPrimaryGreen.withOpacity(0.3),
+                              //       width: 1,
+                              //     ),
+                              //   ),
+                              //   // child: Text(
+                              //   //   'Position product here',
+                              //   //   style: TextStyle(
+                              //   //     color: Colors.white,
+                              //   //     fontSize: 14,
+                              //   //     fontWeight: FontWeight.w500,
+                              //   //   ),
+                              //   // ),
+                              // ),
                             ],
                           ),
                   ),
@@ -1436,36 +1506,36 @@ Better Alternative Product (Higher Eco Score): [Name of an alternative product t
             child: Column(
               children: [
                 // Instruction text
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 40),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(
-                      color: kPrimaryGreen.withOpacity(0.3),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.info_outline, color: kPrimaryGreen, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Align product within frame',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                // Container(
+                //   margin: const EdgeInsets.symmetric(horizontal: 40),
+                //   padding: const EdgeInsets.symmetric(
+                //     horizontal: 20,
+                //     vertical: 12,
+                //   ),
+                //   // decoration: BoxDecoration(
+                //   //   color: Colors.black.withOpacity(0.7),
+                //   //   borderRadius: BorderRadius.circular(25),
+                //   //   border: Border.all(
+                //   //     color: kPrimaryGreen.withOpacity(0.3),
+                //   //     width: 1,
+                //   //   ),
+                //   // ),
+                //   child: Row(
+                //     mainAxisSize: MainAxisSize.min,
+                //     children: [
+                //       Icon(Icons.info_outline, color: kPrimaryGreen, size: 18),
+                //       const SizedBox(width: 8),
+                //       Text(
+                //         'Align product within frame',
+                //         style: TextStyle(
+                //           color: Colors.white,
+                //           fontSize: 13,
+                //           fontWeight: FontWeight.w500,
+                //         ),
+                //       ),
+                //     ],
+                //   ),
+                // ),
                 const SizedBox(height: 24),
 
                 // Action Buttons Row

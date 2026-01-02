@@ -18,7 +18,7 @@ class RankInfo {
   ]);
 }
 
-/// Eco Point Reward System - 8 Tier Ranking System
+/// Eco Point Reward System - 12 Tier Ranking System
 ///
 /// Points can be earned through:
 /// - Product scanning (+2 points)
@@ -30,67 +30,103 @@ class RankInfo {
 /// - Weekly engagement (+10 points)
 /// - Monthly leaderboard bonus (up to +20 points)
 RankInfo rankForPoints(int points) {
-  if (points >= 2000) {
+  if (points >= 40000) {
     return const RankInfo(
       'Global Sustainability Icon',
       Color(0xFFFFD700), // Gold
       '🏆',
-      2000,
+      40000,
       null,
     );
   }
-  if (points >= 1201) {
+  if (points >= 30000) {
     return const RankInfo(
       'Eco Legend',
       Color(0xFF9C27B0), // Purple
       '⭐',
-      1201,
-      2000,
+      30000,
+      39999,
     );
   }
-  if (points >= 801) {
+  if (points >= 23000) {
     return const RankInfo(
       'Climate Champion',
       Color(0xFFE91E63), // Pink
       '🔥',
-      801,
-      1200,
+      23000,
+      29999,
     );
   }
-  if (points >= 501) {
+  if (points >= 17000) {
     return const RankInfo(
       'Earth Guardian',
       Color(0xFF2196F3), // Blue
       '💧',
-      501,
-      800,
+      17000,
+      22999,
     );
   }
-  if (points >= 301) {
+  if (points >= 12000) {
     return const RankInfo(
-      'Sustainability Hero',
-      kRankSustainabilityHero, // Orange
-      '🌎',
-      301,
-      500,
+      'Eco Guardian',
+      Color(0xFF00BCD4), // Cyan
+      '🛡️',
+      12000,
+      16999,
     );
   }
-  if (points >= 151) {
+  if (points >= 8000) {
     return const RankInfo(
       'Planet Protector',
       kRankPlanetProtector, // Dark Green
       '🌳',
-      151,
-      300,
+      8000,
+      11999,
     );
   }
-  if (points >= 51) {
+  if (points >= 5000) {
+    return const RankInfo(
+      'Sustainability Champion',
+      kRankSustainabilityHero, // Orange
+      '🌎',
+      5000,
+      7999,
+    );
+  }
+  if (points >= 3000) {
+    return const RankInfo(
+      'Eco Advocate',
+      Color(0xFF4CAF50), // Green
+      '📢',
+      3000,
+      4999,
+    );
+  }
+  if (points >= 1500) {
     return const RankInfo(
       'Eco Explorer',
       kRankEcoExplorer, // Amber
       '🌻',
-      51,
-      150,
+      1500,
+      2999,
+    );
+  }
+  if (points >= 800) {
+    return const RankInfo(
+      'Sprout',
+      Color(0xFF8BC34A), // Light Green
+      '🌿',
+      800,
+      1499,
+    );
+  }
+  if (points >= 300) {
+    return const RankInfo(
+      'Seedling',
+      Color(0xFF9CCC65), // Pale Green
+      '🌾',
+      300,
+      799,
     );
   }
   return const RankInfo(
@@ -98,7 +134,7 @@ RankInfo rankForPoints(int points) {
     kRankGreenBeginner, // Primary Green
     '🌱',
     0,
-    50,
+    299,
   );
 }
 
@@ -108,22 +144,30 @@ String getRankDescription(int points) {
 
   switch (rank.title) {
     case 'Global Sustainability Icon':
-      return 'The ultimate eco rank. You embody environmental leadership and inspire global change.';
+      return 'Top-tier users recognized for exceptional global impact.';
     case 'Eco Legend':
-      return 'You\'ve reached the elite level — your efforts have made a lasting mark on the planet\'s future.';
+      return 'Elite users with outstanding sustainability contributions.';
     case 'Climate Champion':
-      return 'You lead by example, combining knowledge, action, and influence to protect the environment.';
+      return 'Users actively driving climate-positive behavior.';
     case 'Earth Guardian':
-      return 'You actively reduce waste and carbon impact through consistent eco engagement.';
-    case 'Sustainability Hero':
-      return 'You\'ve made sustainability a daily commitment — inspiring others to do the same.';
+      return 'Advanced users with long-term eco commitment.';
+    case 'Eco Guardian':
+      return 'Dedicated users who lead sustainability efforts.';
     case 'Planet Protector':
-      return 'You\'re taking real action to protect the planet through responsible decisions.';
+      return 'Users making a visible environmental impact.';
+    case 'Sustainability Champion':
+      return 'Highly committed users with strong eco habits.';
+    case 'Eco Advocate':
+      return 'Users who consistently support sustainable practices.';
     case 'Eco Explorer':
-      return 'You\'re exploring sustainable habits and discovering new eco-friendly choices.';
+      return 'Active users who regularly engage in eco-friendly actions.';
+    case 'Sprout':
+      return 'Users who participate occasionally in eco challenges and scans.';
+    case 'Seedling':
+      return 'Users beginning to explore eco-friendly activities.';
     case 'Green Beginner':
     default:
-      return 'You\'re just starting your eco journey! Every scan and challenge helps you grow greener.';
+      return 'Users who are new and just starting their sustainability journey.';
   }
 }
 

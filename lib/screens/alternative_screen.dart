@@ -179,13 +179,24 @@ class AlternativeProductCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Product Image
+                    // Product Image - Prominently displayed
                     Container(
-                      width: 90,
-                      height: 90,
+                      width: 110,
+                      height: 110,
                       decoration: BoxDecoration(
                         color: Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Colors.grey.shade200,
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(16),
@@ -193,31 +204,110 @@ class AlternativeProductCard extends StatelessWidget {
                             ? (product.imagePath.startsWith('http')
                                   ? Image.network(
                                       product.imagePath,
-                                      width: 90,
-                                      height: 90,
+                                      width: 110,
+                                      height: 110,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (ctx, err, st) => Icon(
-                                        Icons.eco,
-                                        size: 40,
-                                        color: kPrimaryGreen.withOpacity(0.3),
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) {
+                                          return child;
+                                        }
+                                        return Center(
+                                          child: SizedBox(
+                                            width: 35,
+                                            height: 35,
+                                            child: CircularProgressIndicator(
+                                              value:
+                                                  loadingProgress
+                                                          .expectedTotalBytes !=
+                                                      null
+                                                  ? loadingProgress
+                                                            .cumulativeBytesLoaded /
+                                                        loadingProgress
+                                                            .expectedTotalBytes!
+                                                  : null,
+                                              strokeWidth: 2.5,
+                                              color: kPrimaryGreen,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      errorBuilder: (ctx, err, st) => Container(
+                                        color: kPrimaryGreen.withOpacity(0.05),
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.eco,
+                                              size: 42,
+                                              color: kPrimaryGreen.withOpacity(
+                                                0.4,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Eco Product',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     )
                                   : Image.asset(
                                       product.imagePath,
-                                      width: 90,
-                                      height: 90,
+                                      width: 110,
+                                      height: 110,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (ctx, err, st) => Icon(
-                                        Icons.eco,
-                                        size: 40,
-                                        color: kPrimaryGreen.withOpacity(0.3),
+                                      errorBuilder: (ctx, err, st) => Container(
+                                        color: kPrimaryGreen.withOpacity(0.05),
+                                        child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            Icon(
+                                              Icons.eco,
+                                              size: 42,
+                                              color: kPrimaryGreen.withOpacity(
+                                                0.4,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              'Eco Product',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w500,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ))
-                            : Center(
-                                child: Icon(
-                                  Icons.eco,
-                                  size: 40,
-                                  color: kPrimaryGreen.withOpacity(0.3),
+                            : Container(
+                                color: kPrimaryGreen.withOpacity(0.05),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.image_outlined,
+                                      size: 42,
+                                      color: Colors.grey.shade400,
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'No Image',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                       ),
@@ -227,23 +317,41 @@ class AlternativeProductCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Product Name
+                          // 1. PRODUCT NAME (PRIORITY #1 - Most Prominent)
                           Text(
                             product.name,
                             style: const TextStyle(
-                              fontSize: 17,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
                               color: Colors.black87,
+                              height: 1.2,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
 
-                          // Eco Score Badge and Wishlist
+                          // 2. ECO SCORE (PRIORITY #2 - Prominent Badge)
                           Row(
                             children: [
                               EcoScoreBadge(score: product.ecoScore),
+                              if (product.rating != null) ...[
+                                const SizedBox(width: 8),
+                                Icon(
+                                  Icons.star,
+                                  size: 14,
+                                  color: Colors.amber.shade700,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  product.rating!.toStringAsFixed(1),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ],
                               const Spacer(),
                               IconButton(
                                 icon: Icon(
@@ -262,14 +370,50 @@ class AlternativeProductCard extends StatelessWidget {
                             ],
                           ),
 
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
 
-                          // Material Type
+                          // 3. PRICE (PRIORITY #3 - Clear and Visible)
+                          if (product.price != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.blue.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.attach_money,
+                                    size: 16,
+                                    color: Colors.blue.shade700,
+                                  ),
+                                  Text(
+                                    'RM ${product.price!.toStringAsFixed(2)}',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          // Material Type (Secondary Info)
+                          const SizedBox(height: 6),
                           Row(
                             children: [
                               Icon(
                                 Icons.inventory_2_outlined,
-                                size: 14,
+                                size: 13,
                                 color: Colors.grey.shade600,
                               ),
                               const SizedBox(width: 4),
@@ -277,7 +421,7 @@ class AlternativeProductCard extends StatelessWidget {
                                 child: Text(
                                   product.materialType,
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: 12,
                                     color: Colors.grey.shade600,
                                   ),
                                   maxLines: 1,
@@ -286,29 +430,6 @@ class AlternativeProductCard extends StatelessWidget {
                               ),
                             ],
                           ),
-
-                          // Rating if available
-                          if (product.rating != null) ...[
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.star,
-                                  size: 14,
-                                  color: Colors.amber.shade700,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  product.rating!.toStringAsFixed(1),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
                         ],
                       ),
                     ),
@@ -328,70 +449,39 @@ class AlternativeProductCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
 
-                // Price and Carbon Savings Row
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: Row(
-                    children: [
-                      // Price
-                      if (product.price != null) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                // Carbon Savings (Environmental Impact)
+                if (product.carbonSavings.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kPrimaryGreen.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.eco, size: 14, color: kPrimaryGreen),
+                        const SizedBox(width: 4),
+                        Flexible(
                           child: Text(
-                            'RM ${product.price!.toStringAsFixed(2)}',
+                            product.carbonSavings,
                             style: TextStyle(
-                              fontSize: 13,
-                              color: Colors.blue.shade700,
+                              fontSize: 12,
+                              color: kPrimaryGreen,
                               fontWeight: FontWeight.w600,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
                       ],
-
-                      // Carbon Savings
-                      if (product.carbonSavings.isNotEmpty)
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: kPrimaryGreen.withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.eco, size: 14, color: kPrimaryGreen),
-                                const SizedBox(width: 4),
-                                Flexible(
-                                  child: Text(
-                                    product.carbonSavings,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: kPrimaryGreen,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
+                    ),
                   ),
-                ),
+                ],
 
                 const SizedBox(height: 14),
                 // Action Buttons
@@ -490,6 +580,161 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
     if (score.startsWith('D')) return 4;
     if (score.startsWith('E')) return 5;
     return 99;
+  }
+
+  /// Extracts generic product type from full product name
+  /// Example: "Colgate Total Whitening Toothpaste 150g Twin Pack" -> "Toothpaste"
+  String _extractGenericProductType(String fullProductName) {
+    if (fullProductName.isEmpty) return fullProductName;
+
+    // Common patterns to remove (case-insensitive)
+    final patternsToRemove = [
+      // Sizes and quantities
+      RegExp(
+        r'\b\d+\s*(ml|l|g|kg|oz|lb|pack|pcs|pieces?)\b',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\b(twin|triple|double|single|multi)\s*pack\b',
+        caseSensitive: false,
+      ),
+      RegExp(r'\b\d+x\d+\b', caseSensitive: false), // 2x150ml
+      RegExp(r"\b\d+'?\b", caseSensitive: false), // 5' or 5 (for sizes)
+      // Colors and variants
+      RegExp(
+        r'\b(red|blue|green|yellow|black|white|pink|purple|orange|brown|grey|gray|silver|gold)\b',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\b(light|dark|deep|bright|pale|neon)\s+(red|blue|green|yellow|black|white|pink|purple|orange|brown|grey|gray)\b',
+        caseSensitive: false,
+      ),
+
+      // Model numbers and codes
+      RegExp(r'\b[A-Z0-9]{2,}-?[A-Z0-9]{2,}\b'), // AB12, XYZ-123
+      RegExp(r'\bmodel\s+[A-Z0-9]+\b', caseSensitive: false),
+      RegExp(r'\bv\d+(\.\d+)?\b', caseSensitive: false), // v2.0, v3
+      // Promotional terms
+      RegExp(
+        r'\b(new|latest|improved|advanced|premium|deluxe|special|limited|edition|pro|plus|max|ultra|super|mega|extra)\b',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\b(sale|offer|deal|discount|promo|bundle)\b',
+        caseSensitive: false,
+      ),
+
+      // Common brand indicators (will be handled separately)
+      RegExp(
+        r'\b(original|authentic|genuine|official)\b',
+        caseSensitive: false,
+      ),
+
+      // Descriptive modifiers that are too specific
+      RegExp(
+        r'\b(organic|natural|eco|green|sustainable|biodegradable|recyclable)\b',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\b(scented|unscented|fragrance-free|hypoallergenic)\b',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\b(whitening|brightening|moisturizing|hydrating|nourishing)\b',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\b(antibacterial|antiseptic|antifungal)\b',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'\b(long-lasting|quick-dry|fast-acting|instant)\b',
+        caseSensitive: false,
+      ),
+
+      // Common connectors and fillers
+      RegExp(r'\s+with\s+.*$', caseSensitive: false), // Everything after "with"
+      RegExp(r'\s+for\s+.*$', caseSensitive: false), // Everything after "for"
+    ];
+
+    // Common brand names to remove (extend this list as needed)
+    final commonBrands = [
+      'Colgate',
+      'Oral-B',
+      'Sensodyne',
+      'Pepsodent',
+      'Darlie',
+      'Dove',
+      'Lux',
+      'Lifebuoy',
+      'Dettol',
+      'Palmolive',
+      'Pantene',
+      'Head & Shoulders',
+      'Rejoice',
+      'Sunsilk',
+      'Clear',
+      'Coca-Cola',
+      'Pepsi',
+      'Nestle',
+      'Milo',
+      'Nescafe',
+      'Maggi',
+      'Knorr',
+      'Ajinomoto',
+      'Lady\'s Choice',
+      'Kimball',
+      'Samsung',
+      'Apple',
+      'Xiaomi',
+      'Huawei',
+      'Oppo',
+      'Vivo',
+      'Nike',
+      'Adidas',
+      'Puma',
+      'Uniqlo',
+      'H&M',
+    ];
+
+    String result = fullProductName;
+
+    // Remove brand names (case-insensitive word boundary matching)
+    for (final brand in commonBrands) {
+      result = result.replaceAll(
+        RegExp(r'\b' + RegExp.escape(brand) + r'\b', caseSensitive: false),
+        '',
+      );
+    }
+
+    // Apply all pattern removals
+    for (final pattern in patternsToRemove) {
+      result = result.replaceAll(pattern, '');
+    }
+
+    // Clean up extra whitespace and punctuation
+    result = result
+        .replaceAll(
+          RegExp(r'[\s,\-\_\/\(\)\[\]\{\}]+'),
+          ' ',
+        ) // Normalize whitespace and punctuation
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' '); // Remove multiple spaces
+
+    // If result is empty or too short, return the original
+    if (result.isEmpty || result.length < 3) {
+      // Fallback: try to extract the last meaningful word from original
+      final words = fullProductName.split(RegExp(r'\s+'));
+      for (int i = words.length - 1; i >= 0; i--) {
+        final word = words[i].replaceAll(RegExp(r'[^a-zA-Z]'), '');
+        if (word.length >= 3 && !RegExp(r'^\d+$').hasMatch(word)) {
+          return word;
+        }
+      }
+      return fullProductName; // Ultimate fallback
+    }
+
+    return result;
   }
 
   // Wishlist management methods
@@ -879,48 +1124,83 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(28),
-            topRight: Radius.circular(28),
+        height: MediaQuery.of(context).size.height * 0.88,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(32),
+            topRight: Radius.circular(32),
           ),
         ),
         child: Column(
           children: [
             // Drag Handle
             Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 50,
+              height: 5,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
 
-            // Header with gradient
+            // Modern Header with Gradient Background
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [kPrimaryGreen.withOpacity(0.1), Colors.white],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+                  colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: kPrimaryGreen.withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
               ),
-              child: Row(
+              child: Column(
                 children: [
-                  Icon(Icons.compare_arrows, color: kPrimaryGreen, size: 28),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Product Comparison',
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.compare_arrows,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      const Text(
+                        'Smart Comparison',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'See how your eco-choice stacks up',
                     style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      fontSize: 13,
+                      color: Colors.white.withOpacity(0.9),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -929,207 +1209,383 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
 
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children: [
-                    const SizedBox(height: 16),
-                    // Product Images Side by Side
-                    Row(
+                    const SizedBox(height: 20),
+
+                    // Product Cards Side by Side with VS badge
+                    Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Container(
-                                height: 120,
+                        Row(
+                          children: [
+                            // Current Product Card
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(16),
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
                                     color: Colors.grey.shade300,
                                     width: 2,
                                   ),
-                                ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: Center(
-                                    child: Icon(
-                                      Icons.shopping_bag,
-                                      size: 48,
-                                      color: Colors.grey.shade400,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
-                                  ),
+                                  ],
+                                ),
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      height: 100,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          Icons.shopping_bag_outlined,
+                                          size: 48,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        'Current',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.black54,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      scanned.productName,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black87,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
+                            ),
+                            const SizedBox(width: 60), // Space for VS badge
+                            // Alternative Product Card
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: Colors.grey.shade200,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Text(
-                                  'Current Product',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      kPrimaryGreen.withOpacity(0.1),
+                                      kPrimaryGreen.withOpacity(0.05),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
                                   ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Icon(
-                            Icons.arrow_forward,
-                            color: kPrimaryGreen,
-                            size: 28,
-                          ),
-                        ),
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Container(
-                                height: 120,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
                                     color: kPrimaryGreen,
-                                    width: 2,
+                                    width: 2.5,
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: kPrimaryGreen.withOpacity(0.2),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
                                 ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: alternative.imagePath.isNotEmpty
-                                      ? (alternative.imagePath.startsWith(
-                                              'http',
-                                            )
-                                            ? Image.network(
-                                                alternative.imagePath,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (ctx, err, st) =>
-                                                    Icon(
-                                                      Icons.eco,
-                                                      size: 48,
-                                                      color: kPrimaryGreen
-                                                          .withOpacity(0.3),
-                                                    ),
-                                              )
-                                            : Image.asset(
-                                                alternative.imagePath,
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (ctx, err, st) =>
-                                                    Icon(
-                                                      Icons.eco,
-                                                      size: 48,
-                                                      color: kPrimaryGreen
-                                                          .withOpacity(0.3),
-                                                    ),
-                                              ))
-                                      : Center(
-                                          child: Icon(
-                                            Icons.eco,
-                                            size: 48,
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      height: 100,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: alternative.imagePath.isNotEmpty
+                                            ? (alternative.imagePath.startsWith(
+                                                    'http',
+                                                  )
+                                                  ? Image.network(
+                                                      alternative.imagePath,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder:
+                                                          (
+                                                            ctx,
+                                                            err,
+                                                            st,
+                                                          ) => Icon(
+                                                            Icons.eco,
+                                                            size: 48,
+                                                            color:
+                                                                kPrimaryGreen,
+                                                          ),
+                                                    )
+                                                  : Image.asset(
+                                                      alternative.imagePath,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder:
+                                                          (
+                                                            ctx,
+                                                            err,
+                                                            st,
+                                                          ) => Icon(
+                                                            Icons.eco,
+                                                            size: 48,
+                                                            color:
+                                                                kPrimaryGreen,
+                                                          ),
+                                                    ))
+                                            : Center(
+                                                child: Icon(
+                                                  Icons.eco,
+                                                  size: 48,
+                                                  color: kPrimaryGreen,
+                                                ),
+                                              ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: kPrimaryGreen,
+                                        borderRadius: BorderRadius.circular(8),
+                                        boxShadow: [
+                                          BoxShadow(
                                             color: kPrimaryGreen.withOpacity(
                                               0.3,
                                             ),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
                                           ),
-                                        ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.stars,
+                                            size: 12,
+                                            color: Colors.white,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'Better Choice',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      alternative.name,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: kPrimaryGreen,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: kPrimaryGreen.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'Better Alternative',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: kPrimaryGreen,
-                                  ),
-                                ),
+                            ),
+                          ],
+                        ),
+                        // VS Badge in the center
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.purple.shade400,
+                                Colors.purple.shade600,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.purple.withOpacity(0.4),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
                               ),
                             ],
+                          ),
+                          child: const Text(
+                            'VS',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 2,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-                    // Comparison Details
-                    _buildDetailComparisonRow(
+
+                    const SizedBox(height: 28),
+
+                    // Comparison Metrics Title
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: kPrimaryGreen.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.analytics_outlined,
+                            color: kPrimaryGreen,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Detailed Metrics',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Comparison Details with better design
+                    _buildModernComparisonRow(
                       'Product Name',
                       scanned.productName,
                       alternative.name,
+                      Icons.shopping_bag_outlined,
+                      Colors.blue,
                     ),
                     const SizedBox(height: 12),
-                    _buildDetailComparisonRow(
+                    _buildModernComparisonRow(
                       'Eco Score',
                       scanned.ecoScore,
                       alternative.ecoScore,
+                      Icons.eco,
+                      kPrimaryGreen,
+                      highlightBetter: true,
                     ),
                     const SizedBox(height: 12),
-                    _buildDetailComparisonRow(
+                    _buildModernComparisonRow(
                       'Packaging',
                       scanned.packagingType,
                       alternative.materialType,
+                      Icons.inventory_2_outlined,
+                      Colors.orange,
                     ),
                     const SizedBox(height: 12),
-                    _buildDetailComparisonRow(
+                    _buildModernComparisonRow(
                       'Category',
                       scanned.category,
                       alternative.category,
+                      Icons.category_outlined,
+                      Colors.purple,
                     ),
 
-                    // Carbon Impact Difference
+                    // Price Comparison if available
+                    if (alternative.price != null) ...[
+                      const SizedBox(height: 12),
+                      _buildModernComparisonRow(
+                        'Price',
+                        'N/A',
+                        'RM ${alternative.price!.toStringAsFixed(2)}',
+                        Icons.attach_money,
+                        Colors.green,
+                      ),
+                    ],
+
+                    // Environmental Impact Highlight
                     if (alternative.carbonSavings.isNotEmpty) ...[
                       const SizedBox(height: 24),
                       Container(
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              kPrimaryGreen.withOpacity(0.15),
+                              kPrimaryGreen.withOpacity(0.2),
                               kPrimaryGreen.withOpacity(0.05),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: kPrimaryGreen.withOpacity(0.3),
+                            color: kPrimaryGreen.withOpacity(0.4),
                             width: 2,
                           ),
                         ),
                         child: Column(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: kPrimaryGreen.withOpacity(0.2),
+                                color: Colors.white,
                                 shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: kPrimaryGreen.withOpacity(0.3),
+                                    blurRadius: 20,
+                                    spreadRadius: 5,
+                                  ),
+                                ],
                               ),
                               child: Icon(
-                                Icons.eco,
+                                Icons.energy_savings_leaf,
                                 color: kPrimaryGreen,
-                                size: 40,
+                                size: 48,
                               ),
                             ),
                             const SizedBox(height: 16),
                             const Text(
-                              'Environmental Impact',
+                              '🌍 Environmental Impact',
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 20,
                                 fontWeight: FontWeight.bold,
                                 color: Colors.black87,
                               ),
@@ -1137,30 +1593,48 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                             const SizedBox(height: 12),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
+                                horizontal: 20,
+                                vertical: 14,
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(16),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
                               ),
                               child: Text(
                                 alternative.carbonSavings,
                                 style: TextStyle(
-                                  fontSize: 15,
+                                  fontSize: 16,
                                   color: kPrimaryGreen,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.bold,
+                                  height: 1.4,
                                 ),
                                 textAlign: TextAlign.center,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'By choosing this alternative',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                                fontStyle: FontStyle.italic,
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: kPrimaryGreen.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Text(
+                                '✨ Your positive impact by switching',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ],
@@ -1170,27 +1644,22 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
 
                     const SizedBox(height: 24),
 
-                    // Action Buttons
+                    // Action Buttons with improved design
                     Row(
                       children: [
                         Expanded(
-                          child: OutlinedButton(
+                          child: OutlinedButton.icon(
                             onPressed: () => Navigator.pop(ctx),
+                            icon: const Icon(Icons.close, size: 20),
+                            label: const Text('Close'),
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
                               side: BorderSide(
-                                color: Colors.grey.shade300,
+                                color: Colors.grey.shade400,
                                 width: 2,
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: const Text(
-                              'Close',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
                               ),
                             ),
                           ),
@@ -1203,12 +1672,17 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                               Navigator.pop(ctx);
                               _openBuyLink(alternative.buyLink);
                             },
-                            icon: const Icon(Icons.shopping_bag),
-                            label: const Text('Choose This'),
+                            icon: const Icon(Icons.shopping_cart, size: 20),
+                            label: const Text(
+                              'Choose Better Option',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: kPrimaryGreen,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              elevation: 4,
+                              shadowColor: kPrimaryGreen.withOpacity(0.5),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -1217,7 +1691,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
@@ -1228,182 +1702,213 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
     );
   }
 
-  Widget _buildDetailComparisonRow(
+  Widget _buildModernComparisonRow(
     String label,
     String scannedValue,
     String altValue,
-  ) {
+    IconData icon,
+    Color accentColor, {
+    bool highlightBetter = false,
+  }) {
     bool altIsBetter = false;
-    if (label == 'Eco Score') {
+    if (highlightBetter && label == 'Eco Score') {
       altIsBetter = _ecoRank(altValue) < _ecoRank(scannedValue);
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.grey.shade200),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Text(
-                    scannedValue.isEmpty || scannedValue == 'N/A'
-                        ? '-'
-                        : scannedValue,
-                    style: const TextStyle(fontSize: 13, color: Colors.black87),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Icon(
-                  Icons.arrow_forward,
-                  size: 16,
-                  color: Colors.grey.shade400,
-                ),
-              ),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: altIsBetter
-                        ? kPrimaryGreen.withOpacity(0.1)
-                        : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: altIsBetter ? kPrimaryGreen : Colors.grey.shade300,
-                      width: altIsBetter ? 2 : 1,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          altValue.isEmpty || altValue == 'N/A'
-                              ? '-'
-                              : altValue,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: altIsBetter ? kPrimaryGreen : Colors.black87,
-                            fontWeight: altIsBetter
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ),
-                      if (altIsBetter)
-                        Icon(
-                          Icons.check_circle,
-                          color: kPrimaryGreen,
-                          size: 16,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildComparisonRow(
-    String label,
-    String scannedValue,
-    String altValue,
-  ) {
-    // Determine which is better for eco score
-    bool altIsBetter = false;
-    if (label == 'Eco Score') {
-      altIsBetter = _ecoRank(altValue) < _ecoRank(scannedValue);
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade600,
+          // Label with icon
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: accentColor.withOpacity(0.08),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Text(
-                  scannedValue.isEmpty || scannedValue == 'N/A'
-                      ? '-'
-                      : scannedValue,
-                  style: const TextStyle(fontSize: 14, color: Colors.black87),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, size: 20, color: accentColor),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  '(Current)',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: accentColor,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          Icon(Icons.arrow_forward, size: 18, color: Colors.grey.shade400),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          // Values comparison
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        altValue.isEmpty || altValue == 'N/A' ? '-' : altValue,
+                // Current value
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Current',
                         style: TextStyle(
-                          fontSize: 14,
-                          color: altIsBetter ? kPrimaryGreen : Colors.black87,
-                          fontWeight: altIsBetter
-                              ? FontWeight.w600
-                              : FontWeight.normal,
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
                         ),
                       ),
-                    ),
-                    if (altIsBetter)
-                      Icon(Icons.check_circle, color: kPrimaryGreen, size: 16),
-                  ],
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.grey.shade200,
+                            width: 1.5,
+                          ),
+                        ),
+                        child: Text(
+                          scannedValue.isEmpty || scannedValue == 'N/A'
+                              ? '—'
+                              : scannedValue,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  '(Alternative)',
-                  style: TextStyle(fontSize: 11, color: Colors.grey),
+                // Arrow
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 24,
+                        color: altIsBetter
+                            ? kPrimaryGreen
+                            : Colors.grey.shade400,
+                      ),
+                    ],
+                  ),
+                ),
+                // Alternative value
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Alternative',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: altIsBetter
+                                  ? kPrimaryGreen
+                                  : Colors.grey.shade600,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          if (altIsBetter) ...[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.verified,
+                              size: 14,
+                              color: kPrimaryGreen,
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: altIsBetter
+                              ? LinearGradient(
+                                  colors: [
+                                    kPrimaryGreen.withOpacity(0.15),
+                                    kPrimaryGreen.withOpacity(0.05),
+                                  ],
+                                )
+                              : null,
+                          color: altIsBetter ? null : Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: altIsBetter
+                                ? kPrimaryGreen
+                                : Colors.grey.shade200,
+                            width: altIsBetter ? 2 : 1.5,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                altValue.isEmpty || altValue == 'N/A'
+                                    ? '—'
+                                    : altValue,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: altIsBetter
+                                      ? kPrimaryGreen
+                                      : Colors.grey.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (altIsBetter)
+                              Icon(
+                                Icons.check_circle,
+                                color: kPrimaryGreen,
+                                size: 18,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1423,6 +1928,50 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
 
     // Update available brands for filter
     _updateAvailableBrands(alternatives);
+
+    // ✅ RANKING: Sort alternatives by priority criteria
+    // Priority 1: Eco Score (A+ > A > B > C > D > E)
+    // Priority 2: Product Relevance (shorter name = more generic/relevant)
+    // Priority 3: Price (lower is better)
+    alternatives.sort((a, b) {
+      // 1. Compare eco scores (lower rank = better)
+      final aEcoRank = _ecoRank(a.ecoScore);
+      final bEcoRank = _ecoRank(b.ecoScore);
+      if (aEcoRank != bEcoRank) {
+        return aEcoRank.compareTo(bEcoRank);
+      }
+
+      // 2. Compare product name length (shorter = more relevant/generic)
+      final aNameLength = a.name.length;
+      final bNameLength = b.name.length;
+      if (aNameLength != bNameLength) {
+        return aNameLength.compareTo(bNameLength);
+      }
+
+      // 3. Compare prices (lower is better)
+      // Products without price come last
+      if (a.price == null && b.price != null) return 1;
+      if (a.price != null && b.price == null) return -1;
+      if (a.price != null && b.price != null) {
+        return a.price!.compareTo(b.price!);
+      }
+
+      return 0; // Equal priority
+    });
+
+    // Debug: Show ranked alternatives
+    if (alternatives.isNotEmpty) {
+      debugPrint('📊 RANKED ALTERNATIVES (${alternatives.length} total):');
+      for (int i = 0; i < alternatives.length && i < 10; i++) {
+        final alt = alternatives[i];
+        debugPrint(
+          '   ${i + 1}. ${alt.name}\n'
+          '      Eco: ${alt.ecoScore} (rank: ${_ecoRank(alt.ecoScore)})\n'
+          '      Price: ${alt.price != null ? "RM ${alt.price!.toStringAsFixed(2)}" : "N/A"}\n'
+          '      Name Length: ${alt.name.length}',
+        );
+      }
+    }
 
     return alternatives;
   }
@@ -1476,8 +2025,8 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                     // Product Image
                     Center(
                       child: Container(
-                        width: 120,
-                        height: 120,
+                        width: 160,
+                        height: 160,
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(20),
@@ -1487,9 +2036,9 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: kPrimaryGreen.withOpacity(0.1),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
+                              color: kPrimaryGreen.withOpacity(0.15),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
                             ),
                           ],
                         ),
@@ -1500,26 +2049,111 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                                     ? Image.network(
                                         p.imagePath,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (ctx, err, st) => Icon(
-                                          Icons.eco,
-                                          size: 48,
-                                          color: kPrimaryGreen.withOpacity(0.3),
-                                        ),
+                                        loadingBuilder: (context, child, loadingProgress) {
+                                          if (loadingProgress == null) {
+                                            return child;
+                                          }
+                                          return Center(
+                                            child: SizedBox(
+                                              width: 40,
+                                              height: 40,
+                                              child: CircularProgressIndicator(
+                                                value:
+                                                    loadingProgress
+                                                            .expectedTotalBytes !=
+                                                        null
+                                                    ? loadingProgress
+                                                              .cumulativeBytesLoaded /
+                                                          loadingProgress
+                                                              .expectedTotalBytes!
+                                                    : null,
+                                                strokeWidth: 3,
+                                                color: kPrimaryGreen,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        errorBuilder: (ctx, err, st) =>
+                                            Container(
+                                              color: kPrimaryGreen.withOpacity(
+                                                0.05,
+                                              ),
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.eco,
+                                                    size: 60,
+                                                    color: kPrimaryGreen
+                                                        .withOpacity(0.3),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Text(
+                                                    'Eco-Friendly\nProduct',
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color:
+                                                          Colors.grey.shade500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                       )
                                     : Image.asset(
                                         p.imagePath,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (ctx, err, st) => Icon(
-                                          Icons.eco,
-                                          size: 48,
-                                          color: kPrimaryGreen.withOpacity(0.3),
-                                        ),
+                                        errorBuilder: (ctx, err, st) =>
+                                            Container(
+                                              color: kPrimaryGreen.withOpacity(
+                                                0.05,
+                                              ),
+                                              child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(
+                                                    Icons.eco,
+                                                    size: 60,
+                                                    color: kPrimaryGreen
+                                                        .withOpacity(0.3),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Text(
+                                                    'Eco-Friendly\nProduct',
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color:
+                                                          Colors.grey.shade500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
                                       ))
-                              : Center(
-                                  child: Icon(
-                                    Icons.eco,
-                                    size: 48,
-                                    color: kPrimaryGreen.withOpacity(0.3),
+                              : Container(
+                                  color: kPrimaryGreen.withOpacity(0.05),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.image_not_supported_outlined,
+                                        size: 60,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'No Image\nAvailable',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                         ),
@@ -1527,23 +2161,135 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Product Name
+                    // 1. PRODUCT NAME (PRIORITY #1 - Most Prominent)
                     Center(
                       child: Text(
                         p.name,
                         style: const TextStyle(
-                          fontSize: 22,
+                          fontSize: 24,
                           fontWeight: FontWeight.bold,
                           color: Colors.black87,
+                          height: 1.3,
                         ),
                         textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
 
-                    // Eco Score Badge (Centered)
-                    Center(child: EcoScoreBadge(score: p.ecoScore)),
-                    const SizedBox(height: 24),
+                    // 2. ECO SCORE (PRIORITY #2 - Prominent Badge)
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              _kEcoScoreColors[p.ecoScore]?.withOpacity(0.15) ??
+                              Colors.grey.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _kEcoScoreColors[p.ecoScore] ?? Colors.grey,
+                            width: 2,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.eco,
+                              color:
+                                  _kEcoScoreColors[p.ecoScore] ?? Colors.grey,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Eco Score: ${p.ecoScore}',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color:
+                                    _kEcoScoreColors[p.ecoScore] ?? Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // 3. PRICE (PRIORITY #3 - Clear and Prominent)
+                    if (p.price != null)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 12,
+                          ),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.blue.shade50,
+                                Colors.blue.shade100,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.blue.shade300,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.attach_money,
+                                color: Colors.blue.shade700,
+                                size: 26,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'RM ${p.price!.toStringAsFixed(2)}',
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (p.price != null) const SizedBox(height: 24),
+
+                    // Rating (if available)
+                    if (p.rating != null)
+                      Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ...List.generate(5, (index) {
+                              return Icon(
+                                index < p.rating!.round()
+                                    ? Icons.star
+                                    : Icons.star_border,
+                                color: Colors.amber.shade700,
+                                size: 22,
+                              );
+                            }),
+                            const SizedBox(width: 8),
+                            Text(
+                              p.rating!.toStringAsFixed(1),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (p.rating != null) const SizedBox(height: 24),
 
                     // Material Section
                     _buildDetailRow(
@@ -1572,6 +2318,17 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                         color: kPrimaryGreen,
                       ),
                     if (p.carbonSavings.isNotEmpty) const SizedBox(height: 16),
+
+                    // Brand (if available)
+                    if (p.brand != null && p.brand!.isNotEmpty)
+                      _buildDetailRow(
+                        icon: Icons.business,
+                        label: 'Brand',
+                        value: p.brand!,
+                        color: Colors.orange,
+                      ),
+                    if (p.brand != null && p.brand!.isNotEmpty)
+                      const SizedBox(height: 16),
 
                     // Buy Link Section
                     if (p.buyLink.isNotEmpty)
@@ -1760,9 +2517,16 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       return;
     }
 
-    debugPrint(
-      '🔄 Starting alternative generation for: ${scanned.productName}',
-    );
+    // Extract generic product type from full product name
+    final genericProductType = _extractGenericProductType(scanned.productName);
+
+    debugPrint('═══════════════════════════════════════════════════');
+    debugPrint('🔄 PRODUCT NAME NORMALIZATION');
+    debugPrint('   Original: ${scanned.productName}');
+    debugPrint('   Generic Type: $genericProductType');
+    debugPrint('   Category: ${scanned.category}');
+    debugPrint('═══════════════════════════════════════════════════');
+
     setState(() => _loading = true);
 
     // Step 1: Try Firestore cache first (fastest)
@@ -1811,6 +2575,11 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
       debugPrint('   Category: ${scanned.category}');
       debugPrint('   Eco Score: ${scanned.ecoScore}');
 
+      // Extract generic product type for better matching
+      final genericProductType = _extractGenericProductType(
+        scanned.productName,
+      );
+
       // Build an enhanced prompt for Gemini 2.0 Flash (latest model)
       final prompt =
           '''
@@ -1818,22 +2587,24 @@ You are an expert eco-product recommender with access to current e-commerce data
 
 SCANNED PRODUCT ANALYSIS:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Product Name: ${scanned.productName}
+Original Product: ${scanned.productName}
+Generic Product Type: $genericProductType
 Category: ${scanned.category}
 Current Eco Score: ${scanned.ecoScore}
 Packaging Type: ${scanned.packagingType}
 Ingredients/Materials: ${scanned.ingredients}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-TASK: Find 5-8 REAL eco-friendly alternatives available on Shopee or Lazada Malaysia that are:
+TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" available on Shopee or Lazada Malaysia that are:
 
 ✅ REQUIREMENTS (ALL MANDATORY):
 1. Better eco score than "${scanned.ecoScore}" (must be A+, A, or B if current is C/D/E)
-2. Same product category as "${scanned.category}"
-3. Currently available for purchase in Malaysia (Shopee/Lazada)
-4. REAL product names and brands (no generic examples)
-5. More sustainable packaging or materials than scanned product
-6. Specific Shopee/Lazada search URLs
+2. Same generic product type as "$genericProductType" (NOT the specific brand "${scanned.productName}")
+3. Same category as "${scanned.category}"
+4. Currently available for purchase in Malaysia (Shopee/Lazada)
+5. REAL product names and brands (no generic examples)
+6. More sustainable packaging or materials than scanned product
+7. Specific Shopee/Lazada search URLs
 
 🎯 PRIORITIZE:
 - Plastic-free packaging
@@ -1849,15 +2620,51 @@ TASK: Find 5-8 REAL eco-friendly alternatives available on Shopee or Lazada Mala
     "ecoScore": "A+",
     "category": "${scanned.category}",
     "material": "Specific packaging material (e.g., Recycled Glass, Bamboo Fiber)",
-    "shortDescription": "Why this is more sustainable than ${scanned.productName} (1 sentence)",
+    "shortDescription": "Why this is more sustainable than the scanned product (1 sentence)",
     "buyUrl": "https://shopee.com.my/search?keyword=exact+product+name",
-    "imageUrl": "",
+    "imageUrl": "https://example.com/product-image.jpg",
     "carbonSavings": "Estimated environmental benefit (e.g., Reduces 5kg CO₂/year)",
     "price": 35.50,
     "brand": "Brand Name",
     "rating": 4.5
   }
 ]
+
+🖼️ IMAGE REQUIREMENTS (CRITICAL - MANDATORY FOR EVERY PRODUCT):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  EVERY alternative MUST include a valid, accessible product image URL
+⚠️  Images are ESSENTIAL for user engagement and product recognition
+⚠️  Do NOT skip images or provide placeholder URLs
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. PRIMARY SOURCES (Use these first):
+   - Shopee Malaysia product images (direct links from search results)
+   - Lazada Malaysia product images
+   - Official brand website product photos
+
+2. IMAGE REQUIREMENTS:
+   ✓ HTTPS URLs preferred for security
+   ✓ Direct image links (ending in .jpg, .png, .webp)
+   ✓ High resolution (minimum 400x400 pixels)
+   ✓ Clear product visibility (no watermarks/logos covering product)
+   ✓ Actual product photo, not category icons or generic illustrations
+
+3. FALLBACK SOURCES (if primary unavailable):
+   - Unsplash (search: eco-friendly + product type)
+   - Pexels (search: sustainable + product type)
+   - Use actual product photos, never use placeholder.com or example.com
+
+4. VALIDATION:
+   - Test that URL is accessible before including
+   - Ensure image shows the actual alternative product recommended
+   - If unsure about image, search "[brand name] [product name] image" on Google Images
+
+EXAMPLE VALID IMAGE URLS:
+✓ https://cf.shopee.com.my/file/[product-image-id]
+✓ https://laz-img-cdn.alicdn.com/[product-image-path]
+✓ https://images.unsplash.com/photo-[id]?ixlib=eco+product
+
+IMPORTANT: Focus on finding alternatives for the generic product type "$genericProductType", not the specific brand "${scanned.productName}". This ensures better category matching and more diverse eco-friendly options.
 
 ⚠️ CRITICAL RULES:
 - Return ONLY the JSON array (no ```json``` markers, no extra text)
@@ -1989,16 +2796,24 @@ Generate the alternatives now:''';
     try {
       debugPrint('🔍 Searching Firestore for cached alternatives...');
 
-      // Create product key for exact match lookup
-      final productKey = scanned.productName
+      // Extract generic product type for better cache matching
+      final genericProductType = _extractGenericProductType(
+        scanned.productName,
+      );
+
+      // Create product key for exact match lookup using generic type
+      final productKey = genericProductType
           .toLowerCase()
           .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
           .trim();
 
+      debugPrint('   Generic Product Type: $genericProductType');
+      debugPrint('   Product Key: $productKey');
+
       QuerySnapshot querySnapshot;
 
-      // First, try to find alternatives specifically cached for this product
-      debugPrint('   Trying product-specific cache: $productKey');
+      // First, try to find alternatives specifically cached for this generic product type
+      debugPrint('   Trying generic product type cache: $productKey');
       querySnapshot = await FirebaseFirestore.instance
           .collection('alternative_products')
           .where('sourceProductKey', isEqualTo: productKey)
@@ -2080,11 +2895,19 @@ Generate the alternatives now:''';
         '💾 Saving ${alternatives.length} alternatives to Firestore...',
       );
 
-      // Create a product-specific document ID based on product name
-      final productKey = scanned.productName
+      // Extract generic product type for cache key
+      final genericProductType = _extractGenericProductType(
+        scanned.productName,
+      );
+
+      // Create a product-specific document ID based on generic product type
+      final productKey = genericProductType
           .toLowerCase()
           .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
           .trim();
+
+      debugPrint('   Caching with generic type: $genericProductType');
+      debugPrint('   Product key: $productKey');
 
       final batch = FirebaseFirestore.instance.batch();
 
@@ -2096,6 +2919,7 @@ Generate the alternatives now:''';
         batch.set(docRef, {
           ...alt.toFirestore(),
           'sourceProductName': scanned.productName,
+          'sourceGenericType': genericProductType,
           'sourceProductKey': productKey,
           'sourceCategory': scanned.category,
           'sourceEcoScore': scanned.ecoScore,
@@ -2783,7 +3607,12 @@ Generate the alternatives now:''';
           // Alternatives List
           if (!_loading)
             SliverPadding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                140,
+              ), // Extra bottom padding for FAB + BottomNav
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
                   if (index >= alternatives.length) {
@@ -2864,7 +3693,9 @@ Generate the alternatives now:''';
                             ),
                           ),
                         ),
-                        const SizedBox(height: 32),
+                        const SizedBox(
+                          height: 20,
+                        ), // Reduced since parent padding handles bottom spacing
                       ],
                     );
                   }

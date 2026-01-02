@@ -782,11 +782,8 @@ class RecentActivityScreen extends StatelessWidget {
                         data['eco_score'] ?? data['ecoScore'] ?? 'N/A',
                       );
 
-                      final co2 = _readString(
-                        data['carbon_footprint'] ??
-                            data['carbonFootprint'] ??
-                            '—',
-                      );
+                      // CO2 data available but not currently displayed in list view
+                      // final co2 = _readString(data['carbon_footprint'] ?? data['carbonFootprint'] ?? '—');
 
                       final imageUrl = _readString(
                         data['image_url'] ??
@@ -802,33 +799,14 @@ class RecentActivityScreen extends StatelessWidget {
                             'N/A',
                       );
 
-                      final ingredients = _readString(
-                        data['ingredients'] ??
-                            data['ingredient_list'] ??
-                            data['ingredientList'] ??
-                            'N/A',
-                      );
+                      // Ingredients available but not currently displayed in list view
+                      // final ingredients = _readString(data['ingredients'] ?? data['ingredient_list'] ?? data['ingredientList'] ?? 'N/A');
 
-                      String packaging = _readString(
-                        data['packaging'] ??
-                            data['packaging_type'] ??
-                            data['packagingType'] ??
-                            'N/A',
-                      );
+                      // Packaging info available but not currently displayed in list view
+                      // final packaging = _readString(data['packaging'] ?? data['packaging_type'] ?? data['packagingType'] ?? 'N/A');
 
-                      String disposalMethod = 'N/A';
-                      if (data['disposal_method'] != null) {
-                        disposalMethod = _readString(data['disposal_method']);
-                      } else if (data['disposalMethod'] != null) {
-                        disposalMethod = _readString(data['disposalMethod']);
-                      } else if (data['disposalSteps'] != null) {
-                        final ds = data['disposalSteps'];
-                        if (ds is List) {
-                          disposalMethod = ds.join(' • ');
-                        } else {
-                          disposalMethod = _readString(ds);
-                        }
-                      }
+                      // Disposal method information available but not currently displayed in list view
+                      // Can be accessed via data['disposal_method'], data['disposalMethod'], or data['disposalSteps']
 
                       DateTime? created;
                       final createdRaw =

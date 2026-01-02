@@ -1,4 +1,3 @@
-import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:ecopilot_test/auth/firebase_service.dart';
@@ -6,12 +5,12 @@ import 'package:ecopilot_test/auth/landing.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart' as profile_screen;
 import 'package:ecopilot_test/screens/alternative_screen.dart'
     as alternative_screen;
-import 'package:ecopilot_test/screens/disposal_guidance_screen.dart'
-    as dispose_screen;
+import 'package:ecopilot_test/screens/disposal_guidance_screen.dart';
 import 'package:ecopilot_test/screens/notification_screen.dart';
 import 'package:ecopilot_test/screens/setting_screen.dart';
 import 'package:ecopilot_test/screens/support_screen.dart';
 import 'package:ecopilot_test/screens/eco_assistant_screen.dart';
+import 'package:ecopilot_test/screens/redeem_screen.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -203,6 +202,18 @@ class AppDrawer extends StatelessWidget {
                         MaterialPageRoute(
                           builder: (_) => const EcoAssistantScreen(),
                         ),
+                      );
+                    },
+                  ),
+                  _buildModernDrawerItem(
+                    context,
+                    icon: Icons.card_giftcard,
+                    label: 'Redeem Rewards',
+                    color: Colors.amber.shade700,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const RedeemScreen()),
                       );
                     },
                   ),

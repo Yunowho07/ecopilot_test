@@ -15,6 +15,7 @@ import 'package:ecopilot_test/screens/home_screen.dart';
 import 'package:ecopilot_test/screens/alternative_screen.dart';
 import 'package:ecopilot_test/screens/profile_screen.dart';
 import 'package:ecopilot_test/screens/eco_assistant_screen.dart';
+import 'package:ecopilot_test/auth/firebase_service.dart';
 
 /// Clean Disposal Guidance screen (hub + details).
 class DisposalGuidanceScreen extends StatefulWidget {
@@ -115,6 +116,11 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           _product!['name'] = _product!['name'] ?? 'Scanned Item';
           _product!['category'] = _product!['category'] ?? 'General';
           _product!['material'] = _product!['material'] ?? 'Unknown';
+
+          // Check if disposal has already been completed for this product
+          if (norm['disposalCompleted'] == true) {
+            _disposalCompleted = true;
+          }
         }
       }
     } catch (e) {
@@ -289,42 +295,39 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
         );
       }
 
-      // Award 20 eco points
-      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
-      final now = DateTime.now();
-      final monthKey = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      // Award 10 eco points using FirebaseService (updates all three categories)
+      // Base disposal: 10 points, Verified location bonus: 5 points = 15 total
+      await FirebaseService().addEcoPoints(
+        points: 10,
+        reason: 'Product disposal completed',
+        activityType: 'dispose_product',
+      );
 
-      // Update monthly points
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final monthlyPointsRef = userRef
-            .collection('monthly_points')
-            .doc(monthKey);
-        final monthlyDoc = await transaction.get(monthlyPointsRef);
-
-        if (monthlyDoc.exists) {
-          final currentPoints = monthlyDoc.data()?['points'] ?? 0;
-          transaction.update(monthlyPointsRef, {'points': currentPoints + 20});
-        } else {
-          transaction.set(monthlyPointsRef, {
-            'points': 20,
-            'goal': 500,
-            'month': monthKey,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-        }
-      });
+      // Award verified disposal bonus if location is available
+      if (_currentPosition != null) {
+        await FirebaseService().addEcoPoints(
+          points: 5,
+          reason: 'Verified disposal with location',
+          activityType: 'verified_disposal_bonus',
+        );
+      }
 
       // Mark product as disposed
       if (widget.productId != null && widget.productId != 'general_fallback') {
-        await userRef.collection('scans').doc(widget.productId).update({
-          'disposalCompleted': true,
-          'disposalCompletedAt': FieldValue.serverTimestamp(),
-          'disposalLocation': {
-            'latitude': _currentPosition?.latitude,
-            'longitude': _currentPosition?.longitude,
-            'accuracy': _currentPosition?.accuracy,
-          },
-        });
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('scans')
+            .doc(widget.productId)
+            .update({
+              'disposalCompleted': true,
+              'disposalCompletedAt': FieldValue.serverTimestamp(),
+              'disposalLocation': {
+                'latitude': _currentPosition?.latitude,
+                'longitude': _currentPosition?.longitude,
+                'accuracy': _currentPosition?.accuracy,
+              },
+            });
       }
 
       setState(() {
@@ -395,7 +398,7 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '+20 Eco Points',
+                            '+10 Eco Points',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
@@ -1438,7 +1441,7 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
                         const SizedBox(height: 8),
                         Text(
                           _isAtDisposalCenter
-                              ? 'Tap below to confirm disposal and earn 20 eco points'
+                              ? 'Tap below to confirm disposal and earn 10 eco points'
                               : 'Please go to a disposal center and check your location',
                           style: TextStyle(
                             fontSize: 14,
@@ -1507,7 +1510,7 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
                                 color: Colors.white,
                               ),
                               label: const Text(
-                                'Done Disposal (+20 Points)',
+                                'Done Disposal (+10 Points)',
                                 style: TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.bold,
@@ -1575,7 +1578,7 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'You earned 20 eco points',
+                                'You earned 10 eco points',
                                 style: TextStyle(
                                   fontSize: 14,
                                   color: Colors.grey.shade700,

@@ -1305,7 +1305,7 @@ class _SettingScreenState extends State<SettingScreen> {
 class _InfoScreen extends StatelessWidget {
   final String title;
   final String content;
-  const _InfoScreen({required this.title, required this.content, super.key});
+  const _InfoScreen({required this.title, required this.content});
 
   @override
   Widget build(BuildContext context) {
@@ -1335,7 +1335,7 @@ class _InfoScreen extends StatelessWidget {
 }
 
 class _DataCollectionScreen extends StatefulWidget {
-  const _DataCollectionScreen({super.key});
+  const _DataCollectionScreen();
 
   @override
   State<_DataCollectionScreen> createState() => _DataCollectionScreenState();
