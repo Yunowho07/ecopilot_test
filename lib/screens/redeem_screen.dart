@@ -5,8 +5,8 @@ import 'package:intl/intl.dart';
 import 'dart:math';
 import '../utils/constants.dart';
 
-// Conversion rate: 1000 eco points = RM 1.00
-const double kEcoPointConversionRate = 1000.0;
+// Conversion rate: 100 eco points = RM 1.00
+const double kEcoPointConversionRate = 100.0;
 
 class RedeemScreen extends StatefulWidget {
   const RedeemScreen({super.key});
@@ -38,16 +38,19 @@ class _RedeemScreenState extends State<RedeemScreen> {
       debugPrint('🔍 Checking for existing offers...');
       final offersSnapshot = await FirebaseFirestore.instance
           .collection('redemption_offers')
-          .limit(1)
           .get();
 
-      // If no offers exist, automatically seed sample offers
-      if (offersSnapshot.docs.isEmpty) {
-        debugPrint('❌ No offers found, auto-loading sample offers...');
-        await _seedSampleOffersWithoutDialog();
-        debugPrint('✅ Sample offers loaded successfully');
-      } else {
-        debugPrint('✅ Found ${offersSnapshot.docs.length} existing offers');
+      // ALWAYS clear ALL old offers and reload with Malaysian stores
+      // This ensures we remove any old/outdated stores
+      debugPrint(
+        '🔄 Clearing ALL offers and loading fresh Malaysian stores...',
+      );
+      await _clearAllOffers();
+      await _addOffersToFirestore();
+      debugPrint('✅ Malaysian stores loaded successfully');
+
+      if (mounted) {
+        _showSnackBar('✅ Store list refreshed!');
       }
     } catch (e) {
       debugPrint('❌ Error checking offers: $e');
@@ -166,7 +169,7 @@ class _RedeemScreenState extends State<RedeemScreen> {
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      // Create redemption record without deducting points (pending verification)
+      // Redeem voucher - deduct points immediately and create voucher
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final userRef = FirebaseFirestore.instance
             .collection('users')
@@ -183,10 +186,14 @@ class _RedeemScreenState extends State<RedeemScreen> {
           throw Exception('Insufficient points');
         }
 
-        // Create redemption record with pending status
-        // Points will be deducted only after store verification
+        // Deduct points immediately
+        transaction.update(userRef, {
+          'ecoPoints': FieldValue.increment(-requiredPoints),
+        });
+
+        // Create redeemed voucher with active status
         final now = DateTime.now();
-        final expiryTime = now.add(const Duration(hours: 24)); // 24 hour expiry
+        final expiryTime = now.add(const Duration(days: 30)); // 30 day validity
         final redemptionCode = _generateRedemptionCode();
 
         final redemptionRef = FirebaseFirestore.instance
@@ -202,10 +209,10 @@ class _RedeemScreenState extends State<RedeemScreen> {
           'pointsRequired': requiredPoints,
           'monetaryValue': _convertPointsToMoney(requiredPoints),
           'createdAt': FieldValue.serverTimestamp(),
+          'redeemedAt': FieldValue.serverTimestamp(),
           'expiresAt': Timestamp.fromDate(expiryTime),
           'redemptionCode': redemptionCode, // QR/Barcode for store scanning
-          'status':
-              'pending', // pending, verified, completed, expired, cancelled
+          'status': 'active', // active, used, expired, cancelled
           'verificationMethod': 'barcode', // barcode or qr_code
         });
       });
@@ -322,7 +329,7 @@ class _RedeemScreenState extends State<RedeemScreen> {
     );
   }
 
-  // Show success dialog after redemption request
+  // Show success dialog after voucher redemption
   void _showSuccessDialog(String title, String store) {
     showDialog(
       context: context,
@@ -338,20 +345,20 @@ class _RedeemScreenState extends State<RedeemScreen> {
                 shape: BoxShape.circle,
               ),
               child: const Icon(
-                Icons.qr_code_2_rounded,
+                Icons.check_circle_rounded,
                 color: kPrimaryGreen,
                 size: 64,
               ),
             ),
             const SizedBox(height: 20),
             const Text(
-              'Redemption Request Created! 🎉',
+              'Voucher Redeemed Successfully! 🎉',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
-              'Your redemption request for:',
+              'You have successfully redeemed:',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
             ),
@@ -380,13 +387,13 @@ class _RedeemScreenState extends State<RedeemScreen> {
                   const Icon(Icons.info_outline, color: Colors.blue, size: 32),
                   const SizedBox(height: 12),
                   const Text(
-                    'Next Steps:',
+                    'How to Use Your Voucher:',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '1. Visit $store within 24 hours\n2. Show your QR code to staff\n3. Points deducted after verification\n4. Receive your reward!',
+                    '1. Visit $store\n2. Show your voucher QR code to staff\n3. Get your reward!\n4. Voucher is valid for 30 days',
                     style: const TextStyle(fontSize: 13, height: 1.5),
                     textAlign: TextAlign.center,
                   ),
@@ -397,20 +404,25 @@ class _RedeemScreenState extends State<RedeemScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.amber.withOpacity(0.1),
+                color: kPrimaryGreen.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber.withOpacity(0.5)),
+                border: Border.all(color: kPrimaryGreen.withOpacity(0.5)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.access_time, size: 18, color: Colors.orange),
+                  const Icon(
+                    Icons.check_circle,
+                    size: 18,
+                    color: kPrimaryGreen,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'QR code expires in 24 hours if not used',
+                      'Points deducted from your account',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -438,7 +450,7 @@ class _RedeemScreenState extends State<RedeemScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text('View QR Code'),
+            child: const Text('View My Vouchers'),
           ),
         ],
       ),
@@ -457,6 +469,52 @@ class _RedeemScreenState extends State<RedeemScreen> {
     }
   }
 
+  // Clear all existing offers from Firestore
+  Future<void> _clearAllOffers() async {
+    try {
+      debugPrint('🗑️ Clearing ALL existing offers from database...');
+      final offersSnapshot = await FirebaseFirestore.instance
+          .collection('redemption_offers')
+          .get();
+
+      if (offersSnapshot.docs.isEmpty) {
+        debugPrint('✅ No offers to clear');
+        return;
+      }
+
+      debugPrint('🗑️ Found ${offersSnapshot.docs.length} offers to delete');
+
+      // Delete in batches (Firestore batch limit is 500)
+      final List<List<QueryDocumentSnapshot>> batches = [];
+      for (var i = 0; i < offersSnapshot.docs.length; i += 500) {
+        batches.add(
+          offersSnapshot.docs.sublist(
+            i,
+            i + 500 > offersSnapshot.docs.length
+                ? offersSnapshot.docs.length
+                : i + 500,
+          ),
+        );
+      }
+
+      for (var batchDocs in batches) {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final doc in batchDocs) {
+          debugPrint('  🗑️ Deleting: ${doc.id}');
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+
+      debugPrint(
+        '✅ Successfully cleared ${offersSnapshot.docs.length} old offers',
+      );
+    } catch (e) {
+      debugPrint('❌ Error clearing offers: $e');
+      rethrow;
+    }
+  }
+
   // Seed sample offers without showing dialog (for auto-load)
   Future<void> _seedSampleOffersWithoutDialog() async {
     try {
@@ -470,6 +528,125 @@ class _RedeemScreenState extends State<RedeemScreen> {
       debugPrint('❌ Error seeding offers: $e');
       if (mounted) {
         _showSnackBar('Failed to load offers: $e');
+      }
+    }
+  }
+
+  // Reload offers - clear old ones and add new Malaysian stores
+  Future<void> _reloadOffers() async {
+    try {
+      setState(() {
+        _isCheckingOffers = true;
+      });
+
+      debugPrint('🔄 Reloading offers...');
+
+      // Show confirmation dialog first
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.refresh, color: kPrimaryGreen),
+              SizedBox(width: 8),
+              Text('Reload Store List'),
+            ],
+          ),
+          content: const Text(
+            'This will replace all current offers with the latest Malaysian store list. Continue?',
+            style: TextStyle(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimaryGreen,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Reload'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) {
+        setState(() {
+          _isCheckingOffers = false;
+        });
+        return;
+      }
+
+      await _clearAllOffers();
+      await _addOffersToFirestore();
+      debugPrint('✅ Offers reloaded successfully');
+
+      if (mounted) {
+        _showSnackBar('✅ Store list updated with Malaysian retailers!');
+      }
+    } on FirebaseException catch (e) {
+      debugPrint('❌ Firebase error reloading offers: ${e.code} - ${e.message}');
+      if (mounted) {
+        if (e.code == 'permission-denied') {
+          showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Row(
+                children: [
+                  Icon(Icons.warning, color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text('Permission Required'),
+                ],
+              ),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'You don\'t have permission to manually reload the store list.',
+                    style: TextStyle(fontSize: 14),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'The store list will automatically update when you restart the app.',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'If you see old stores, please close and reopen the app.',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ],
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimaryGreen,
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        } else {
+          _showSnackBar('Error: ${e.message}');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error reloading offers: $e');
+      if (mounted) {
+        _showSnackBar('Failed to reload offers: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingOffers = false;
+        });
       }
     }
   }
@@ -519,147 +696,195 @@ class _RedeemScreenState extends State<RedeemScreen> {
     final offers = [
       // 80-120 Points Tier - Small discounts, single items
       {
-        'title': '₱50 OFF at 7 Eleven',
-        'storeName': '7 Eleven',
+        'title': 'RM 5 OFF at 99 Speedmart',
+        'storeName': '99 Speedmart',
         'description':
-            'Get ₱50 discount on eco-friendly products at any 7 Eleven store',
-        'requiredPoints': 80,
-        'category': 'Food & Beverage',
+            'Get RM 5 discount on eco-friendly products at any 99 Speedmart store',
+        'requiredPoints': 500,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 30)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/99speedmart.jpg',
       },
       {
-        'title': 'Free Coffee at Gigi Coffee',
-        'storeName': 'Gigi Coffee',
+        'title': 'RM 8 Voucher at KK Super Mart',
+        'storeName': 'KK Super Mart',
         'description':
-            'Enjoy a free regular coffee of your choice at Gigi Coffee',
-        'requiredPoints': 100,
-        'category': 'Food & Beverage',
+            'Redeem RM 8 voucher for groceries and household items at KK Super Mart',
+        'requiredPoints': 800,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 45)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/kk_supermart.jpg',
       },
       {
-        'title': '₱80 Discount at 99 Speedmart',
-        'storeName': '99 Speedmart',
+        'title': 'RM 10 Discount at Hero Market',
+        'storeName': 'Hero Market',
         'description':
-            'Save ₱80 on sustainable household products at 99 Speedmart',
-        'requiredPoints': 110,
+            'Save RM 10 on your shopping at Hero Market convenience stores',
+        'requiredPoints': 1000,
         'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 60)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/hero.jpg',
       },
       {
-        'title': 'Beverage Voucher at Chagee',
-        'storeName': 'Chagee',
+        'title': 'RM 12 OFF at Family Mart',
+        'storeName': 'Family Mart',
         'description':
-            'Redeem for any medium-sized beverage at Chagee tea shop',
-        'requiredPoints': 120,
+            'Get RM 12 discount on sustainable products at Family Mart outlets',
+        'requiredPoints': 1200,
         'category': 'Food & Beverage',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 30)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/familymart.jpg',
       },
       // 150-200 Points Tier - Medium rewards, free products
       {
-        'title': 'Frozen Yogurt at llao llao',
-        'storeName': 'llao llao',
+        'title': 'RM 15 Voucher at Econsave',
+        'storeName': 'Econsave',
         'description':
-            'Get a free regular frozen yogurt with 2 toppings at llao llao',
-        'requiredPoints': 150,
-        'category': 'Food & Beverage',
+            'Redeem RM 15 voucher for groceries at any Econsave supermarket',
+        'requiredPoints': 1500,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 60)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/econsave.jpg',
       },
       {
-        'title': 'Reusable Shopping Bag from KK Mart',
-        'storeName': 'KK Mart',
+        'title': 'RM 18 OFF at Mydin',
+        'storeName': 'Mydin',
         'description':
-            'Claim a free eco-friendly reusable shopping bag at KK Mart',
-        'requiredPoints': 160,
+            'Get RM 18 discount on eco-friendly products at Mydin hypermarket',
+        'requiredPoints': 1800,
         'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 90)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/mydin.jpg',
       },
       {
-        'title': '₱150 OFF at Zus Coffee',
-        'storeName': 'Zus Coffee',
-        'description': 'Enjoy ₱150 discount on any order at Zus Coffee outlets',
-        'requiredPoints': 180,
-        'category': 'Food & Beverage',
+        'title': 'RM 18 Voucher at Lotus\'s Malaysia',
+        'storeName': 'Lotus\'s Malaysia',
+        'description':
+            'Shop with RM 18 voucher at Lotus\'s Malaysia stores nationwide',
+        'requiredPoints': 1800,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 45)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/lotus.jpg',
       },
       {
-        'title': 'Combo Meal at Family Mart',
-        'storeName': 'Family Mart',
+        'title': 'RM 20 OFF at Giant Hypermarket',
+        'storeName': 'Giant Hypermarket',
         'description':
-            'Redeem a sustainable meal combo at any Family Mart store',
-        'requiredPoints': 200,
-        'category': 'Food & Beverage',
+            'Save RM 20 on sustainable groceries at Giant Hypermarket',
+        'requiredPoints': 2000,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 75)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/giant.jpg',
       },
       // 220-300 Points Tier - Premium rewards, high-value items
       {
-        'title': 'Free Organic Beauty Kit',
-        'storeName': 'CU Mart',
-        'description': 'Get a complete organic beauty care set from CU Mart',
-        'requiredPoints': 220,
-        'category': 'Beauty & Care',
+        'title': 'RM 22 Voucher at AEON',
+        'storeName': 'AEON',
+        'description':
+            'Redeem RM 22 voucher at AEON Big & AEON stores across Malaysia',
+        'requiredPoints': 2200,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 60)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/aeon.jpg',
       },
       {
-        'title': '₱250 Voucher at Tealive',
-        'storeName': 'Tealive',
-        'description': 'Enjoy ₱250 worth of beverages at any Tealive location',
-        'requiredPoints': 250,
-        'category': 'Food & Beverage',
+        'title': 'RM 25 OFF at Village Grocer',
+        'storeName': 'Village Grocer',
+        'description':
+            'Get RM 25 discount on organic and sustainable products at Village Grocer',
+        'requiredPoints': 2500,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 90)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/village_grocer.jpg',
       },
       {
-        'title': 'Sustainable Fashion Discount',
-        'storeName': 'EcoFashion Hub',
+        'title': 'RM 28 Voucher at Lulu Hypermarket',
+        'storeName': 'Lulu Hypermarket',
         'description':
-            '20% OFF on organic clothing and sustainable fashion items',
-        'requiredPoints': 280,
-        'category': 'Fashion',
+            'Shop with RM 28 voucher at participating Lulu Hypermarket outlets',
+        'requiredPoints': 2800,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 45)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/lulu.jpg',
       },
       {
-        'title': 'Premium Coffee Experience',
-        'storeName': 'Kopi Saigon',
+        'title': 'RM 30 OFF at NSK Trade City',
+        'storeName': 'NSK Trade City',
         'description':
-            '₱300 voucher for Vietnamese coffee and sustainable treats',
-        'requiredPoints': 300,
-        'category': 'Food & Beverage',
+            'Save RM 30 on your shopping at NSK Trade City supermarket',
+        'requiredPoints': 3000,
+        'category': 'Home & Living',
         'expiryDate': Timestamp.fromDate(
           DateTime.now().add(const Duration(days: 75)),
         ),
-        'imageUrl': '',
+        'imageUrl': 'assets/stores/nsk.jpg',
+      },
+      // Additional stores - Various tiers
+      {
+        'title': 'RM 10 Voucher at TF Value-Mart',
+        'storeName': 'TF Value-Mart',
+        'description': 'Redeem RM 10 for groceries at TF Value-Mart outlets',
+        'requiredPoints': 1000,
+        'category': 'Home & Living',
+        'expiryDate': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 60)),
+        ),
+        'imageUrl': 'assets/stores/tf_value_mart.jpg',
+      },
+      {
+        'title': 'RM 15 OFF at The Store',
+        'storeName': 'The Store',
+        'description': 'Get RM 15 discount at The Store / Pacific Mart',
+        'requiredPoints': 1500,
+        'category': 'Home & Living',
+        'expiryDate': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 60)),
+        ),
+        'imageUrl': 'assets/stores/the_store.jpg',
+      },
+      {
+        'title': 'RM 12 Voucher at Bataras Hypermarket',
+        'storeName': 'Bataras Hypermarket',
+        'description': 'Shop with RM 12 voucher at Bataras Hypermarket',
+        'requiredPoints': 1200,
+        'category': 'Home & Living',
+        'expiryDate': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 45)),
+        ),
+        'imageUrl': 'assets/stores/bataras.jpg',
+      },
+      {
+        'title': 'RM 15 OFF at Pasaraya Sakan',
+        'storeName': 'Pasaraya Sakan',
+        'description': 'Save RM 15 on eco-friendly products at Pasaraya Sakan',
+        'requiredPoints': 1500,
+        'category': 'Home & Living',
+        'expiryDate': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 60)),
+        ),
+        'imageUrl': 'assets/stores/sakan.jpg',
       },
     ];
 
@@ -680,303 +905,350 @@ class _RedeemScreenState extends State<RedeemScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFB),
-      appBar: AppBar(
-        title: const Text(
-          'Redeem Rewards',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            fontSize: 20,
-            letterSpacing: 0.5,
-          ),
-        ),
-        flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
-            ),
-          ),
-        ),
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.receipt_long, color: Colors.white),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const MyVouchersScreen()),
-              );
-            },
-            tooltip: 'My Vouchers',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // User Points Header - Modern Card Design
-          Container(
-            margin: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  kPrimaryGreen,
-                  kPrimaryGreen.withOpacity(0.85),
-                  const Color(0xFF1B5E20),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('redemption_offers')
+            .orderBy('requiredPoints')
+            .snapshots(),
+        builder: (context, snapshot) {
+          // Filter offers based on category and availability
+          var filteredDocs = <QueryDocumentSnapshot>[];
+          if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+            filteredDocs = snapshot.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+
+              // Filter by category
+              if (_selectedCategory != 'All') {
+                final category = data['category'] ?? '';
+                if (category != _selectedCategory) return false;
+              }
+
+              // Filter by affordability
+              if (_showOnlyAvailable) {
+                final requiredPoints = data['requiredPoints'] ?? 0;
+                if (!_hasEnoughPoints(requiredPoints)) return false;
+              }
+
+              return true;
+            }).toList();
+          }
+
+          return CustomScrollView(
+            slivers: [
+              // Collapsing App Bar
+              SliverAppBar(
+                expandedHeight: 120,
+                floating: false,
+                pinned: true,
+                elevation: 0,
+                iconTheme: const IconThemeData(color: Colors.white),
+                flexibleSpace: FlexibleSpaceBar(
+                  title: const Text(
+                    'Redeem Rewards',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 18,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  background: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.8)],
+                      ),
+                    ),
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.refresh, color: Colors.white),
+                    onPressed: _reloadOffers,
+                    tooltip: 'Reload Store List',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.receipt_long, color: Colors.white),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const MyVouchersScreen(),
+                        ),
+                      );
+                    },
+                    tooltip: 'My Vouchers',
+                  ),
                 ],
               ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: kPrimaryGreen.withOpacity(0.4),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                  spreadRadius: 2,
-                ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                // Decorative circles
-                Positioned(
-                  right: -30,
-                  top: -30,
-                  child: Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withOpacity(0.1),
+
+              // User Points Header - Collapsible
+              SliverToBoxAdapter(
+                child: Container(
+                  margin: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        kPrimaryGreen,
+                        kPrimaryGreen.withOpacity(0.85),
+                        const Color(0xFF1B5E20),
+                      ],
                     ),
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: kPrimaryGreen.withOpacity(0.4),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      // Decorative circles
+                      Positioned(
+                        right: -30,
+                        top: -30,
+                        child: Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.1),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: -20,
+                        bottom: -20,
+                        child: Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withOpacity(0.08),
+                          ),
+                        ),
+                      ),
+                      // Content
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Available Balance',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.white70,
+                                        fontWeight: FontWeight.w500,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      'Eco Points',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white60,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.account_balance_wallet,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Icon(
+                                  Icons.eco,
+                                  color: Colors.white,
+                                  size: 32,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  '$_userEcoPoints',
+                                  style: const TextStyle(
+                                    fontSize: 48,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    height: 1,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    'POINTS',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 1.2,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '≈ ${_convertPointsToMoney(_userEcoPoints)} value',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                Positioned(
-                  left: -20,
-                  bottom: -20,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withOpacity(0.08),
-                    ),
+              ),
+
+              // Filters Section - Collapsible
+              SliverToBoxAdapter(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
                   ),
-                ),
-                // Content
-                Padding(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Available Balance',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.white70,
-                                  fontWeight: FontWeight.w500,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                'Eco Points',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white60,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.account_balance_wallet,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          const Icon(Icons.eco, color: Colors.white, size: 32),
-                          const SizedBox(width: 12),
-                          Text(
-                            '$_userEcoPoints',
-                            style: const TextStyle(
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              height: 1,
-                            ),
+                          Icon(
+                            Icons.filter_list_rounded,
+                            size: 20,
+                            color: kPrimaryGreen,
                           ),
                           const SizedBox(width: 8),
-                          const Padding(
-                            padding: EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              'POINTS',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 1.2,
-                              ),
+                          const Text(
+                            'Filter Offers',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _buildCategoryChip('All'),
+                            _buildCategoryChip('Food & Beverage'),
+                            _buildCategoryChip('Fashion'),
+                            _buildCategoryChip('Home & Living'),
+                            _buildCategoryChip('Beauty & Care'),
+                            _buildCategoryChip('Electronics'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
-                          vertical: 6,
+                          vertical: 8,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(20),
+                          color: kPrimaryGreen.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          '≈ ${_convertPointsToMoney(_userEcoPoints)} value',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: _showOnlyAvailable,
+                              onChanged: (value) {
+                                setState(() {
+                                  _showOnlyAvailable = value ?? false;
+                                });
+                              },
+                              activeColor: kPrimaryGreen,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                            ),
+                            const Expanded(
+                              child: Text(
+                                'Show only affordable offers',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                            Icon(
+                              Icons.account_balance_wallet_outlined,
+                              size: 20,
+                              color: kPrimaryGreen,
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
+              ),
 
-          // Filters Section - Modern Design
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.filter_list_rounded,
-                      size: 20,
-                      color: kPrimaryGreen,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Filter Offers',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildCategoryChip('All'),
-                      _buildCategoryChip('Food & Beverage'),
-                      _buildCategoryChip('Fashion'),
-                      _buildCategoryChip('Home & Living'),
-                      _buildCategoryChip('Beauty & Care'),
-                      _buildCategoryChip('Electronics'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: kPrimaryGreen.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      Checkbox(
-                        value: _showOnlyAvailable,
-                        onChanged: (value) {
-                          setState(() {
-                            _showOnlyAvailable = value ?? false;
-                          });
-                        },
-                        activeColor: kPrimaryGreen,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                      const Expanded(
-                        child: Text(
-                          'Show only affordable offers',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.black87,
-                          ),
-                        ),
-                      ),
-                      Icon(
-                        Icons.account_balance_wallet_outlined,
-                        size: 20,
-                        color: kPrimaryGreen,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Redemption Offers List
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('redemption_offers')
-                  .orderBy('requiredPoints')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
+              // Conditional Slivers based on state
+              if (snapshot.connectionState == ConnectionState.waiting)
+                const SliverFillRemaining(
+                  child: Center(
                     child: CircularProgressIndicator(color: kPrimaryGreen),
-                  );
-                }
-
-                if (snapshot.hasError) {
-                  return Center(
+                  ),
+                )
+              else if (snapshot.hasError)
+                SliverFillRemaining(
+                  child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -995,111 +1267,86 @@ class _RedeemScreenState extends State<RedeemScreen> {
                         ),
                       ],
                     ),
-                  );
-                }
-
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  // Show loading if still checking for offers
-                  if (_isCheckingOffers) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const CircularProgressIndicator(color: kPrimaryGreen),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Loading offers...',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey.shade600,
-                            ),
+                  ),
+                )
+              else if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+                SliverFillRemaining(
+                  child: _isCheckingOffers
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const CircularProgressIndicator(
+                                color: kPrimaryGreen,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Loading offers...',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  return Center(
+                        )
+                      : Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.card_giftcard_rounded,
+                                size: 64,
+                                color: Colors.grey.shade400,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'No offers available',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Check back soon for new rewards!',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              ElevatedButton.icon(
+                                onPressed: _seedSampleOffers,
+                                icon: const Icon(Icons.refresh),
+                                label: const Text('Load Sample Offers'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: kPrimaryGreen,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                )
+              else if (filteredDocs.isEmpty)
+                SliverFillRemaining(
+                  child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons.card_giftcard_outlined,
+                          Icons.search_off,
                           size: 64,
                           color: Colors.grey.shade400,
                         ),
                         const SizedBox(height: 16),
                         Text(
-                          'No redemption offers available',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Tap the button below to load sample offers',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton.icon(
-                          onPressed: _seedSampleOffers,
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          label: const Text('Load Sample Offers'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: kPrimaryGreen,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 14,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                // Filter offers based on category and availability
-                var filteredDocs = snapshot.data!.docs.where((doc) {
-                  final data = doc.data() as Map<String, dynamic>;
-
-                  // Filter by category
-                  if (_selectedCategory != 'All') {
-                    final category = data['category'] ?? '';
-                    if (category != _selectedCategory) return false;
-                  }
-
-                  // Filter by affordability
-                  if (_showOnlyAvailable) {
-                    final requiredPoints = data['requiredPoints'] ?? 0;
-                    if (!_hasEnoughPoints(requiredPoints)) return false;
-                  }
-
-                  return true;
-                }).toList();
-
-                if (filteredDocs.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.filter_list_off,
-                          size: 64,
-                          color: Colors.grey.shade400,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No offers match your filters',
+                          'No matching offers',
                           style: TextStyle(
                             fontSize: 16,
                             color: Colors.grey.shade600,
@@ -1115,22 +1362,22 @@ class _RedeemScreenState extends State<RedeemScreen> {
                         ),
                       ],
                     ),
-                  );
-                }
-
-                return ListView.builder(
+                  ),
+                )
+              else
+                SliverPadding(
                   padding: const EdgeInsets.all(16),
-                  itemCount: filteredDocs.length,
-                  itemBuilder: (context, index) {
-                    final doc = filteredDocs[index];
-                    final data = doc.data() as Map<String, dynamic>;
-                    return _buildOfferCard(doc.id, data);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final doc = filteredDocs[index];
+                      final data = doc.data() as Map<String, dynamic>;
+                      return _buildOfferCard(doc.id, data);
+                    }, childCount: filteredDocs.length),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1236,7 +1483,7 @@ class _RedeemScreenState extends State<RedeemScreen> {
               ),
               child: Stack(
                 children: [
-                  Image.network(
+                  Image.asset(
                     imageUrl,
                     height: 200,
                     width: double.infinity,
@@ -1699,28 +1946,25 @@ class MyVouchersScreen extends StatelessWidget {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'verified':
-      case 'completed':
+      case 'active':
         return const Color(0xFF10B981);
+      case 'used':
+        return Colors.blue;
       case 'expired':
         return Colors.red;
       case 'cancelled':
         return Colors.grey;
       default:
-        return Colors.blue;
+        return Colors.orange;
     }
   }
 
   String _getStatusLabel(String status) {
     switch (status) {
-      case 'pending':
-        return 'PENDING';
-      case 'verified':
-        return 'VERIFIED';
-      case 'completed':
-        return 'COMPLETED';
+      case 'active':
+        return 'ACTIVE';
+      case 'used':
+        return 'USED';
       case 'expired':
         return 'EXPIRED';
       case 'cancelled':
@@ -1818,13 +2062,13 @@ class MyVouchersScreen extends StatelessWidget {
                     final isExpired =
                         expiresAt != null &&
                         DateTime.now().isAfter(expiresAt.toDate());
-                    final actualStatus = isExpired && status == 'pending'
+                    final actualStatus = isExpired && status == 'active'
                         ? 'expired'
                         : status;
 
                     return GestureDetector(
                       onTap: () {
-                        if (actualStatus == 'pending') {
+                        if (actualStatus == 'active') {
                           _showQRCodeDialog(
                             context,
                             redemptionCode,

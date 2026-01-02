@@ -266,11 +266,11 @@ service cloud.firestore {
       // All authenticated users can read redemption offers
       allow read: if request.auth != null;
       
-      // Only authenticated users can create offers (for seeding sample data)
-      allow create: if request.auth != null;
+      // Authenticated users can create/delete offers (for auto-cleanup and reloading)
+      allow create, delete: if request.auth != null;
       
-      // Only admins can update or delete offers
-      allow update, delete: if false;
+      // Only admins can update offers
+      allow update: if false;
     }
 
     // ========================================
