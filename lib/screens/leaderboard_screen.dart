@@ -424,11 +424,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ElevatedButton.icon(
               onPressed: () => Navigator.pop(context),
               icon: Icon(
-                _selectedPeriod != 'all' ? Icons.eco : Icons.qr_code_scanner,
+                _selectedPeriod == 'monthly'
+                    ? Icons.eco
+                    : Icons.qr_code_scanner,
                 size: 20,
               ),
               label: Text(
-                _selectedPeriod != 'all'
+                _selectedPeriod == 'monthly'
                     ? 'Start Earning Points'
                     : 'Start Scanning',
               ),

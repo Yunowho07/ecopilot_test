@@ -33,8 +33,9 @@ service cloud.firestore {
       }
 
       // Monthly points subcollection: /users/{userId}/monthly_points/{monthKey}
+      // Allow all authenticated users to read for leaderboard calculations
       match /monthly_points/{monthKey} {
-        allow read: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null;
         allow write: if request.auth != null && request.auth.uid == userId;
       }
       
@@ -62,6 +63,12 @@ service cloud.firestore {
         allow create: if request.auth != null && request.auth.uid == userId;
         allow update: if request.auth != null && request.auth.uid == userId;
         allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // Alternative History subcollection: /users/{userId}/alternative_history/{historyId}
+      match /alternative_history/{historyId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if request.auth != null && request.auth.uid == userId;
       }
     }
 

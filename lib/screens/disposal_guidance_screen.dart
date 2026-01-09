@@ -942,6 +942,7 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           pinned: true,
           backgroundColor: kPrimaryGreen,
           iconTheme: const IconThemeData(color: Colors.white),
+          automaticallyImplyLeading: false,
           flexibleSpace: FlexibleSpaceBar(
             background: Stack(
               fit: StackFit.expand,
@@ -1666,7 +1667,7 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
     final bool showDetail = widget.productId != null && !_loading;
 
     return Scaffold(
-      drawer: const AppDrawer(),
+      drawer: showDetail ? null : const AppDrawer(),
       appBar: AppBar(
         backgroundColor: kPrimaryGreen,
         centerTitle: true,
@@ -1699,24 +1700,47 @@ class _DisposalGuidanceScreenState extends State<DisposalGuidanceScreen> {
           : showDetail
           ? _buildGuidanceDetail(context)
           : _buildDisposalHub(),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
-        },
-        backgroundColor: kPrimaryGreen,
-        icon: Image.asset(
-          'assets/chatbot.png',
-          width: 40,
-          height: 40,
-          color: Colors.white,
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: kPrimaryGreen.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        label: const Text(
-          'Eco Assistant',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const EcoAssistantScreen()),
+            );
+          },
+          backgroundColor: kPrimaryGreen,
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            child: Image.asset(
+              'assets/chatbot.png',
+              width: 40,
+              height: 40,
+              color: Colors.white,
+            ),
+          ),
+          label: const Text(
+            'EcoBot',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              letterSpacing: 0.5,
+            ),
+          ),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
-        elevation: 6,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNavBar(),

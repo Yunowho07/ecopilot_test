@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../auth/firebase_service.dart';
 import 'profile_screen.dart';
 import 'alternative_screen.dart';
+import 'alternative_screen.dart' as alt_screen;
 import '/screens/scan_screen.dart';
 import 'notification_screen.dart';
 import 'recent_activity_screen.dart';
@@ -44,12 +45,15 @@ class _HomeScreenState extends State<HomeScreen> {
   // Image slider state
   int _currentSlideIndex = 0;
   Timer? _sliderTimer;
-  final PageController _pageController = PageController();
+  // Initialize at a large starting position for infinite scroll effect
+  late final PageController _pageController;
   final List<String> _sliderImages = [
     'assets/slider1.jpg',
     'assets/slider2.jpg',
     'assets/slider3.jpg',
   ];
+  // Large number to simulate infinite scrolling
+  static const int _infiniteScrollOffset = 10000;
 
   // 🚫 REMOVED: String _tip = 'Loading tip...'; // Replaced by FutureBuilder
 
@@ -126,6 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize PageController at middle position for infinite scroll
+    _pageController = PageController(initialPage: _infiniteScrollOffset);
     _todayDateString = DateFormat('yyyy-MM-dd').format(DateTime.now());
     _tipFuture = _fetchTodayTip(); // Cache the future once
     _loadUserData();
@@ -152,14 +158,17 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // Start automatic image slider
+  // Start automatic image slider with seamless infinite loop
   void _startSliderTimer() {
-    _sliderTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _sliderTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (_pageController.hasClients) {
-        final nextPage = (_currentSlideIndex + 1) % _sliderImages.length;
+        // Get current page, add 1, and animate to next page
+        // No need for modulo - we have a huge virtual page count
+        final currentPage =
+            _pageController.page?.round() ?? _infiniteScrollOffset;
         _pageController.animateToPage(
-          nextPage,
-          duration: const Duration(milliseconds: 400),
+          currentPage + 1,
+          duration: const Duration(milliseconds: 600),
           curve: Curves.easeInOut,
         );
       }
@@ -1276,20 +1285,21 @@ class _HomeScreenState extends State<HomeScreen> {
               flexibleSpace: FlexibleSpaceBar(
                 background: Stack(
                   children: [
-                    // Image Slider Background
+                    // Image Slider Background - Infinite Loop
                     Positioned.fill(
                       child: PageView.builder(
                         controller: _pageController,
                         onPageChanged: (index) {
-                          // Update slider index without triggering full rebuild
-                          _currentSlideIndex = index;
-                          // Removed setState to prevent refreshing the entire screen
-                          // including the StreamBuilder for recent activity
+                          // Update slide index without setState to avoid rebuilding entire screen
+                          _currentSlideIndex = index % _sliderImages.length;
                         },
-                        itemCount: _sliderImages.length,
+                        // Use a very large itemCount for infinite scrolling effect
+                        itemCount: _infiniteScrollOffset * 2,
                         itemBuilder: (context, index) {
+                          // Map the virtual index to actual image index using modulo
+                          final imageIndex = index % _sliderImages.length;
                           return Image.asset(
-                            _sliderImages[index],
+                            _sliderImages[imageIndex],
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
                               // Fallback to gradient if images not found
@@ -1429,26 +1439,26 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               const SizedBox(height: 8),
                               // Slider Indicators
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(
-                                  _sliderImages.length,
-                                  (index) => AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                    ),
-                                    width: _currentSlideIndex == index ? 24 : 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: _currentSlideIndex == index
-                                          ? Colors.white
-                                          : Colors.white.withOpacity(0.4),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                  ),
-                                ),
-                              ),
+                              // Row(
+                              //   mainAxisAlignment: MainAxisAlignment.center,
+                              //   children: List.generate(
+                              //     _sliderImages.length,
+                              //     (index) => AnimatedContainer(
+                              //       duration: const Duration(milliseconds: 300),
+                              //       margin: const EdgeInsets.symmetric(
+                              //         horizontal: 4,
+                              //       ),
+                              //       width: _currentSlideIndex == index ? 24 : 8,
+                              //       height: 8,
+                              //       decoration: BoxDecoration(
+                              //         color: _currentSlideIndex == index
+                              //             ? Colors.white
+                              //             : Colors.white.withOpacity(0.4),
+                              //         borderRadius: BorderRadius.circular(4),
+                              //       ),
+                              //     ),
+                              //   ),
+                              // ),
                             ],
                           ),
                         ),
@@ -1467,16 +1477,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               actions: [
-                // Refresh Button
-                IconButton(
-                  icon: const Icon(
-                    Icons.refresh,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                  onPressed: _refreshData,
-                  tooltip: 'Refresh data',
-                ),
                 // Notification Icon
                 Padding(
                   padding: const EdgeInsets.only(right: 16),
@@ -1684,24 +1684,47 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
-        },
-        backgroundColor: kPrimaryGreen,
-        icon: Image.asset(
-          'assets/chatbot.png',
-          width: 40,
-          height: 40,
-          color: Colors.white,
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: kPrimaryGreen.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        label: const Text(
-          'Eco Assistant',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const EcoAssistantScreen()),
+            );
+          },
+          backgroundColor: kPrimaryGreen,
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            child: Image.asset(
+              'assets/chatbot.png',
+              width: 40,
+              height: 40,
+              color: Colors.white,
+            ),
+          ),
+          label: const Text(
+            'EcoBot',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              letterSpacing: 0.5,
+            ),
+          ),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
-        elevation: 6,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNavBar(),
@@ -2617,11 +2640,13 @@ class _HomeScreenState extends State<HomeScreen> {
           ).push(MaterialPageRoute(builder: (_) => const HomeScreen()));
           return;
         }
-        // When the Alternative tab is tapped, open the Alternative screen (or do nothing if already here).
+        // When the Alternative tab is tapped, open the Alternative screen (history view)
         if (index == 1) {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const AlternativeScreen()));
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const alt_screen.AlternativeScreen(),
+            ),
+          );
           return;
         }
         // When Scan tab is tapped, open the ScanScreen and wait for result

@@ -19,7 +19,7 @@
     <!-- Optional: allow apps to query camera-capable features -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <application
-        android:label="ecopilot_test"
+        android:label="EcoPilot"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         

@@ -1,0 +1,32 @@
+﻿Updated [eco_assistant_screen.dart](c:\Flutter_Project\ecopilot_test\lib\screens\eco_assistant_screen.dart) with comprehensive Eco Assistant knowledge base!
+
+The AI assistant can now answer all these question categories:
+
+ **Eco Points & Rewards** - Earning (5-15pts scanning, 10-20pts challenges, 15pts disposal), tracking (weekly/monthly/all-time), redemption (100pts = RM 1.00), rank progression
+ **App Features & Usage** - Product scan, disposal scan, barcode scanner, eco scores (A-E ratings), alternatives, recent activity  
+ **Disposal & Recycling** - Guidance, location verification (100m GPS), rewards (10+5 bonus), one-time disposal
+ **Leaderboard & Ranking** - Monthly vs all-time, podium display, real-time sync, tie handling
+ **Notifications & Streaks** - Daily streaks, 8 PM reminders, notification types, no restoration
+ **Alternative Products** - Gemini AI analysis, comparison, ranking, direct scanning
+ **Sustainability Education** - Daily tips, recycling symbols, Malaysian context, SDGs, material info
+ **General Knowledge** - Math, science, history, entertainment, random facts
+ **Technical Support** - Login, performance, crashes, data safety, account deletion
+ **Feedback & Future** - Suggestions, bug reports, expansion plans, updates
+
+**What Changed:**
+- Replaced numbered list (1-14) with organized categories  
+- Added specific details: point values, redemption rates, rank thresholds
+- Included troubleshooting steps and technical specifications
+- Covered all 80+ possible user questions from your list
+- Updated response guidelines for better clarity
+
+**Test the assistant:**
+1. Hot reload the app (press 'r' in terminal)
+2. Navigate to Eco Assistant
+3. Try questions like:
+   - "How many points do I need to be Eco Champion?"
+   - "Why didn't my rank update?"
+   - "How does location verification work?"
+   - "What is 25% of 480?" (general knowledge test)
+
+The assistant now has comprehensive knowledge to handle any question about EcoPilot features! 

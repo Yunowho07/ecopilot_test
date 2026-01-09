@@ -46,89 +46,248 @@ class AppDrawer extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Modern Header with Gradient
+            // Modern Header with Advanced Design
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [kPrimaryGreen, kPrimaryGreen.withOpacity(0.85)],
+                  colors: [
+                    const Color(0xFF2E7D32), // Darker green
+                    kPrimaryGreen,
+                    const Color(0xFF66BB6A), // Lighter green
+                  ],
+                  stops: const [0.0, 0.5, 1.0],
                 ),
               ),
-              child: SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Profile Picture
-                      StreamBuilder<User?>(
-                        stream: FirebaseAuth.instance.userChanges(),
-                        builder: (context, snapshot) {
-                          final currentUser =
-                              snapshot.data ??
-                              FirebaseAuth.instance.currentUser;
-                          final photoUrl = currentUser?.photoURL;
-                          return Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 3),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
+              child: Stack(
+                children: [
+                  // Decorative Background Pattern
+                  Positioned.fill(
+                    child: CustomPaint(painter: _EcoPatternPainter()),
+                  ),
+
+                  // Decorative Circles
+                  Positioned(
+                    top: -60,
+                    right: -60,
+                    child: Container(
+                      width: 180,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.08),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 40,
+                    right: 20,
+                    child: Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.06),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: -40,
+                    left: -40,
+                    child: Container(
+                      width: 150,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withOpacity(0.05),
+                      ),
+                    ),
+                  ),
+
+                  // Eco Icons Decoration
+                  Positioned(
+                    top: 30,
+                    left: 20,
+                    child: Icon(
+                      Icons.eco,
+                      size: 35,
+                      color: Colors.white.withOpacity(0.12),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 40,
+                    right: 30,
+                    child: Icon(
+                      Icons.recycling,
+                      size: 30,
+                      color: Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  Positioned(
+                    top: 100,
+                    right: 60,
+                    child: Transform.rotate(
+                      angle: -0.3,
+                      child: Icon(
+                        Icons.nature,
+                        size: 28,
+                        color: Colors.white.withOpacity(0.09),
+                      ),
+                    ),
+                  ),
+
+                  // Gradient Overlay for better text readability
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.15),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Main Content
+                  SafeArea(
+                    bottom: false,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Profile Picture with Enhanced Design
+                          StreamBuilder<User?>(
+                            stream: FirebaseAuth.instance.userChanges(),
+                            builder: (context, snapshot) {
+                              final currentUser =
+                                  snapshot.data ??
+                                  FirebaseAuth.instance.currentUser;
+                              final photoUrl = currentUser?.photoURL;
+                              return Container(
+                                width: 85,
+                                height: 85,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Colors.white.withOpacity(0.3),
+                                      Colors.white.withOpacity(0.1),
+                                    ],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.25),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 6),
+                                      spreadRadius: 2,
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.white.withOpacity(0.2),
+                                      blurRadius: 10,
+                                      offset: const Offset(-3, -3),
+                                      spreadRadius: 0,
+                                    ),
+                                  ],
+                                ),
+                                padding: const EdgeInsets.all(3),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 3,
+                                    ),
+                                  ),
+                                  child: CircleAvatar(
+                                    backgroundColor: Colors.white,
+                                    backgroundImage: photoUrl != null
+                                        ? NetworkImage(photoUrl)
+                                        : null,
+                                    child: photoUrl == null
+                                        ? Icon(
+                                            Icons.person,
+                                            size: 42,
+                                            color: kPrimaryGreen,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 18),
+                          // User Name with Shadow
+                          Text(
+                            userName,
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                              shadows: [
+                                Shadow(
+                                  color: Colors.black.withOpacity(0.3),
+                                  offset: const Offset(0, 2),
+                                  blurRadius: 4,
                                 ),
                               ],
                             ),
-                            child: CircleAvatar(
-                              backgroundColor: Colors.white,
-                              backgroundImage: photoUrl != null
-                                  ? NetworkImage(photoUrl)
-                                  : null,
-                              child: photoUrl == null
-                                  ? Icon(
-                                      Icons.person,
-                                      size: 40,
-                                      color: kPrimaryGreen,
-                                    )
-                                  : null,
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      // User Name
-                      Text(
-                        userName,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      // User Email
-                      if (userEmail.isNotEmpty)
-                        Text(
-                          userEmail,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.white.withOpacity(0.9),
-                            fontWeight: FontWeight.w500,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                    ],
+                          const SizedBox(height: 6),
+                          // User Email with Badge
+                          if (userEmail.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: Colors.white.withOpacity(0.3),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.email_outlined,
+                                    size: 14,
+                                    color: Colors.white.withOpacity(0.95),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Flexible(
+                                    child: Text(
+                                      userEmail,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.white.withOpacity(0.95),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
 
@@ -194,7 +353,7 @@ class AppDrawer extends StatelessWidget {
                   _buildModernDrawerItemWithImage(
                     context,
                     imagePath: 'assets/chatbot.png',
-                    label: 'Eco Assistant',
+                    label: 'EcoBot',
                     color: Colors.teal.shade600,
                     onTap: () {
                       Navigator.of(context).pop();
@@ -605,4 +764,81 @@ class AppDrawer extends StatelessWidget {
       ),
     );
   }
+}
+
+// Custom Painter for Eco Pattern Background
+class _EcoPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withOpacity(0.05)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+
+    // Draw wavy lines pattern
+    final path = Path();
+    for (int i = 0; i < 5; i++) {
+      final y = size.height * (i / 5);
+      path.moveTo(0, y);
+
+      for (double x = 0; x <= size.width; x += 20) {
+        final offset = (x / 20).floor() % 2 == 0 ? 8 : -8;
+        path.lineTo(x, y + offset);
+      }
+    }
+    canvas.drawPath(path, paint);
+
+    // Draw leaf shapes
+    final leafPaint = Paint()
+      ..color = Colors.white.withOpacity(0.06)
+      ..style = PaintingStyle.fill;
+
+    // Leaf 1
+    final leaf1 = Path()
+      ..moveTo(size.width * 0.15, size.height * 0.3)
+      ..quadraticBezierTo(
+        size.width * 0.2,
+        size.height * 0.25,
+        size.width * 0.25,
+        size.height * 0.3,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.2,
+        size.height * 0.35,
+        size.width * 0.15,
+        size.height * 0.3,
+      );
+    canvas.drawPath(leaf1, leafPaint);
+
+    // Leaf 2
+    final leaf2 = Path()
+      ..moveTo(size.width * 0.75, size.height * 0.6)
+      ..quadraticBezierTo(
+        size.width * 0.8,
+        size.height * 0.55,
+        size.width * 0.85,
+        size.height * 0.6,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.8,
+        size.height * 0.65,
+        size.width * 0.75,
+        size.height * 0.6,
+      );
+    canvas.drawPath(leaf2, leafPaint);
+
+    // Draw dots pattern
+    final dotPaint = Paint()
+      ..color = Colors.white.withOpacity(0.08)
+      ..style = PaintingStyle.fill;
+
+    for (int i = 0; i < 15; i++) {
+      final x = (size.width / 15) * i;
+      final y = (size.height / 3) * ((i % 3) + 0.5);
+      canvas.drawCircle(Offset(x, y), 2, dotPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

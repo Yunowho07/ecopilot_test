@@ -75,7 +75,7 @@ class _RedeemScreenState extends State<RedeemScreen> {
     }
   }
 
-  // Load user's total Eco Points
+  // Load user's available Eco Points (spendable points for redemptions)
   Future<void> _loadUserEcoPoints() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -88,9 +88,27 @@ class _RedeemScreenState extends State<RedeemScreen> {
 
       if (userDoc.exists) {
         final data = userDoc.data();
+
+        // Initialize availablePoints if it doesn't exist (for existing users)
+        var availablePoints = data?['availablePoints'];
+        if (availablePoints == null) {
+          // First time - set availablePoints equal to ecoPoints
+          final ecoPoints = data?['ecoPoints'] ?? 0;
+          availablePoints = ecoPoints;
+
+          // Update Firestore with availablePoints
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .update({'availablePoints': ecoPoints});
+
+          debugPrint('✅ Initialized availablePoints for user: $ecoPoints');
+        }
+
         if (mounted) {
           setState(() {
-            _userEcoPoints = data?['ecoPoints'] ?? 0;
+            // Use availablePoints for redemptions (can be spent)
+            _userEcoPoints = availablePoints ?? 0;
           });
         }
       }
@@ -169,7 +187,7 @@ class _RedeemScreenState extends State<RedeemScreen> {
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      // Redeem voucher - deduct points immediately and create voucher
+      // Redeem voucher - deduct from availablePoints only (ecoPoints remain for leaderboard)
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final userRef = FirebaseFirestore.instance
             .collection('users')
@@ -180,15 +198,16 @@ class _RedeemScreenState extends State<RedeemScreen> {
           throw Exception('User document not found');
         }
 
-        final currentPoints = userDoc.data()?['ecoPoints'] ?? 0;
+        // Check availablePoints (spendable), not ecoPoints (total earned)
+        final currentAvailablePoints = userDoc.data()?['availablePoints'] ?? 0;
 
-        if (currentPoints < requiredPoints) {
+        if (currentAvailablePoints < requiredPoints) {
           throw Exception('Insufficient points');
         }
 
-        // Deduct points immediately
+        // Deduct from availablePoints only - ecoPoints stays unchanged for leaderboard
         transaction.update(userRef, {
-          'ecoPoints': FieldValue.increment(-requiredPoints),
+          'availablePoints': FieldValue.increment(-requiredPoints),
         });
 
         // Create redeemed voucher with active status
@@ -963,11 +982,6 @@ class _RedeemScreenState extends State<RedeemScreen> {
                   ),
                 ),
                 actions: [
-                  IconButton(
-                    icon: const Icon(Icons.refresh, color: Colors.white),
-                    onPressed: _reloadOffers,
-                    tooltip: 'Reload Store List',
-                  ),
                   IconButton(
                     icon: const Icon(Icons.receipt_long, color: Colors.white),
                     onPressed: () {

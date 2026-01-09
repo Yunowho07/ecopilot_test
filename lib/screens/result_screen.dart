@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'alternative_screen.dart' as alternative_screen;
+import 'alternative_screen.dart';
+import 'new_alternative_screen.dart';
 import '../models/product_analysis_data.dart';
 import 'package:ecopilot_test/utils/constants.dart';
 
@@ -674,9 +675,8 @@ class ResultScreen extends StatelessWidget {
               onTap: () {
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (_) => alternative_screen.AlternativeScreen(
-                      scannedProduct: analysisData,
-                    ),
+                    builder: (_) =>
+                        NewAlternativeScreen(scannedProduct: analysisData),
                   ),
                 );
               },

@@ -595,15 +595,15 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 SliverToBoxAdapter(
                   child: Column(
                     children: [
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 4),
                       _buildFilterChips(),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 2),
 
                       // Scheduling controls with modern design
                       Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 16.0,
-                          vertical: 8.0,
+                          vertical: 4.0,
                         ),
                         child: Row(
                           children: [
@@ -631,7 +631,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 2),
 
                       // Streak Reminders Section
                       _buildStreakRemindersSection(),
@@ -885,7 +885,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 12),
+          const SizedBox(height: 4),
           Row(
             children: [
               Container(
@@ -938,12 +938,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             'Stay engaged like TikTok! Get reminders to maintain your streak',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -966,7 +966,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   type: 'morning',
                   color: Colors.amber,
                 ),
-                const Divider(height: 24),
+                const Divider(height: 16),
                 _buildStreakReminderToggle(
                   icon: Icons.notifications_active,
                   title: 'Mid-Day Check',
@@ -974,7 +974,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   type: 'midday',
                   color: Colors.blue,
                 ),
-                const Divider(height: 24),
+                const Divider(height: 16),
                 _buildStreakReminderToggle(
                   icon: Icons.warning_amber,
                   title: 'Evening Warning',
@@ -982,7 +982,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
                   type: 'evening',
                   color: Colors.orange,
                 ),
-                const Divider(height: 24),
+                const Divider(height: 16),
                 _buildStreakReminderToggle(
                   icon: Icons.alarm,
                   title: 'Last Chance',
@@ -993,7 +993,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
         ],
       ),
     );

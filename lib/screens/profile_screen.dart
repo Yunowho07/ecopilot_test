@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:lottie/lottie.dart';
 import 'alternative_screen.dart';
 import 'home_screen.dart';
 import 'scan_screen.dart';
@@ -320,182 +321,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
             backgroundColor: constants.kPrimaryGreen,
             iconTheme: const IconThemeData(color: Colors.white),
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(32),
-                    bottomRight: Radius.circular(32),
-                  ),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      constants.kPrimaryGreen,
-                      constants.kPrimaryGreen.withOpacity(0.8),
-                    ],
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 60),
-                    // Profile Picture
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        // Outer glow effect
-                        Container(
-                          width: 140,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 20,
-                                spreadRadius: 5,
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Avatar with border
-                        Container(
-                          width: 130,
-                          height: 130,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 4),
-                          ),
-                          child: ClipOval(
-                            child: CircleAvatar(
-                              radius: 63,
-                              backgroundColor: Colors.white.withOpacity(0.3),
-                              backgroundImage: _pickedImageBytes != null
-                                  ? MemoryImage(_pickedImageBytes!)
-                                  : (photo != null && photo.isNotEmpty)
-                                  ? CachedNetworkImageProvider(photo)
-                                  : null,
-                              child:
-                                  (_pickedImageBytes == null &&
-                                      (photo == null || photo.isEmpty))
-                                  ? const Icon(
-                                      Icons.person,
-                                      size: 60,
-                                      color: Colors.white,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                        ),
-                        // Upload progress overlay
-                        if (_isUploading && _uploadProgress != null)
-                          Container(
-                            width: 130,
-                            height: 130,
-                            decoration: const BoxDecoration(
-                              color: Colors.black54,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(
-                                    width: 50,
-                                    height: 50,
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        CircularProgressIndicator(
-                                          value: _uploadProgress,
-                                          strokeWidth: 3,
-                                          color: Colors.white,
-                                        ),
-                                        Text(
-                                          '${((_uploadProgress ?? 0) * 100).toStringAsFixed(0)}%',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        // Edit button
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: GestureDetector(
-                            onTap: _pickImage,
-                            child: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: constants.kPrimaryGreen,
-                                  width: 3,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.15),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: _isUploading
-                                  ? SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: Center(
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: constants.kPrimaryGreen,
-                                        ),
-                                      ),
-                                    )
-                                  : Icon(
-                                      _uploadError != null
-                                          ? Icons.refresh
-                                          : Icons.camera_alt,
-                                      color: constants.kPrimaryGreen,
-                                      size: 20,
-                                    ),
-                            ),
-                          ),
-                        ),
-                      ],
+              background: Stack(
+                children: [
+                  // Lottie Animation Background
+                  Positioned.fill(
+                    child: Lottie.asset(
+                      'assets/animations/eco_background.json',
+                      repeat: true,
+                      fit: BoxFit.cover,
+                      animate: true,
                     ),
-                    const SizedBox(height: 16),
-                    // User Name
-                    Text(
-                      _nameController.text.isEmpty
-                          ? 'User Name'
-                          : _nameController.text,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                  ),
+                  // Gradient Overlay
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          constants.kPrimaryGreen.withOpacity(0.85),
+                          const Color(0xFF1B5E20).withOpacity(0.8),
+                          constants.kPrimaryGreen.withOpacity(0.75),
+                        ],
+                        stops: const [0.0, 0.5, 1.0],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    // Email
-                    Text(
-                      _emailController.text,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.white.withOpacity(0.9),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  // Decorative elements
+                  _buildDecorativeElements(),
+                  // Main content
+                  _buildProfileHeader(),
+                ],
               ),
             ),
           ),
@@ -900,27 +756,312 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const EcoAssistantScreen()));
-        },
-        backgroundColor: constants.kPrimaryGreen,
-        icon: Image.asset(
-          'assets/chatbot.png',
-          width: 40,
-          height: 40,
-          color: Colors.white,
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: constants.kPrimaryGreen.withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        label: const Text(
-          'Eco Assistant',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const EcoAssistantScreen()),
+            );
+          },
+          backgroundColor: constants.kPrimaryGreen,
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            child: Image.asset(
+              'assets/chatbot.png',
+              width: 40,
+              height: 40,
+              color: Colors.white,
+            ),
+          ),
+          label: const Text(
+            'EcoBot',
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              letterSpacing: 0.5,
+            ),
+          ),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
-        elevation: 6,
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: _buildBottomNavBar(),
+    );
+  }
+
+  // Decorative Elements for Header
+  Widget _buildDecorativeElements() {
+    return Stack(
+      children: [
+        // Decorative circles pattern
+        Positioned(
+          top: -80,
+          right: -80,
+          child: Container(
+            width: 200,
+            height: 200,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.08),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 100,
+          right: 30,
+          child: Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.06),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 30,
+          left: -40,
+          child: Container(
+            width: 150,
+            height: 150,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withOpacity(0.07),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 80,
+          right: 50,
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 2,
+              ),
+            ),
+          ),
+        ),
+        // Eco icons decoration
+        Positioned(
+          top: 60,
+          left: 30,
+          child: Icon(
+            Icons.eco,
+            size: 40,
+            color: Colors.white.withOpacity(0.1),
+          ),
+        ),
+        Positioned(
+          bottom: 50,
+          right: 40,
+          child: Icon(
+            Icons.recycling,
+            size: 35,
+            color: Colors.white.withOpacity(0.09),
+          ),
+        ),
+        // Leaf pattern
+        Positioned(
+          top: 150,
+          left: 60,
+          child: Transform.rotate(
+            angle: -0.5,
+            child: Icon(
+              Icons.nature,
+              size: 30,
+              color: Colors.white.withOpacity(0.08),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Profile Header Content
+  Widget _buildProfileHeader() {
+    final user = _service.currentUser;
+    final photo = _photoUrlController.text.isNotEmpty
+        ? _photoUrlController.text
+        : user?.photoURL;
+
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const SizedBox(height: 60),
+          // Profile Picture
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              // Outer glow effect
+              Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 20,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+              ),
+              // Avatar with border
+              Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 4),
+                ),
+                child: ClipOval(
+                  child: CircleAvatar(
+                    radius: 63,
+                    backgroundColor: Colors.white.withValues(alpha: 0.3),
+                    backgroundImage: _pickedImageBytes != null
+                        ? MemoryImage(_pickedImageBytes!)
+                        : (photo != null && photo.isNotEmpty)
+                        ? CachedNetworkImageProvider(photo)
+                        : null,
+                    child:
+                        (_pickedImageBytes == null &&
+                            (photo == null || photo.isEmpty))
+                        ? const Icon(
+                            Icons.person,
+                            size: 60,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
+                ),
+              ),
+              // Upload progress overlay
+              if (_isUploading && _uploadProgress != null)
+                Container(
+                  width: 130,
+                  height: 130,
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 50,
+                          height: 50,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                value: _uploadProgress,
+                                strokeWidth: 3,
+                                color: Colors.white,
+                              ),
+                              Text(
+                                '${((_uploadProgress ?? 0) * 100).toStringAsFixed(0)}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              // Edit button
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: constants.kPrimaryGreen,
+                        width: 3,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: _isUploading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: constants.kPrimaryGreen,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            _uploadError != null
+                                ? Icons.refresh
+                                : Icons.camera_alt,
+                            color: constants.kPrimaryGreen,
+                            size: 20,
+                          ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // User Name
+          Text(
+            _nameController.text.isEmpty ? 'User Name' : _nameController.text,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Email
+          Text(
+            _emailController.text,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withValues(alpha: 0.9),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

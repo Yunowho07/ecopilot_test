@@ -68,6 +68,44 @@ class ProductAnalysisData {
     );
   }
 
+  // Convert to JSON for Firestore storage
+  Map<String, dynamic> toJson() {
+    return {
+      'imageUrl': imageUrl,
+      'productName': productName,
+      'category': category,
+      'ingredients': ingredients,
+      'carbonFootprint': carbonFootprint,
+      'packagingType': packagingType,
+      'disposalMethod': disposalMethod,
+      'containsMicroplastics': containsMicroplastics,
+      'palmOilDerivative': palmOilDerivative,
+      'crueltyFree': crueltyFree,
+      'nearbyCenter': nearbyCenter,
+      'tips': tips,
+      'ecoScore': ecoScore,
+    };
+  }
+
+  // Create from JSON
+  factory ProductAnalysisData.fromJson(Map<String, dynamic> json) {
+    return ProductAnalysisData(
+      imageUrl: json['imageUrl'],
+      productName: json['productName'] ?? 'N/A',
+      category: json['category'] ?? 'N/A',
+      ingredients: json['ingredients'] ?? 'N/A',
+      carbonFootprint: json['carbonFootprint'] ?? 'N/A',
+      packagingType: json['packagingType'] ?? 'N/A',
+      disposalMethod: json['disposalMethod'] ?? 'N/A',
+      containsMicroplastics: json['containsMicroplastics'] ?? false,
+      palmOilDerivative: json['palmOilDerivative'] ?? false,
+      crueltyFree: json['crueltyFree'] ?? false,
+      nearbyCenter: json['nearbyCenter'] ?? 'N/A',
+      tips: json['tips'] ?? 'N/A',
+      ecoScore: json['ecoScore'] ?? 'N/A',
+    );
+  }
+
   factory ProductAnalysisData.fromGeminiOutput(
     String geminiOutput, {
     File? imageFile,

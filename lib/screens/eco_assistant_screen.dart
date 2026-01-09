@@ -30,7 +30,8 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
     }
 
     _model = GenerativeModel(
-      model:'gemini-2.5-flash', // Fast, efficient model perfect for chat - 1K RPM limit
+      model:
+          'gemini-2.5-flash', // Fast, efficient model perfect for chat - 1K RPM limit
       apiKey: apiKey,
       generationConfig: GenerationConfig(
         temperature: 0.7,
@@ -45,8 +46,18 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
         SafetySetting(HarmCategory.dangerousContent, HarmBlockThreshold.medium),
       ],
       systemInstruction: Content.text(
-        '''You are EcoBot, a friendly and knowledgeable eco-assistant for the EcoPilot app. 
-        Your role is to help users:
+        '''You are EcoBot, a versatile and friendly AI assistant for the EcoPilot app. 
+        
+        🌟 YOU CAN ANSWER ANY QUESTION - You're a general-purpose AI with expertise in ALL topics including:
+        • Mathematics, Science, Physics, Chemistry, Biology
+        • History, Geography, Culture, Languages
+        • Technology, Programming, AI, Computers
+        • Entertainment, Movies, Music, Books, Games
+        • Sports, Health, Fitness, Cooking, Travel
+        • Current events, News, Trivia, and Fun facts
+        • And absolutely anything else users ask!
+        
+        🌱 SPECIAL FOCUS - When questions relate to EcoPilot or sustainability:
         1. Learn about recycling, waste sorting, and proper disposal methods for different materials  
         2. Understand eco-friendliness scores (A–E rating system) and what affects a product’s sustainability  
         3. Provide daily eco tips and guidance on sustainable living to help reduce carbon footprint  
@@ -62,10 +73,15 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
         13. Help troubleshoot app features or guide users on where to find certain functions  
         14. Support community engagement by suggesting ways to contribute (e.g., reporting missing product info or verifying eco data)
         
-        Keep responses concise (2-3 sentences max), friendly, and actionable.
-        Use emojis appropriately to make the conversation engaging.
-        If asked about specific products, guide users to scan them using the app.
-        Always promote sustainable practices and celebrate users' eco-efforts.''',
+        💬 RESPONSE GUIDELINES:
+        • Concise: 2-3 sentences for simple questions; detailed for complex topics
+        • Friendly: Warm, engaging, conversational, supportive
+        • Emojis: Enhance readability without overdoing it
+        • Step-by-step: Clear numbered instructions for app features
+        • Encourage sustainability: Gently promote eco-friendly behaviors
+        • Honest limits: If unsure about specific data, guide to check in-app
+        • Escalate: For tech issues beyond scope, suggest contacting support
+        • Celebrate: Acknowledge progress and encourage continued eco-actions!''',
       ),
     );
     _sendWelcomeMessage();
@@ -82,7 +98,7 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
     if (_messages.isEmpty) {
       final welcomeMessage = ChatMessage(
         text:
-            "Hi! I'm your Eco Assistant! 🌱 Ask me anything about recycling, eco-scores, sustainable living, or how to use the app!",
+            "Hi! I'm your Eco Bot! 🌱✨\n\nI can help with:\n• EcoPilot features & eco-living tips\n• General knowledge (math, science, history)\n• Random questions & fun trivia\n\nAsk me anything!",
         isUser: false,
         timestamp: DateTime.now(),
       );
@@ -253,7 +269,7 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Eco Assistant',
+                  'EcoBot',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -325,20 +341,36 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
                     runSpacing: 8,
                     children: [
                       _buildQuickActionChip(
-                        '♻️ How to recycle plastic?',
+                        '♻️ Recycle Plastic',
                         'How do I properly recycle plastic products?',
                       ),
                       _buildQuickActionChip(
-                        '🌱 Daily Eco Challenge',
+                        '🌱 Eco Challenges',
                         'Tell me about Daily Eco Challenges',
                       ),
                       _buildQuickActionChip(
-                        '⭐ Earn Eco Points',
+                        '⭐ Earn Points',
                         'How can I earn more Eco Points?',
                       ),
                       _buildQuickActionChip(
-                        '📊 Eco Score Meaning',
+                        '📊 Eco Scores',
                         'What do the eco-scores A-E mean?',
+                      ),
+                      _buildQuickActionChip(
+                        '🧮 Math Help',
+                        'What is 25% of 480?',
+                      ),
+                      _buildQuickActionChip(
+                        '🔬 Science Facts',
+                        'Explain photosynthesis simply',
+                      ),
+                      _buildQuickActionChip(
+                        '🎬 Entertainment',
+                        'Recommend a good sci-fi movie',
+                      ),
+                      _buildQuickActionChip(
+                        '💡 Random Fact',
+                        'Tell me an interesting fact',
                       ),
                     ],
                   ),
@@ -422,7 +454,7 @@ class _EcoAssistantScreenState extends State<EcoAssistantScreen> {
                     child: TextField(
                       controller: _messageController,
                       decoration: InputDecoration(
-                        hintText: 'Ask me anything eco-friendly...',
+                        hintText: 'Ask me anything...',
                         hintStyle: TextStyle(color: Colors.grey.shade400),
                         filled: true,
                         fillColor: Colors.grey.shade50,

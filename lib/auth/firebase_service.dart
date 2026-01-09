@@ -505,7 +505,8 @@ class FirebaseService {
         'photoUrl': photoUrl,
         'ecoPoints': 0, // Changed from ecoScore to ecoPoints
         'title': 'Green Beginner',
-        'streakDays': 0,
+        'streakCount':
+            0, // Changed from streakDays to streakCount to match Firestore rules
         'streak': 0,
         'lastChallengeDate': null, // Track last challenge completion
         'createdAt': Timestamp.now(),
@@ -641,12 +642,12 @@ class FirebaseService {
   Future<List<Map<String, dynamic>>> getLeaderboard({int limit = 50}) async {
     try {
       debugPrint('Fetching leaderboard with limit: $limit');
-      // Try to query with orderBy first
+      // Try to query with orderBy first - force server fetch to get latest data
       final snapshot = await _firestore
           .collection('users')
           .orderBy('ecoPoints', descending: true)
           .limit(limit)
-          .get();
+          .get(const GetOptions(source: Source.server));
 
       debugPrint(
         'Leaderboard query returned ${snapshot.docs.length} documents',
@@ -798,8 +799,10 @@ class FirebaseService {
       final monthKey = DateFormat('yyyy-MM').format(now);
       debugPrint('🔍 Fetching monthly leaderboard for $monthKey');
 
-      // Get all users
-      final usersSnapshot = await _firestore.collection('users').get();
+      // Get all users - force server fetch to get latest data
+      final usersSnapshot = await _firestore
+          .collection('users')
+          .get(const GetOptions(source: Source.server));
       debugPrint('👥 Total users found: ${usersSnapshot.docs.length}');
 
       final userPointsMap = <String, Map<String, dynamic>>{};
@@ -812,6 +815,8 @@ class FirebaseService {
         final userData = userDoc.data();
         usersChecked++;
 
+        int monthlyPoints = 0;
+
         try {
           // Read monthly points from the same location addEcoPoints writes to
           final monthlyDoc = await _firestore
@@ -821,34 +826,35 @@ class FirebaseService {
               .doc(monthKey)
               .get();
 
-          int monthlyPoints = 0;
           if (monthlyDoc.exists) {
             final data = monthlyDoc.data();
             monthlyPoints = data?['points'] ?? 0;
           }
 
-          if (monthlyPoints > 0) {
-            usersWithPoints++;
-          }
-
-          userPointsMap[userId] = {
-            'uid': userId,
-            'username': userData['username'] ?? userData['name'] ?? 'Anonymous',
-            'name': userData['name'] ?? userData['displayName'] ?? 'Anonymous',
-            'photoUrl': userData['photoUrl'] ?? '',
-            'ecoScore': monthlyPoints,
-            'ecoPoints': monthlyPoints,
-            'title': userData['title'] ?? '',
-          };
-
           debugPrint(
-            '  ${monthlyPoints > 0 ? '✓' : '○'} ${userData['name']}: $monthlyPoints points this month',
+            '  ✓ ${userData['name']}: $monthlyPoints points this month',
           );
         } catch (e) {
           debugPrint(
             '  ❌ Error fetching monthly_points for user ${userData['name']}: $e',
           );
+          // Continue with 0 points even if error occurs
         }
+
+        // Add all users to the leaderboard, even with 0 monthly points
+        if (monthlyPoints > 0) {
+          usersWithPoints++;
+        }
+
+        userPointsMap[userId] = {
+          'uid': userId,
+          'username': userData['username'] ?? userData['name'] ?? 'Anonymous',
+          'name': userData['name'] ?? userData['displayName'] ?? 'Anonymous',
+          'photoUrl': userData['photoUrl'] ?? '',
+          'ecoScore': monthlyPoints,
+          'ecoPoints': monthlyPoints,
+          'title': userData['title'] ?? '',
+        };
       }
 
       debugPrint(
@@ -1428,13 +1434,17 @@ class FirebaseService {
     final weekKey = '${now.year}-${weekNumber.toString().padLeft(2, '0')}';
 
     try {
-      // 1. Update OVERALL eco points (never resets)
+      // 1. Update OVERALL eco points (never resets, used for leaderboard/ranks)
       final userDoc = await _firestore.collection('users').doc(uid).get();
       final currentOverallPoints = userDoc.data()?['ecoPoints'] ?? 0;
+      final currentAvailablePoints = userDoc.data()?['availablePoints'] ?? 0;
       final newOverallPoints = currentOverallPoints + points;
+      final newAvailablePoints = currentAvailablePoints + points;
 
       await _firestore.collection('users').doc(uid).set({
-        'ecoPoints': newOverallPoints,
+        'ecoPoints': newOverallPoints, // Total earned (for leaderboard/ranks)
+        'availablePoints':
+            newAvailablePoints, // Spendable points (for redemptions)
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 

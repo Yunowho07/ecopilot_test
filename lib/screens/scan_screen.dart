@@ -213,10 +213,35 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   }
 
   // Toggle back to image mode
-  void _switchToImageMode() {
+  Future<void> _switchToImageMode() async {
+    try {
+      // Stop the barcode scanner first
+      if (_barcodeScannerController != null) {
+        await _barcodeScannerController!.stop();
+        debugPrint('🛑 Barcode scanner stopped');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error stopping barcode scanner: $e');
+    }
+
     setState(() {
       _isBarcodeMode = false;
     });
+
+    // Always reinitialize camera when returning from barcode mode
+    debugPrint('📷 Reinitializing camera after barcode mode...');
+
+    // Dispose existing camera controller if any
+    try {
+      await _cameraController?.dispose();
+      _cameraController = null;
+      setState(() => _isCameraInitialized = false);
+    } catch (e) {
+      debugPrint('⚠️ Error disposing camera: $e');
+    }
+
+    // Reinitialize camera
+    await _initializeCamera();
   }
 
   // Handle barcode detection
@@ -1728,24 +1753,29 @@ IMPORTANT: Apply the SAME eco score criteria consistently. A glass bottle produc
           const SizedBox(height: 24),
 
           // Search Instruction Text - More elegant
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.touch_app, color: kPrimaryGreen, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                _isBarcodeMode
-                    ? 'Scanning from Open Food Facts & Open Beauty Facts...'
-                    : 'Scan image or barcode for eco-insights',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w400,
-                  letterSpacing: 0.3,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.touch_app, color: kPrimaryGreen, size: 18),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _isBarcodeMode
+                        ? 'Scanning from Open Food Facts & Open Beauty Facts...'
+                        : 'Scan image or barcode for eco-insights',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 20),
 
