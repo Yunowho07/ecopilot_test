@@ -82,42 +82,97 @@ class _ForgotPasswordDialogContentState
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
+      // Send the password reset email
       await FirebaseService().sendPasswordReset(
         email: _emailController.text.trim(),
       );
+
       if (mounted) {
         setState(() {
           _isLoading = false;
           _emailSent = true;
         });
-        // Auto close after 3 seconds
-        Future.delayed(const Duration(seconds: 3), () {
+        // Auto close after 8 seconds to give user time to read instructions
+        Future.delayed(const Duration(seconds: 8), () {
           if (mounted) Navigator.of(context).pop();
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
+
+        // Extract error message
+        String errorMessage = 'Failed to send reset email. Please try again.';
+        if (e is Exception) {
+          errorMessage = e.toString().replaceAll('Exception: ', '');
+        }
+
+        // Show detailed error with helpful suggestions
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            title: Row(
               children: [
-                const Icon(Icons.error_outline, color: Colors.white),
+                Icon(Icons.error_outline, color: Colors.red.shade600),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Failed to send reset email. Please check your email address.',
-                    style: const TextStyle(fontSize: 14),
+                const Text('Unable to Send Email'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(errorMessage, style: const TextStyle(fontSize: 15)),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Troubleshooting Tips:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '• Check if the email is correctly spelled\n'
+                        '• Verify this email is registered\n'
+                        '• Check your internet connection\n'
+                        '• Try again in a few minutes',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.orange.shade900,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            duration: const Duration(seconds: 4),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'OK',
+                  style: TextStyle(
+                    color: widget.primaryGreen,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       }
@@ -418,7 +473,7 @@ class _ForgotPasswordDialogContentState
                 const SizedBox(height: 12),
 
                 Text(
-                  'We\'ve sent a password reset link to',
+                  'We\'ve sent a password reset link to:',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
                 ),
@@ -442,22 +497,81 @@ class _ForgotPasswordDialogContentState
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.blue.shade200, width: 1),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(
-                        Icons.info_outline,
-                        color: Colors.blue.shade700,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Please check your inbox and spam folder',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.blue.shade900,
-                            height: 1.4,
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.blue.shade700,
+                            size: 20,
                           ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Next Steps',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '1. Check your inbox (and spam/junk folder)\n2. Click the reset link in the email\n3. Create a new secure password\n4. Log in with your new password',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue.shade900,
+                          height: 1.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Important note about not receiving email
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.orange.shade200, width: 1),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.help_outline,
+                            color: Colors.orange.shade700,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Didn\'t receive the email?',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange.shade900,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        '• Wait 5-10 minutes (emails may be delayed)\n'
+                        '• Check spam/junk folder\n'
+                        '• Verify the email address is correct\n'
+                        '• Make sure your inbox isn\'t full\n'
+                        '• Try requesting again',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.orange.shade900,
+                          height: 1.5,
                         ),
                       ),
                     ],

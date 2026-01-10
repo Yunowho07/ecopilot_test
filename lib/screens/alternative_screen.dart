@@ -559,17 +559,9 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
   bool _loading = false;
   List<AlternativeProduct> _loadedAlternatives = [];
   Set<String> _wishlist = {}; // Product IDs in wishlist
-  List<AlternativeProduct> _recentWishlisted =
-      []; // Recently added wishlist items
+  List<AlternativeProduct> _recentlyViewed =
+      []; // Recently viewed alternative products
   String _dataSource = ''; // Track which data source was used
-
-  // Filter states
-  double? _maxPrice;
-  String? _selectedBrand;
-  double? _minRating;
-  List<String> _availableBrands = [];
-
-  bool _showFilters = false;
 
   int _ecoRank(String s) {
     final score = s.toUpperCase().trim();
@@ -768,7 +760,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
             .map((d) => AlternativeProduct.fromFirestore(d))
             .toList();
         setState(() {
-          _recentWishlisted = recent;
+          _recentlyViewed = recent;
         });
       }
     } catch (e) {
@@ -796,7 +788,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
         await wishlistRef.delete();
         setState(() => _wishlist.remove(product.id));
         setState(() {
-          _recentWishlisted.removeWhere((item) => item.id == product.id);
+          _recentlyViewed.removeWhere((item) => item.id == product.id);
         });
         ScaffoldMessenger.of(
           context,
@@ -821,60 +813,23 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
     }
   }
 
-  // Filter methods
-  List<AlternativeProduct> _applyFilters(List<AlternativeProduct> products) {
-    var filtered = products;
-
-    // Filter by max price
-    if (_maxPrice != null) {
-      filtered = filtered.where((p) {
-        if (p.price == null) return true; // Include products without price
-        return p.price! <= _maxPrice!;
-      }).toList();
-    }
-
-    // Filter by brand
-    if (_selectedBrand != null && _selectedBrand!.isNotEmpty) {
-      filtered = filtered.where((p) {
-        if (p.brand == null) return false;
-        return p.brand == _selectedBrand;
-      }).toList();
-    }
-
-    // Filter by minimum rating
-    if (_minRating != null) {
-      filtered = filtered.where((p) {
-        if (p.rating == null) return true; // Include unrated products
-        return p.rating! >= _minRating!;
-      }).toList();
-    }
-
-    return filtered;
-  }
-
-  void _updateAvailableBrands(List<AlternativeProduct> products) {
-    final brands = products
-        .where((p) => p.brand != null && p.brand!.isNotEmpty)
-        .map((p) => p.brand!)
-        .toSet()
-        .toList();
-    brands.sort();
+  // Track recently viewed alternatives
+  void _addToRecentlyViewed(AlternativeProduct product) {
     setState(() {
-      _availableBrands = brands;
+      // Remove if already exists to avoid duplicates
+      _recentlyViewed.removeWhere((p) => p.id == product.id);
+      // Add to beginning of list
+      _recentlyViewed.insert(0, product);
+      // Keep only last 10 items
+      if (_recentlyViewed.length > 10) {
+        _recentlyViewed = _recentlyViewed.sublist(0, 10);
+      }
     });
   }
 
-  void _resetFilters() {
-    setState(() {
-      _maxPrice = null;
-      _selectedBrand = null;
-      _minRating = null;
-    });
-  }
-
-  // Build Recent Wishlist Section Widget
-  Widget _buildRecentWishlistSection() {
-    if (_recentWishlisted.isEmpty) {
+  // Build Recently Viewed Alternatives Section Widget
+  Widget _buildRecentlyViewedSection() {
+    if (_recentlyViewed.isEmpty) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
 
@@ -907,7 +862,7 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    '${_recentWishlisted.length} items',
+                    '${_recentlyViewed.length} viewed',
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                   ),
                 ],
@@ -917,9 +872,9 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
               height: 220,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
-                itemCount: _recentWishlisted.length,
+                itemCount: _recentlyViewed.length,
                 itemBuilder: (context, index) {
-                  final product = _recentWishlisted[index];
+                  final product = _recentlyViewed[index];
                   return Container(
                     width: 170,
                     margin: const EdgeInsets.only(right: 16),
@@ -1922,12 +1877,6 @@ class _AlternativeScreenState extends State<AlternativeScreen> {
     var alternatives = _loadedAlternatives.isNotEmpty
         ? _loadedAlternatives
         : (_computeFallbackAlternatives());
-
-    // Apply filters
-    alternatives = _applyFilters(alternatives);
-
-    // Update available brands for filter
-    _updateAvailableBrands(alternatives);
 
     // ✅ RANKING: Sort alternatives by priority criteria
     // Priority 1: Eco Score (A+ > A > B > C > D > E)
@@ -3315,120 +3264,55 @@ Generate the alternatives now:''';
                     ),
                   ),
 
-                  // Filter Button Row
+                  // Results Summary
                   const SizedBox(height: 16),
-                  Row(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              !_loading && alternatives.isNotEmpty
-                                  ? '${alternatives.length} alternatives found'
-                                  : 'Finding alternatives...',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.white.withOpacity(0.9),
-                                fontWeight: FontWeight.w500,
+                      Text(
+                        !_loading && alternatives.isNotEmpty
+                            ? '${alternatives.length} Eco-Friendly Alternatives'
+                            : 'Finding alternatives...',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      // Show data source
+                      if (_dataSource.isNotEmpty && !_loading)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _dataSource.contains('Gemini')
+                                    ? Icons.auto_awesome
+                                    : _dataSource.contains('Firestore')
+                                    ? Icons.cloud_done
+                                    : _dataSource.contains('Cloudinary')
+                                    ? Icons.cloud_download
+                                    : Icons.info_outline,
+                                size: 14,
+                                color: Colors.white.withOpacity(0.8),
                               ),
-                            ),
-                            // Show data source
-                            if (_dataSource.isNotEmpty && !_loading)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      _dataSource.contains('Gemini')
-                                          ? Icons.auto_awesome
-                                          : _dataSource.contains('Firestore')
-                                          ? Icons.cloud_done
-                                          : _dataSource.contains('Cloudinary')
-                                          ? Icons.cloud_download
-                                          : _dataSource.contains('AI-Generated')
-                                          ? Icons.lightbulb_outline
-                                          : Icons.info_outline,
-                                      size: 12,
-                                      color: Colors.white.withOpacity(0.7),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        'Source: $_dataSource',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white.withOpacity(0.7),
-                                          fontStyle: FontStyle.italic,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Source: $_dataSource',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withOpacity(0.8),
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () =>
-                                setState(() => _showFilters = !_showFilters),
-                            borderRadius: BorderRadius.circular(10),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.filter_list,
-                                    color: Colors.white,
-                                    size: 18,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Filters',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if (_maxPrice != null ||
-                                      _selectedBrand != null ||
-                                      _minRating != null)
-                                    Container(
-                                      margin: const EdgeInsets.only(left: 6),
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Text(
-                                        '!',
-                                        style: TextStyle(
-                                          color: kPrimaryGreen,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
+                            ],
                           ),
                         ),
-                      ),
                     ],
                   ),
                 ],
@@ -3436,153 +3320,8 @@ Generate the alternatives now:''';
             ),
           ),
 
-          // Recent Wishlist Section
-          _buildRecentWishlistSection(),
-
-          // Filter Panel
-          if (_showFilters && !_loading)
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.tune, color: kPrimaryGreen),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Filter Alternatives',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: _resetFilters,
-                          child: Text(
-                            'Reset',
-                            style: TextStyle(color: kPrimaryGreen),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Max Price Filter
-                    Text(
-                      'Maximum Price (RM)',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Slider(
-                      value: _maxPrice ?? 100.0,
-                      min: 10.0,
-                      max: 200.0,
-                      divisions: 19,
-                      activeColor: kPrimaryGreen,
-                      label: 'RM ${(_maxPrice ?? 100.0).toStringAsFixed(0)}',
-                      onChanged: (value) => setState(() => _maxPrice = value),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Brand Filter
-                    if (_availableBrands.isNotEmpty) ...[
-                      Text(
-                        'Brand',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedBrand,
-                        decoration: InputDecoration(
-                          hintText: 'All Brands',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 12,
-                          ),
-                        ),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            value: null,
-                            child: Text('All Brands'),
-                          ),
-                          ..._availableBrands.map(
-                            (brand) => DropdownMenuItem(
-                              value: brand,
-                              child: Text(brand),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) =>
-                            setState(() => _selectedBrand = value),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Minimum Rating Filter
-                    Text(
-                      'Minimum Rating',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        for (double rating in [0.0, 3.0, 3.5, 4.0, 4.5])
-                          ChoiceChip(
-                            label: Text(rating == 0.0 ? 'Any' : '$rating ⭐'),
-                            selected:
-                                _minRating == (rating == 0.0 ? null : rating),
-                            selectedColor: kPrimaryGreen,
-                            labelStyle: TextStyle(
-                              color:
-                                  _minRating == (rating == 0.0 ? null : rating)
-                                  ? Colors.white
-                                  : Colors.black87,
-                            ),
-                            onSelected: (selected) {
-                              setState(() {
-                                _minRating = rating == 0.0 ? null : rating;
-                              });
-                            },
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          // Recently Viewed Section
+          _buildRecentlyViewedSection(),
 
           // Loading Indicator
           if (_loading)
@@ -3591,13 +3330,11 @@ Generate the alternatives now:''';
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(kPrimaryGreen),
-                    ),
+                    CircularProgressIndicator(color: kPrimaryGreen),
                     SizedBox(height: 16),
                     Text(
-                      'Finding sustainable alternatives...',
-                      style: TextStyle(color: Colors.grey, fontSize: 15),
+                      'Finding eco-friendly alternatives...',
+                      style: TextStyle(fontSize: 15, color: Colors.grey),
                     ),
                   ],
                 ),
@@ -3607,12 +3344,7 @@ Generate the alternatives now:''';
           // Alternatives List
           if (!_loading)
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                20,
-                20,
-                140,
-              ), // Extra bottom padding for FAB + BottomNav
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 140),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate((context, index) {
                   if (index >= alternatives.length) {
@@ -3703,7 +3435,10 @@ Generate the alternatives now:''';
                   return AlternativeProductCard(
                     product: alternatives[index],
                     isInWishlist: _wishlist.contains(alternatives[index].id),
-                    onTap: () => _showAlternativeDetails(alternatives[index]),
+                    onTap: () {
+                      _addToRecentlyViewed(alternatives[index]);
+                      _showAlternativeDetails(alternatives[index]);
+                    },
                     onBuyNow: () => _openBuyLink(alternatives[index].buyLink),
                     onAddToWishlist: () => _toggleWishlist(alternatives[index]),
                     onCompare: widget.scannedProduct != null

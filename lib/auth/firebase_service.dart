@@ -127,7 +127,23 @@ class FirebaseService {
   ///
   /// Throws a [FirebaseAuthException] on failure.
   Future<void> sendPasswordReset({required String email}) async {
-    await _auth.sendPasswordResetEmail(email: email);
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      // Provide user-friendly error messages
+      switch (e.code) {
+        case 'user-not-found':
+          throw Exception('No account found with this email address.');
+        case 'invalid-email':
+          throw Exception('Please enter a valid email address.');
+        case 'too-many-requests':
+          throw Exception('Too many attempts. Please try again later.');
+        default:
+          throw Exception('Failed to send reset email. Please try again.');
+      }
+    } catch (e) {
+      throw Exception('An error occurred. Please check your connection.');
+    }
   }
 
   // --- Social Sign-In Methods ---

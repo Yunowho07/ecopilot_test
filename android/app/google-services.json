@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "185672794875-2mie8o9cqsi8ji2c1kkpngp564hjft93.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ecopilot_test",
+            "certificate_hash": "1973e883f6032c16a1352d4ddc8d73d359dae690"
+          }
+        },
+        {
           "client_id": "185672794875-kcqukia1o242f10ia7sddu0m66gt8ob5.apps.googleusercontent.com",
           "client_type": 3
         }
