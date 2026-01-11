@@ -5,6 +5,7 @@ import '/utils/constants.dart';
 import 'package:intl/intl.dart';
 import 'package:ecopilot_test/models/product_analysis_data.dart';
 import 'package:ecopilot_test/screens/alternative_screen.dart';
+import 'package:ecopilot_test/screens/better_alternative_screen.dart';
 
 class RecentActivityScreen extends StatelessWidget {
   const RecentActivityScreen({super.key});
@@ -454,11 +455,11 @@ class RecentActivityScreen extends StatelessWidget {
                             data['image'],
                       );
 
-                      // Navigate to Alternative Screen
+                      // Navigate to Better Alternative Screen
                       Navigator.of(context).pop(); // Close the modal first
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => AlternativeScreen(
+                          builder: (_) => BetterAlternativeScreen(
                             scannedProduct: productAnalysis,
                           ),
                         ),

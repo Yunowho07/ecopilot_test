@@ -14,7 +14,10 @@ Future<void> showForgotPasswordDialog(BuildContext context) {
       elevation: 0,
       backgroundColor: Colors.transparent,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 400),
+        constraints: BoxConstraints(
+          maxWidth: 400,
+          maxHeight: MediaQuery.of(context).size.height * 0.9,
+        ),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -192,11 +195,12 @@ class _ForgotPasswordDialogContentState
       opacity: _fadeAnimation,
       child: SlideTransition(
         position: _slideAnimation,
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               // Close button
               Align(
                 alignment: Alignment.topRight,
@@ -604,6 +608,7 @@ class _ForgotPasswordDialogContentState
             ],
           ),
         ),
+      ),
       ),
     );
   }

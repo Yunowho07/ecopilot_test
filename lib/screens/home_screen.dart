@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../auth/firebase_service.dart';
 import 'profile_screen.dart';
 import 'alternative_screen.dart';
+import 'better_alternative_screen.dart';
 import 'alternative_screen.dart' as alt_screen;
 import '/screens/scan_screen.dart';
 import 'notification_screen.dart';
@@ -2136,10 +2137,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       // Close the modal first
                       Navigator.of(context).pop();
 
-                      // Navigate to Alternative Screen with product data
+                      // Navigate to Better Alternative Screen with product data
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => AlternativeScreen(
+                          builder: (_) => BetterAlternativeScreen(
                             scannedProduct: ProductAnalysisData(
                               productName: name,
                               category: category,

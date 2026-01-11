@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:ecopilot_test/models/product_analysis_data.dart';
-import 'package:ecopilot_test/screens/alternative_screen.dart';
+import 'package:ecopilot_test/screens/better_alternative_screen.dart';
 
 /// Wrapper screen that shows alternatives for a specific scanned product
+/// Redirects to BetterAlternativeScreen for generation
 class NewAlternativeScreen extends StatelessWidget {
   final ProductAnalysisData? scannedProduct;
 
@@ -10,6 +11,13 @@ class NewAlternativeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlternativeScreen(scannedProduct: scannedProduct);
+    if (scannedProduct == null) {
+      // If no product, go back
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Navigator.of(context).pop();
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    return BetterAlternativeScreen(scannedProduct: scannedProduct!);
   }
 }
