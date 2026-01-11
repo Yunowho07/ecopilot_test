@@ -1267,10 +1267,13 @@ class FirebaseService {
 
       // 4. Award eco points using addEcoPoints to update all systems
       // (all-time, monthly, weekly, and point_history)
+      // Note: Don't use activityType to avoid daily limit restriction
+      // Each challenge has its own completion tracking
       await addEcoPoints(
         points: points + bonusPoints,
         reason: 'Daily challenge completed',
-        activityType: 'complete_daily_challenge',
+        activityType:
+            null, // No activity limit - challenges track their own completion
       );
 
       // 5. Update user's streak and lastChallengeDate

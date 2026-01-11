@@ -172,10 +172,7 @@ class _BetterAlternativeScreenState extends State<BetterAlternativeScreen> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Removed from wishlist')));
       } else {
-        await wishlistRef.set({
-          ...product.toFirestore(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        await wishlistRef.set(product.toFirestore(includeTimestamp: true));
         setState(() => _wishlist.add(product.id));
         _loadWishlist();
         ScaffoldMessenger.of(
@@ -197,10 +194,11 @@ class _BetterAlternativeScreenState extends State<BetterAlternativeScreen> {
       final scanId =
           '${DateTime.now().millisecondsSinceEpoch}_${widget.scannedProduct.productName.hashCode.abs()}';
 
+      // Save to recentlyViewed collection so it appears in AlternativeScreen
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .collection('scanned_products')
+          .collection('recentlyViewed')
           .doc(scanId)
           .set({
             'productName': widget.scannedProduct.productName,
@@ -211,16 +209,16 @@ class _BetterAlternativeScreenState extends State<BetterAlternativeScreen> {
             'imageUrl': widget.scannedProduct.imageUrl,
             'alternativesCount': _loadedAlternatives.length,
             'alternatives': _loadedAlternatives
-                .map((a) => a.toFirestore())
+                .map((a) => a.toFirestore(includeTimestamp: false))
                 .toList(),
-            'scannedAt': FieldValue.serverTimestamp(),
+            'timestamp': FieldValue.serverTimestamp(),
           });
 
       debugPrint(
-        '✅ Saved scanned product with ${_loadedAlternatives.length} alternatives',
+        '✅ Saved to recently viewed with ${_loadedAlternatives.length} alternatives',
       );
     } catch (e) {
-      debugPrint('Error saving scanned product: $e');
+      debugPrint('Error saving to recently viewed: $e');
     }
   }
 
@@ -316,6 +314,7 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
 3. Same category as "${widget.scannedProduct.category}"
 4. REAL product names (no generic examples)
 5. Currently available in Malaysia
+6. MUST include valid product image URLs
 
 📋 OUTPUT FORMAT (JSON ARRAY ONLY - NO MARKDOWN):
 [
@@ -334,16 +333,23 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
   }
 ]
 
-🖼️ IMAGE REQUIREMENTS:
-- Use Shopee/Lazada product images
-- Direct URLs ending in .jpg, .png, .webp
-- High resolution (minimum 400x400px)
-- Fallback to Unsplash/Pexels if needed
+🖼️ IMAGE REQUIREMENTS (CRITICAL - EVERY PRODUCT MUST HAVE AN IMAGE):
+- Priority 1: Real product images from Shopee Malaysia (e.g., https://cf.shopee.com.my/file/...)
+- Priority 2: Real product images from Lazada Malaysia (e.g., https://my-live.slatic.net/...)
+- Priority 3: Brand official website product images
+- Priority 4: High-quality Unsplash photos: https://images.unsplash.com/photo-{id}?w=800&q=80
+- Format: Direct image URLs ending in .jpg, .png, .webp, .jpeg
+- Quality: Minimum 600x600px, preferably 800x800px or higher
+- ABSOLUTELY NO PLACEHOLDER TEXT like "N/A", "placeholder", or empty strings
+- MUST be accessible public URLs without authentication
 
-⚠️ CRITICAL:
-- Return ONLY JSON array (no markdown)
-- All products MUST be real and purchasable
+⚠️ CRITICAL RULES:
+- Return ONLY JSON array (no markdown, no code blocks)
+- All products MUST be real, currently available products in Malaysia
+- EVERY product MUST have a valid, working imageUrl field
 - Include 5-8 alternatives minimum
+- Double-check that all imageUrl values are actual URLs, not empty or "N/A"
+- If you cannot find a real product image, use a relevant Unsplash URL
 ''';
 
       final text = await GenerativeService.generateResponse(prompt);
@@ -381,6 +387,31 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
             '${DateTime.now().millisecondsSinceEpoch}_${itemIndex}_${name.hashCode.abs()}';
         itemIndex++;
 
+        // Get image URL, with fallback to Unsplash if empty or invalid
+        String imageUrl = (item['imageUrl'] ?? '').toString().trim();
+
+        // Validate image URL - check if it's empty, placeholder text, or not a URL
+        final isInvalidUrl =
+            imageUrl.isEmpty ||
+            imageUrl == 'N/A' ||
+            imageUrl.toLowerCase() == 'placeholder' ||
+            !imageUrl.startsWith('http');
+
+        if (isInvalidUrl) {
+          debugPrint(
+            '⚠️ Invalid/missing image for "$name", fetching from Unsplash...',
+          );
+          imageUrl = await _fetchUnsplashImage(
+            name,
+            widget.scannedProduct.category,
+          );
+          debugPrint('✅ Using Unsplash image: ${imageUrl.substring(0, 50)}...');
+        } else {
+          debugPrint(
+            '✅ Using provided image for "$name": ${imageUrl.substring(0, 50)}...',
+          );
+        }
+
         generated.add(
           AlternativeProduct(
             id: uniqueId,
@@ -392,7 +423,7 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
             benefit: '',
             whereToBuy: '',
             carbonSavings: (item['carbonSavings'] ?? '').toString(),
-            imagePath: (item['imageUrl'] ?? '').toString(),
+            imagePath: imageUrl,
             buyLink: (item['buyUrl'] ?? '').toString(),
             shortDescription: (item['shortDescription'] ?? '').toString(),
             price: _parsePrice(item['price']),
@@ -503,7 +534,7 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
             .doc(alt.id);
 
         batch.set(docRef, {
-          ...alt.toFirestore(),
+          ...alt.toFirestore(includeTimestamp: false),
           'sourceProductName': widget.scannedProduct.productName,
           'sourceGenericType': genericProductType,
           'sourceProductKey': productKey,
@@ -537,6 +568,46 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
       return double.tryParse(rating)?.clamp(0.0, 5.0);
     }
     return null;
+  }
+
+  /// Fetch a fallback image from Unsplash if product has no image
+  Future<String> _fetchUnsplashImage(
+    String productName,
+    String category,
+  ) async {
+    try {
+      // Create search query from product name and category
+      final searchTerms = <String>[];
+
+      // Extract meaningful words from product name
+      final cleanName = productName
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), '')
+          .split(' ')
+          .where((word) => word.length > 3)
+          .take(2)
+          .join(' ');
+
+      if (cleanName.isNotEmpty) searchTerms.add(cleanName);
+      if (category.isNotEmpty && category != 'N/A') {
+        searchTerms.add(category.toLowerCase());
+      }
+
+      // Build query for Unsplash with eco-friendly context
+      final query = Uri.encodeComponent(searchTerms.join(' '));
+
+      // Use Unsplash Source API with specific dimensions and quality
+      // This provides random photos matching the search terms
+      final url =
+          'https://source.unsplash.com/800x800/?$query,product,sustainable';
+
+      debugPrint('🖼️ Fetching Unsplash image for: ${searchTerms.join(' ')}');
+      return url;
+    } catch (e) {
+      debugPrint('Error fetching Unsplash image: $e');
+      // Return a default eco-friendly placeholder URL
+      return 'https://source.unsplash.com/800x800/?eco,sustainable,product';
+    }
   }
 
   Future<void> _loadAlternativesFromCloudinary() async {
@@ -574,16 +645,39 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
                   '${DateTime.now().millisecondsSinceEpoch}_${itemIndex}_${item['name'].hashCode.abs()}';
               itemIndex++;
 
+              final productName = item['name'] ?? '';
+
+              // Get image URL, with fallback to Unsplash if empty or invalid
+              String imageUrl = (item['imagePath'] ?? '').toString().trim();
+
+              // Validate image URL
+              final isInvalidUrl =
+                  imageUrl.isEmpty ||
+                  imageUrl == 'N/A' ||
+                  imageUrl.toLowerCase() == 'placeholder' ||
+                  !imageUrl.startsWith('http');
+
+              if (isInvalidUrl) {
+                debugPrint(
+                  '⚠️ Invalid/missing image for "$productName", fetching from Unsplash...',
+                );
+                imageUrl = await _fetchUnsplashImage(
+                  productName,
+                  item['category'] ?? widget.scannedProduct.category,
+                );
+                debugPrint('✅ Using Unsplash fallback image');
+              }
+
               fetched.add(
                 AlternativeProduct(
                   id: uniqueId,
-                  name: item['name'] ?? '',
+                  name: productName,
                   ecoScore: item['ecoScore'] ?? 'N/A',
                   materialType: item['materialType'] ?? '',
                   benefit: item['benefit'] ?? '',
                   whereToBuy: item['whereToBuy'] ?? '',
                   carbonSavings: item['carbonSavings'] ?? '',
-                  imagePath: item['imagePath'] ?? '',
+                  imagePath: imageUrl,
                   buyLink: item['buyLink'] ?? '',
                   shortDescription: item['shortDescription'] ?? '',
                   category: item['category'] ?? '',
@@ -756,23 +850,51 @@ TASK: Find 5-8 REAL eco-friendly alternatives for "$genericProductType" availabl
                       kPrimaryGreen,
                       highlightBetter: true,
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
+                    _buildComparisonRow(
+                      'Carbon Footprint',
+                      'Standard emissions',
+                      alternative.carbonSavings.isNotEmpty
+                          ? alternative.carbonSavings
+                          : 'Reduced emissions',
+                      Icons.cloud_outlined,
+                      const Color(0xFF2196F3),
+                    ),
+                    const SizedBox(height: 16),
                     _buildComparisonRow(
                       'Price',
-                      'N/A',
+                      'Market price',
                       alternative.price != null
                           ? 'RM ${alternative.price!.toStringAsFixed(2)}'
-                          : 'N/A',
+                          : 'Comparable',
                       Icons.attach_money,
-                      Colors.blue,
+                      const Color(0xFFFF9800),
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     _buildComparisonRow(
                       'Packaging',
-                      widget.scannedProduct.packagingType,
-                      alternative.materialType,
-                      Icons.inventory_2,
-                      Colors.orange,
+                      widget.scannedProduct.packagingType.isNotEmpty
+                          ? widget.scannedProduct.packagingType
+                          : 'Conventional',
+                      alternative.materialType.isNotEmpty
+                          ? alternative.materialType
+                          : 'Eco-friendly',
+                      Icons.inventory_2_outlined,
+                      const Color(0xFF9C27B0),
+                    ),
+                    const SizedBox(height: 16),
+                    _buildComparisonRow(
+                      'Ingredients',
+                      widget.scannedProduct.ingredients.isNotEmpty
+                          ? widget.scannedProduct.ingredients
+                          : 'Standard ingredients',
+                      alternative.shortDescription.isNotEmpty
+                          ? alternative.shortDescription
+                          : alternative.benefit.isNotEmpty
+                          ? alternative.benefit
+                          : 'Natural & sustainable',
+                      Icons.science_outlined,
+                      const Color(0xFF4CAF50),
                     ),
                   ],
                 ),
